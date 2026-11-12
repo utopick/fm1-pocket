@@ -11,7 +11,7 @@
   Layout of this file
     <head>    install (manifest, service worker), skin bootstrap, <style>: the device drawn with CSS, the skins, the views
     <body>    the rail (logo, power, flip, menu), the device (upper part: knobs, screen, buttons; keys), the menu, toast
-    <script>  data blocks (worklet, firmware list, core), then: helpers, storage, the device (built once, placed by CSS),
+    <script>  the Pocket apps' MIDI device panel (as it is in them), data blocks (worklet, firmware list, core), then: helpers, storage, the device (built once, placed by CSS),
               screen and lights, input, power and boot, saves, firmware list and files, views / keys / skins, MIDI,
               install, boot
 
@@ -203,6 +203,29 @@
       #menu .mini .my { grid-column: 1 / -1; border-radius: 6px; background: repeating-linear-gradient(90deg, var(--tray) 0 4%, var(--key1) 4% 7.5%, var(--keyline) 7.5% 9%, var(--key1) 9% 12.5%); }
       #menu .box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2a313b; border-radius: 12px; background: #171b22; overflow: auto; }
       #menu .box button { margin-top: auto; flex: none; }
+      #menu .box .grid button { margin-top: 0; }
+      #menu .box .grid { margin-top: auto; flex: none; }
+      #menu .how { width: 100%; flex: 1; min-height: 60px; max-height: 150px; }
+      #menu button.big { min-height: 56px; font-size: 14px; background: #b48cff; border-color: #b48cff; color: #14091f; }
+      #menu button.big i { color: #14091f; }
+      #menu .thanks p { font-size: 14px; color: #c9d0da; }
+      #menu .thanks .lead { font-size: 19px; line-height: 1.3; color: #fff; }
+      #menu .cap { flex: 1; min-height: 0; display: block; border-radius: 10px; overflow: hidden; background: #0d0f12; }
+      #menu .cap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      /* the MIDI device panel is the Pocket apps' own (kept identical): here it only has to fit a turned page */
+      body #mdPanel .mdCard { max-height: 96%; }
+      /* a sheet to read: the manual, the licences */
+      #sheet { position: fixed; inset: 0; z-index: 6; background: #11141a; color: #e8ecf1; display: flex; touch-action: auto; font: 15px/1.5 system-ui, sans-serif; }
+      #sheet[hidden], #sheet [hidden] { display: none; }
+      #sheet .box { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px; gap: 8px; }
+      #sheet .bar { display: flex; gap: 6px; align-items: center; }
+      #sheet .bar b { flex: 1; font: 900 17px system-ui; }
+      #sheet button { min-height: 44px; min-width: 52px; padding: 6px 10px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; }
+      #sheet button.on { background: #b48cff; border-color: #b48cff; color: #14091f; }
+      #shBody { flex: 1; min-height: 0; overflow: auto; padding: 0 6px 20px; max-width: 900px; width: 100%; align-self: center; -webkit-user-select: text; user-select: text; }
+      #shBody h3 { margin: 18px 0 6px; font-size: 18px; color: #b48cff; }
+      #shBody p, #shBody ul { margin: 6px 0; }
+      #shBody pre { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: #c9d0da; }
       #menu h3 { margin: 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; }
       #menu .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
       #menu button { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; width: 100%; }
@@ -289,41 +312,87 @@
         </section>
         <section data-tab="conn" class="row">
           <div class="box">
-            <h3>MIDI</h3>
-            <p>Every keyboard and controller plugged into this device plays the FM-1 through its MIDI IN: notes, knobs, clock, byte for byte.</p>
+            <h3>MIDI CONTROLLER</h3>
+            <p>Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and <b>DEVICE</b> shows a drawing of it where you can change any of them.</p>
             <p id="midiNames">Not connected yet.</p>
-            <button id="midi" title="Connect your MIDI keyboards and controllers to the FM-1's MIDI IN"><i>CONTROLLER</i>CONNECT MIDI</button>
+            <div class="grid">
+              <button id="midi" title="Connect your MIDI keyboards and controllers"><i>CONTROLLER</i>CONNECT MIDI</button>
+              <button id="midiDev" title="A drawing of your controller: see what each key, pad and knob does, and assign them"><i>MAP · LEARN</i>DEVICE</button>
+            </div>
           </div>
           <div class="box">
             <h3>THE APP</h3>
+            <svg class="how" viewBox="0 0 300 92" role="img" aria-label="Install: open it in the browser, install it, then it is on your home screen and works offline">
+              <g fill="none" stroke="#8a94a3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="14" y="8" width="62" height="46" rx="6" /><path d="M14 20h62" /><circle cx="22" cy="14" r="1.5" /><circle cx="29" cy="14" r="1.5" />
+                <path d="M88 31h22m-7-7 7 7-7 7" /><path d="M190 31h22m-7-7 7 7-7 7" />
+                <rect x="126" y="6" width="48" height="50" rx="8" /><path d="M150 18v22m-9-9 9 9 9-9M138 48h24" stroke="#b48cff" />
+                <rect x="232" y="4" width="34" height="54" rx="7" /><path d="M244 52h10" />
+              </g>
+              <rect x="240" y="14" width="18" height="18" rx="5" fill="#b48cff" />
+              <g fill="#a3acb9" font-family="ui-monospace, Menlo, monospace" font-size="9" font-weight="700" text-anchor="middle">
+                <text x="45" y="72">1 · OPEN IT</text><text x="45" y="84">in the browser</text>
+                <text x="150" y="72">2 · INSTALL</text><text x="150" y="84">one tap</text>
+                <text x="249" y="72">3 · YOUR APP</text><text x="249" y="84">works offline</text>
+              </g>
+            </svg>
             <p id="instHint"></p>
-            <p>Installed, it opens full screen and sideways, and the firmwares marked ● run with no connection. Your saves stay on this device.</p>
-            <button id="inst" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
+            <button id="inst" class="big" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
           </div>
         </section>
         <section data-tab="info" class="row">
-          <div class="box">
-            <h3>CREDITS</h3>
-            <p>
-              A fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by Joakim Eriksson (MIT): the emulated FM-1 inside is his work, unchanged.
-              This page is a simpler front for phones.
-            </p>
-            <p>
-              Each firmware belongs to its author and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, through fm1-emu's list.
-              The pictures on the firmware cards are the Hub's. Not affiliated with M-VAVE.
-            </p>
+          <div class="box thanks">
+            <h3>THANK YOU, JOAKIM</h3>
+            <p class="lead">FM1.Pocket is a fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by <b>Joakim Eriksson</b>.</p>
+            <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app only adds a phone-first front to it.</p>
+            <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
+            <div class="grid">
+              <button id="manual" title="The manual, in English and Spanish"><i>EN · ES</i>MANUAL</button>
+              <button id="licence" title="The full text of the licences"><i>MIT</i>LICENSE</button>
+            </div>
           </div>
           <div class="box">
-            <h3>COMPUTER KEYS</h3>
-            <p>A W S E D F T G Y H U J K O L P play the notes.</p>
-            <p>Z and X: octave down and up. Space: PLAY. R: REC.</p>
-            <p>1 to 0: the ten buttons, FX to SEQ.</p>
-            <p>Arrows and , . turn SELECT, PRESETS and ALGORITHM.</p>
+            <h3>MORE POCKET APPS, BY UTOPICK</h3>
+            <a class="cap" href="https://utopick.github.io/track-pocket/" target="_blank" rel="noopener" title="TRACK.Pocket: tracker, sampler, mixer"><img alt="TRACK.Pocket" src="data:image/jpeg;base64,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" /></a>
+            <a class="cap" href="https://utopick.github.io/tune-pocket/" target="_blank" rel="noopener" title="TUNE.Pocket: tuner, scales, jam band, looper"><img alt="TUNE.Pocket" src="data:image/jpeg;base64,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" /></a>
+            <a class="cap" href="https://utopick.github.io/sing-pocket/" target="_blank" rel="noopener" title="SING.Pocket: vocal coach"><img alt="SING.Pocket" src="data:image/jpeg;base64,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" /></a>
           </div>
         </section>
         <input type="file" id="file" accept=".fwsc" hidden />
       </div>
     </div>
+    <div id="sheet" hidden>
+      <div class="box" role="dialog" aria-modal="true" aria-labelledby="shTitle">
+        <div class="bar">
+          <b id="shTitle"></b>
+          <button data-lg="en" title="English">EN</button><button data-lg="es" title="Español">ES</button>
+          <button id="shClose" title="Close">CLOSE</button>
+        </div>
+        <div id="shBody"></div>
+      </div>
+    </div>
+    <pre id="licEmu" hidden>MIT License
+
+Copyright (c) 2026 Joakim Eriksson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</pre>
     <div id="sure" hidden>
       <div class="box" role="alertdialog" aria-modal="true" aria-labelledby="sureText">
         <p id="sureText"></p>
@@ -334,6 +403,350 @@
     </div>
     <div id="toast"></div>
 
+    <script id="midi-device">
+// Shared, offline MIDI device wireframes and per-device assignments. Kept identical in all Pocket apps.
+// The drawings are original line sketches of each controller's layout (not manufacturer images), made in code.
+// Pads (MIDI channel 10) and knobs (CC numbers, in order) light up by themselves; LEARN pins a drawn control to
+// the real one and to a Pocket function.
+(function () {
+  "use strict";
+  // shape = which layout to draw; keys / pads / knobs = how many; base = lowest key's note number;
+  // cc0 = the CC number of knob 1 when the model is known (its knobs are cc0, cc0 + 1 ...); without it knobs go by rank
+  const PROFILES = {
+    synido: { title: "Synido Scale Pocket", shape: "mini", keys: 25, base: 48, pads: 0, knobs: 1, source: "https://www.synido.com/products/scale-pocket-portable-mini-piano-midi-controller-learn-scales-play-music" },
+    akai: { title: "Akai MPK mini Play mk3", shape: "mpk", keys: 25, base: 48, pads: 8, knobs: 8, cc0: 2, source: "https://www.akaipro.com/mpk-mini-play-mk3/" },
+    korgpad: { title: "Korg nanoPAD2 · pads", shape: "pads", keys: 0, base: 36, pads: 16, padCh: 0, knobs: 0, source: "https://www.korg.com/us/products/computergear/nanopad2/" },
+    korgkey: { title: "Korg nanoKEY2 · 25 keys", shape: "nkey", keys: 25, base: 48, pads: 0, knobs: 0, source: "https://www.korg.com/us/products/computergear/nanokey2/" },
+    casio: { title: "Casio PX-S1100", shape: "piano", keys: 88, base: 21, pads: 0, knobs: 0, source: "https://www.casio.com/us/electronic-musical-instruments/product.PX-S1100BK/" },
+    novation25: { title: "Novation Launchkey · 25 keys", shape: "lk", keys: 25, base: 48, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
+    novation37: { title: "Novation Launchkey · 37 keys", shape: "lk", keys: 37, base: 48, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
+    novation49: { title: "Novation Launchkey · 49 keys", shape: "lk", keys: 49, base: 36, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
+    novation61: { title: "Novation Launchkey · 61 keys", shape: "lk", keys: 61, base: 36, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
+    novation88: { title: "Novation Launchkey · 88 keys", shape: "lk", keys: 88, base: 21, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
+    generic: { title: "MIDI keyboard · generic", shape: "mpk", keys: 25, base: 48, pads: 8, knobs: 8, source: "" },
+  };
+  const css = `#mdPanel{position:fixed;inset:0;z-index:96;background:#000b;display:flex;align-items:center;justify-content:center;padding:12px;color:#eaf0f5;font:12px/1.45 system-ui}
+#mdPanel *{box-sizing:border-box}#mdPanel .mdCard{width:min(900px,100%);max-height:94vh;overflow:auto;background:#1a2029;border:1px solid #54606e;border-radius:14px;padding:16px}
+#mdPanel header{display:flex;align-items:center;justify-content:space-between;gap:10px}#mdPanel h2{margin:0;font-size:19px}#mdPanel button,#mdPanel select{background:#303b49;color:#fff;border:1px solid #647486;border-radius:6px;padding:8px;min-height:36px;font:inherit}
+#mdPanel button{cursor:pointer}#mdPanel button:focus-visible,#mdPanel select:focus-visible{outline:2px solid #69ccfa}#mdPanel .mdRow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:12px 0}#mdPanel label{display:grid;gap:3px}#mdPanel small{color:#b4c4d1}#mdPanel a{color:#8bd5fc}
+#mdPanel .mdDevice{margin:12px 0}#mdPanel .mdDevice svg{width:100%;height:auto;display:block}
+#mdPanel .body{fill:#141a22;stroke:#8aa0b6;stroke-width:2}#mdPanel .sh,#mdPanel .dc{fill:none;stroke:#9fb2c6;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#mdPanel .dc{stroke:#5f7186}#mdPanel .tk{fill:none;stroke:#47576a;stroke-width:1.3;stroke-dasharray:1.5 5}#mdPanel .hit{fill:transparent;stroke:none}
+#mdPanel .nm{fill:#8196ab;font:600 11px system-ui;text-anchor:middle;pointer-events:none}#mdPanel .mdc{cursor:pointer;outline:none}#mdPanel .mdc:focus-visible .sh{stroke:#69ccfa}
+#mdPanel .mdc.lit .sh{fill:#38d5fb55;stroke:#38d5fb}#mdPanel .mdc.lit{filter:drop-shadow(0 0 6px #38d5fb)}#mdPanel .mdc.chosen .sh{stroke:#ffbf52;stroke-width:3}
+#mdPanel .mdKey{fill:#1b232d;stroke:#9fb2c6;stroke-width:1;cursor:pointer;outline:none}#mdPanel .mdBlack{fill:#090d12}#mdPanel .mdKey:focus-visible{stroke:#69ccfa;stroke-width:2}
+#mdPanel .mdKey.lit{fill:#38d5fb;filter:drop-shadow(0 0 5px #38d5fb)}#mdPanel .mdKey.chosen{stroke:#ffbf52;stroke-width:3}
+#mdPanel .mdMap{border-top:1px solid #647486;padding-top:10px}#mdPanel .mdMap select{max-width:100%;min-width:200px}#mdPanel .mdHint{min-height:1.5em;color:#ffce84}
+#mdPanel .mdDevice{overflow-x:auto}#mdPanel .mdDevice svg{min-width:720px}
+#mdPanel .tg path{fill:none;stroke:#ffbf52;stroke-width:1.1;opacity:.75}#mdPanel .tg rect{fill:#1a2029;stroke:#ffbf52;stroke-width:1.2}#mdPanel .tg text{fill:#ffd28a;font:700 11.5px system-ui;text-anchor:middle;pointer-events:none}
+#mdPanel .mdc .sh{fill:#141a22}#mdPanel .tg.info path{stroke:#647486}#mdPanel .tg.info rect{stroke:#647486}#mdPanel .tg.info text{fill:#9fb2c6}`;
+  const storageKey = "pocket.midi.devices.v1." + location.pathname.split("/").filter(Boolean)[0];
+  const load = () => { try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; } };
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const guess = (s) => {
+    if (/scale pocket|synido/i.test(s)) return "synido";
+    if (/mpk|akai/i.test(s)) return "akai";
+    if (/nanokey/i.test(s)) return "korgkey";
+    if (/nanopad|korg/i.test(s)) return "korgpad";
+    if (/casio|privia|px-s|cdp/i.test(s)) return "casio";
+    if (/launchkey|novation/i.test(s)) { const n = (s.match(/\b(25|37|49|61|88)\b/) || [])[1]; return "novation" + (n || 25); }
+    return "generic";
+  };
+  const noteName = (n) => ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"][n % 12] + (Math.floor(n / 12) - 1);
+  // Pads send notes on MIDI channel 10 (36 and up); with more pads than the bank, banks wrap round.
+  const padIndex = (pads, note) => (((note - 36) % pads) + pads) % pads;
+  // Knobs are matched in the order of their CC numbers (mod wheel, sustain and the like are not knobs).
+  const NOT_KNOB = new Set([0, 1, 32, 64, 98, 99, 100, 101]);
+  const knobRank = (seen, cc, cc0) => (cc0 != null ? (cc >= cc0 ? cc - cc0 : -1) : NOT_KNOB.has(cc) || cc >= 120 ? -1 : [...seen].filter((x) => !NOT_KNOB.has(x) && x < 120).sort((a, b) => a - b).indexOf(cc));
+
+  // ---------- the wireframes (SVG, 840 wide)
+  const W = 840;
+  const num = (n) => Math.round(n * 10) / 10;
+  const g = (id, label, inner) => `<g class="mdc" data-control="${id}" tabindex="0" role="button" aria-label="${esc(label)}">${inner}</g>`;
+  const knob = (id, x, y, r, label) => g(id, label, `<circle class="hit" cx="${x}" cy="${y}" r="${r + 8}"/><circle class="tk" cx="${x}" cy="${y}" r="${r + 5}"/><circle class="sh" cx="${x}" cy="${y}" r="${r}"/><line class="sh" x1="${x}" y1="${y}" x2="${x}" y2="${num(y - r + 4)}" transform="rotate(40 ${x} ${y})"/>`);
+  const pad = (id, x, y, s, n) => g(id, "Pad " + n, `<rect class="sh" x="${x}" y="${y}" width="${s}" height="${s}" rx="6"/><rect class="dc" x="${num(x + 5)}" y="${num(y + 5)}" width="${s - 10}" height="${s - 10}" rx="3"/><text class="nm" x="${num(x + s / 2)}" y="${num(y + s / 2 + 4)}">${n}</text>`);
+  // flip: pad 1 is on the bottom row (the MPK numbers its pads from the bottom left)
+  const padGrid = (x, y, cols, count, s, gap, flip) => Array.from({ length: count }, (_, i) => { const r = Math.floor(i / cols), rows = Math.ceil(count / cols); return pad("p" + i, x + (i % cols) * (s + gap), y + (flip ? rows - 1 - r : r) * (s + gap), s, i + 1); }).join("");
+  const knobGrid = (x, y, cols, count, dx, dy, r) => Array.from({ length: count }, (_, i) => knob("c" + i, x + (i % cols) * dx, y + Math.floor(i / cols) * dy, r, "Knob " + (i + 1))).join("");
+  const wheel = (x, y, w, h) => `<rect class="dc" x="${x}" y="${y}" width="${w}" height="${h}" rx="${w / 2}"/>` + [0.2, 0.35, 0.5, 0.65, 0.8].map((f) => `<line class="dc" x1="${x + 4}" x2="${x + w - 4}" y1="${num(y + h * f)}" y2="${num(y + h * f)}"/>`).join("");
+  // the joystick is a control of its own ("j"): pitch bend and the mod wheel CC 1 light it, never a knob
+  const joystick = (x, y, r) => g("j", "Joystick", `<circle class="hit" cx="${x}" cy="${y}" r="${r + 6}"/><circle class="sh" cx="${x}" cy="${y}" r="${r}"/><circle class="dc" cx="${x}" cy="${y}" r="${num(r * 0.5)}"/><path class="dc" d="M${x - r} ${y}h${2 * r}M${x} ${y - r}v${2 * r}"/>`);
+  const btn = (x, y, w, h) => `<rect class="dc" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/>`;
+  const btnRow = (x, y, n, w, h, gap) => Array.from({ length: n }, (_, i) => btn(x + i * (w + gap), y, w, h)).join("");
+  const screen = (x, y, w, h) => `<rect class="dc" x="${x}" y="${y}" width="${w}" height="${h}" rx="4"/><path class="dc" d="M${x + 8} ${y + h * 0.35}h${w * 0.5}M${x + 8} ${y + h * 0.65}h${w * 0.3}"/>`;
+  const speaker = (x, y, w, h) => Array.from({ length: Math.floor(h / 10) }, (_, i) => `<line class="dc" x1="${x}" x2="${x + w}" y1="${y + i * 10}" y2="${y + i * 10}" stroke-dasharray="6 5"/>`).join("");
+  function keysSvg(x, y, w, h, n, base) {
+    const black = (m) => [1, 3, 6, 8, 10].includes(m % 12);
+    let whites = 0;
+    for (let i = 0; i < n; i++) if (!black(base + i)) whites++;
+    const kw = w / Math.max(1, whites), bw = kw * 0.62;
+    let wi = 0, out = "", blk = "";
+    for (let i = 0; i < n; i++) {
+      const m = base + i, lab = `data-control="k${m}" data-note="${m}" tabindex="0" role="button" aria-label="${noteName(m)}"`;
+      if (black(m)) {
+        const cx = Math.min(Math.max(x + wi * kw, x + bw / 2), x + w - bw / 2);
+        blk += `<rect class="mdKey mdBlack" ${lab} x="${num(cx - bw / 2)}" y="${y}" width="${num(bw)}" height="${num(h * 0.6)}" rx="2"><title>${noteName(m)}</title></rect>`;
+      } else {
+        out += `<rect class="mdKey mdWhite" ${lab} x="${num(x + wi * kw)}" y="${y}" width="${num(kw)}" height="${h}" rx="3"><title>${noteName(m)}</title></rect>`;
+        if (m % 12 === 0 && kw >= 11) out += `<text class="nm" x="${num(x + wi * kw + kw / 2)}" y="${y + h - 7}" style="font-size:${kw > 24 ? 11 : 8}px">${noteName(m)}</text>`;
+        wi++;
+      }
+    }
+    return out + blk;
+  }
+  function schematic(p, base) {
+    let h = 0, inner = "";
+    const keys = (y, kh, x0 = 22) => keysSvg(x0, y, W - 2 * x0, kh, p.keys, base);
+    switch (p.shape) {
+      case "mpk": // joystick, 4x2 pads, screen, 4x2 knobs, speaker; the keys along the bottom
+        h = 290;
+        inner = joystick(62, 78, 32) + padGrid(120, 22, 4, p.pads, 54, 8, true) + screen(392, 34, 96, 50) + btnRow(392, 102, 3, 26, 22, 8) + knobGrid(546, 48, 4, p.knobs, 60, 64, 19) + speaker(776, 30, 38, 110) + keys(170, 100);
+        break;
+      case "lk": // wheels, screen and buttons, a row of 8 knobs over 2x8 pads, a fader; the keys at the bottom
+        h = 330;
+        inner = wheel(24, 24, 26, 150) + wheel(60, 24, 26, 150) + screen(112, 30, 170, 54) + btnRow(112, 104, 3, 52, 26, 8) + btnRow(112, 142, 3, 52, 26, 8) + knobGrid(352, 44, 8, p.knobs, 50, 0, 16) + padGrid(334, 86, 8, p.pads, 42, 8) + btn(772, 30, 14, 146) + btn(764, 70, 30, 22) + keys(200, 112);
+        break;
+      case "mini": // a small keyboard: one knob, a display, scale buttons
+        h = 230;
+        inner = knob("c0", 58, 52, 20, "Knob 1") + screen(112, 28, 130, 50) + btnRow(272, 34, 6, 42, 32, 10) + keys(112, 100);
+        break;
+      case "piano": // 88 keys under a slim panel
+        h = 210;
+        inner = `<circle class="dc" cx="38" cy="38" r="10"/>` + `<rect class="dc" x="92" y="33" width="130" height="10" rx="5"/><rect class="dc" x="150" y="27" width="14" height="22" rx="4"/>` + btnRow(270, 24, 6, 40, 28, 10) + keys(80, 114, 14);
+        break;
+      case "pads": // nanoPAD2: the X-Y touch pad, six buttons over a 4x4 pad grid, no keys
+        h = 370;
+        inner = g("xy", "X-Y pad", `<rect class="sh" x="70" y="40" width="290" height="290" rx="10"/><path class="dc" d="M215 40v290M70 185h290"/><circle class="dc" cx="215" cy="185" r="16"/>`) + btnRow(430, 28, 6, 36, 20, 8) + padGrid(430, 64, 4, p.pads, 62, 8, true);
+        break;
+      case "nkey": // nanoKEY2: octave shift, pitch bend, mod and sustain buttons over 25 slim keys
+        h = 260;
+        inner = [["o-", "OCT −"], ["o+", "OCT +"], ["b-", "PITCH −"], ["b+", "PITCH +"], ["m", "MOD"], ["s", "SUSTAIN"]].map(([id, t], i) => g(id, t, `<rect class="sh" x="${40 + i * 70}" y="30" width="56" height="34" rx="6"/><text class="nm" x="${68 + i * 70}" y="52">${t}</text>`)).join("") + keys(110, 130);
+        break;
+    }
+    return `<svg viewBox="0 0 ${W} ${h}" role="img" aria-label="${esc(p.title)} wireframe"><rect class="body" x="1" y="1" width="${W - 2}" height="${h - 2}" rx="16"/>${inner}</svg>`;
+  }
+
+  function createMidiPanel(MI, run, send) {
+    const saved = load();
+    let el, device = "", profile = "", selected = "", learning = false, base = 48;
+    const flash = new Map(), seenCC = {};
+    const persist = () => localStorage.setItem(storageKey, JSON.stringify(saved));
+    const record = () => (saved[device] = saved[device] || { profile: guess(device), map: {}, controls: {} });
+    const prof = () => PROFILES[profile] || PROFILES.generic;
+    // ---- the starting assignment: what a control does before anyone assigns it (the app lists it in MI.defaults)
+    const defs = () => (typeof MI.defaults === "function" ? MI.defaults() : MI.defaults) || {};
+    const profOf = (from) => PROFILES[saved[from]?.profile || guess(from)] || PROFILES.generic;
+    const shortName = (id) => String((MI.actions().find((x) => x.id === id) || { name: id }).name).replace("VOLUME ", "VOL ").slice(0, 12);
+    // [action id, label] a model gives control id (a pad "p3", a knob "c1"), or null. Knobs need a known first CC.
+    function factory(p, id) {
+      const d = defs(), i = +id.slice(1);
+      if (id[0] === "p" && p.pads) return d.pads?.[i] || (d.padText ? ["", d.padText + " " + (i + 1)] : null);
+      if (id[0] === "c" && p.knobs && p.cc0 != null) return d.knobs?.[i] || null;
+      return null;
+    }
+    function effective(dev, p, id) {
+      const r = saved[dev], c = r?.controls?.[id];
+      if (c && "action" in c) return c.action ? [c.action, shortName(c.action)] : null; // the user's own choice
+      if (r?.defaults === false) return null;
+      const f = factory(p, id);
+      if (!f) return null;
+      const taken = f[0] && (Object.values(r?.map || {}).includes(f[0]) || Object.values(MI.map || {}).includes(f[0]) || Object.entries(r?.controls || {}).some(([k, v]) => k !== id && v.action === f[0]));
+      return taken ? null : f; // an action the user put on another control is not also on this one
+    }
+    function controlOf(from, key) {
+      const p = profOf(from), bound = Object.entries(saved[from]?.controls || {}).find(([, v]) => v.key === key)?.[0];
+      if (bound) return bound;
+      const [, t, ch, n] = key.match(/^([nc])(\d+):(\d+)$/) || [];
+      if (t === "n") return +ch === (p.padCh ?? 9) && p.pads ? "p" + padIndex(p.pads, +n) : "";
+      const r = t === "c" ? knobRank(seenCC[from], +n, p.cc0) : -1;
+      return p.cc0 != null && r >= 0 && r < p.knobs ? "c" + r : "";
+    }
+    // a control nobody assigned, doing what its model's starting assignment says
+    function fallback(from, key, cc, on, value) {
+      if (MI.holdDefaults && MI.holdDefaults()) return false; // the app is using the pads and keys for something on screen
+      const e = effective(from, profOf(from), controlOf(from, key)), action = e && e[0] && MI.actions().find((a) => a.id === e[0]);
+      if (!action) return false;
+      run(action, from + "/" + key, cc, on, value);
+      return true;
+    }
+    function defaultsOff() {
+      MI.names.forEach((n) => { saved[n] = saved[n] || { profile: guess(n), map: {}, controls: {} }; saved[n].defaults = false; });
+      persist();
+      if (el) { drawDevice(); select(selected); }
+    }
+    // a tag with a line to each control that has a function, above the drawing (two rows when there are many)
+    function tags(svg) {
+      const p = prof(), items = [], d = defs();
+      svg.querySelectorAll('[data-control^="p"],[data-control^="c"]').forEach((n) => {
+        const e = effective(device, p, n.dataset.control);
+        if (!e || !e[1]) return;
+        const b = n.getBBox();
+        items.push({ x: b.x + b.width / 2, y: b.y, t: e[1], on: !!e[0] });
+      });
+      items.sort((a, b) => a.x - b.x || a.y - b.y);
+      const h = svg.viewBox.baseVal.height, rows = items.length > 8 ? 2 : 1, T = items.length ? rows * 26 + 10 : 0, B = p.keys && d.keys ? 38 : 0;
+      if (!T && !B) return;
+      let out = "";
+      const tag = (x, y, t, wmax) => { const w = Math.min(t.length * 7 + 14, wmax); return `<rect x="${num(x - w / 2)}" y="${y}" width="${num(w)}" height="19" rx="9"/><text x="${num(x)}" y="${y + 13.5}">${esc(t)}</text>`; };
+      items.forEach((it, i) => {
+        const sx = items.length > 1 ? 50 + (i * (W - 100)) / (items.length - 1) : W / 2, ty = -T + 6 + (rows === 2 ? (i % 2) * 26 : 0), ym = ty + 19 + 8;
+        out += `<g class="tg${it.on ? "" : " info"}"><path d="M${num(it.x)} ${num(it.y)}V${num(Math.max(ym, ty + 20))}L${num(sx)} ${ty + 19}"/>${tag(sx, ty, it.t.slice(0, 12), 2 * ((W - 100) / Math.max(1, items.length - 1)) - 6)}</g>`;
+      });
+      if (B) out += `<g class="tg info"><path d="M${W / 2} ${h - 2}V${h + 10}"/>${tag(W / 2, h + 10, "KEYS · " + d.keys, 260)}</g>`;
+      svg.setAttribute("viewBox", `0 ${-T} ${W} ${h + T + B}`);
+      svg.querySelector(".body").insertAdjacentHTML("afterend", out);
+    }
+    function sourceOptions() {
+      if (!el) return;
+      const sel = el.querySelector("#mdSource");
+      sel.innerHTML = MI.names.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      if (!MI.names.includes(device)) device = MI.names[0] || "";
+      sel.value = device;
+    }
+    function open() {
+      if (!MI.names.length) return;
+      if (el) return;
+      device = MI.names[0];
+      const style = document.createElement("style"); style.textContent = css; style.id = "mdStyle"; document.head.appendChild(style);
+      el = document.createElement("div"); el.id = "mdPanel";
+      el.innerHTML = `<div class="mdCard" role="dialog" aria-modal="true" aria-label="MIDI device diagram"><header><h2>MIDI DEVICE · LIVE DIAGRAM</h2><button data-do="close">DONE</button></header><div class="mdRow"><label>Input port<select id="mdSource"></select></label><label>Diagram<select id="mdProfile"></select></label></div><small>A line sketch of the layout, not to scale. Pick the model that matches yours. Keys, pads and knobs light up as you use them; knobs are matched in the order of their CC numbers. LEARN pins a drawn control to the real one.</small><div class="mdDevice"></div><div class="mdMap"><div class="mdRow"><strong id="mdSelected">Select a key, pad or knob</strong><label>Pocket function<select id="mdAction"></select></label><button data-do="learn">LEARN FROM HARDWARE</button><button data-do="clear">CLEAR CONTROL</button><button data-do="defaults" id="mdDefaults" title="The functions the app gives the knobs and pads before you assign anything"></button></div><div class="mdHint" id="mdHint"></div><small>Choose a diagram control and a Pocket function, then press or turn its real counterpart. Assignments are saved for this input port and this Pocket app. Unassigned keys still play normally. Click a drawn key to preview it.</small><p><a id="mdSourceLink" target="_blank" rel="noopener noreferrer">Manufacturer reference ↗</a></p></div></div>`;
+      document.body.appendChild(el);
+      sourceOptions();
+      el.querySelector("#mdSource").onchange = (e) => { device = e.target.value; learning = false; selected = ""; draw(); };
+      el.querySelector("#mdProfile").onchange = (e) => { profile = e.target.value; record().profile = profile; persist(); selected = ""; draw(); };
+      el.querySelector("#mdAction").onchange = () => { if (selected) setAssignment(selected, el.querySelector("#mdAction").value); };
+      const pick = (control) => { select(control.dataset.control); if (control.dataset.control.startsWith("k")) preview(+control.dataset.control.slice(1)); };
+      el.onclick = (e) => {
+        const control = e.target.closest("[data-control]");
+        if (control) return pick(control);
+        const action = e.target.closest("[data-do]")?.dataset.do;
+        if (action === "close") close();
+        if (action === "learn" && selected) { learning = true; hint("Now press the matching hardware control on " + device + "."); }
+        if (action === "clear" && selected) { clearAssignment(selected); hint("Assignment removed."); }
+        if (action === "defaults") { const r = record(); r.defaults = r.defaults === false; persist(); drawDevice(); select(selected); }
+      };
+      el.onkeydown = (e) => {
+        const control = (e.key === "Enter" || e.key === " ") && e.target.closest?.("[data-control]");
+        if (control) { e.preventDefault(); pick(control); }
+      };
+      draw();
+    }
+    function close() { learning = false; el?.remove(); el = null; document.getElementById("mdStyle")?.remove(); }
+    function hint(text) { if (el) el.querySelector("#mdHint").textContent = text; }
+    function draw() {
+      if (!el) return;
+      profile = record().profile || guess(device);
+      const p = prof(); base = p.base;
+      const sel = el.querySelector("#mdProfile");
+      sel.innerHTML = Object.entries(PROFILES).map(([id, x]) => `<option value="${id}">${esc(x.title)}</option>`).join(""); sel.value = profile;
+      const link = el.querySelector("#mdSourceLink"); link.hidden = !p.source; link.href = p.source;
+      drawDevice(); select("");
+      hint("Listening to " + device + ". Press a key, a pad or turn a knob to see it light up.");
+    }
+    function drawDevice() {
+      if (!el) return;
+      const box = el.querySelector(".mdDevice");
+      box.innerHTML = schematic(prof(), base);
+      tags(box.querySelector("svg"));
+      const b = el.querySelector("#mdDefaults");
+      if (b) b.textContent = "DEFAULTS " + (record().defaults === false ? "OFF" : "ON");
+    }
+    function select(id) {
+      selected = id; if (!el) return;
+      el.querySelectorAll(".chosen").forEach((x) => x.classList.remove("chosen"));
+      el.querySelector(`[data-control="${id}"]`)?.classList.add("chosen");
+      const CTL = { j: "Joystick", xy: "X-Y pad", "o-": "Octave −", "o+": "Octave +", "b-": "Pitch −", "b+": "Pitch +", m: "Mod", s: "Sustain" };
+      el.querySelector("#mdSelected").textContent = id ? (CTL[id] || (id[0] === "k" ? noteName(+id.slice(1)) : id[0] === "p" ? `Pad ${+id.slice(1) + 1}` : `Knob ${+id.slice(1) + 1}`)) : "Select a key, pad or knob";
+      const actions = MI.actions(), groups = [...new Set(actions.map((a) => a.group))];
+      const action = el.querySelector("#mdAction");
+      action.innerHTML = `<option value="">Unassigned · normal key</option>` + groups.map((gr) => `<optgroup label="${esc(gr)}">${actions.filter((a) => a.group === gr).map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join("")}</optgroup>`).join("");
+      action.value = id ? (effective(device, prof(), id)?.[0] || "") : "";
+      action.disabled = !id;
+      const binding = id && record().controls[id]?.key;
+      hint(binding ? `Hardware: ${binding} · ${action.value ? "assigned" : "normal"}` : id ? "Choose a function and press LEARN to bind the real control." : "Select a drawn control to assign it.");
+    }
+    function setAssignment(id, action) {
+      const r = record(), c = r.controls[id] || (r.controls[id] = {});
+      c.action = action;
+      if (c.key) { if (action) r.map[c.key] = action; else delete r.map[c.key]; }
+      persist(); select(id);
+    }
+    function clearAssignment(id) {
+      const r = record(), c = r.controls[id];
+      if (c?.key) delete r.map[c.key];
+      delete r.controls[id]; persist(); select(id);
+    }
+    function preview(n) {
+      send([0x90, n, 90], device);
+      setTimeout(() => send([0x80, n, 0], device), 170);
+    }
+    const lit = (id, on) => el?.querySelector(`[data-control="${id}"]`)?.classList.toggle("lit", on);
+    const blink = (id) => { lit(id, true); clearTimeout(flash.get(id)); flash.set(id, setTimeout(() => lit(id, false), 180)); };
+    // the controls that are neither keys, pads nor knobs: [control, text] for a message, or null
+    function special(p, cmd, cc, a, b, bound) {
+      if (bound) return null;
+      if (p.shape === "mpk" && (cmd === 0xe0 || (cc && a === 1))) return ["j", cmd === 0xe0 ? "Joystick · pitch bend" : `Joystick · mod (CC 1) = ${b}`];
+      if (p.shape === "pads" && cc) return ["xy", `X-Y pad · CC ${a} = ${b}`];
+      if (p.shape === "nkey") {
+        if (cmd === 0xe0) return [b >= 64 ? "b+" : "b-", "Pitch bend button"];
+        if (cc && a === 1) return ["m", `Mod button · CC 1 = ${b}`];
+        if (cc && a === 64) return ["s", `Sustain button · CC 64 = ${b}`];
+      }
+      return null;
+    }
+    function observe(data, from) {
+      const [st, a, b] = data, cmd = st & 0xf0;
+      if (st >= 0xf0 || !from) return;
+      const noteOn = cmd === 0x90 && b > 0, noteOff = cmd === 0x80 || (cmd === 0x90 && b === 0), cc = cmd === 0xb0;
+      const key = (cc ? "c" : "n") + (st & 15) + ":" + a;
+      if (learning && el && from === device && (noteOn || cc && b > 0)) {
+        const r = record(), c = r.controls[selected] || (r.controls[selected] = {});
+        if (c.key) delete r.map[c.key];
+        for (const [id, other] of Object.entries(r.controls)) if (id !== selected && other.key === key) delete other.key;
+        delete r.map[key];
+        c.key = key; if (c.action) r.map[key] = c.action;
+        persist(); learning = false; select(selected);
+      }
+      if (cc) (seenCC[from] = seenCC[from] || new Set()).add(a);
+      if (!el || from !== device) return;
+      const p = prof(), bound = Object.entries(record().controls).find(([, v]) => v.key === key)?.[0];
+      if (noteOn || noteOff) {
+        // a learned pad, else any note on channel 10 is a pad; everything else is a key
+        const id = bound && !bound.startsWith("k") ? bound : !bound && (st & 15) === (p.padCh ?? 9) && p.pads ? "p" + padIndex(p.pads, a) : "";
+        if (id) {
+          lit(id, noteOn);
+          if (noteOn) hint(`Pad ${+id.slice(1) + 1} · note ${a} · channel ${(st & 15) + 1}`);
+          return;
+        }
+        if (!p.keys) return;
+        if (a < base || a >= base + p.keys) { base = Math.max(0, Math.min(127 - p.keys, Math.floor(a / 12) * 12)); drawDevice(); }
+        lit("k" + a, noteOn);
+      } else if (special(p, cmd, cc, a, b, bound)) {
+        const [id, text] = special(p, cmd, cc, a, b, bound);
+        blink(id);
+        hint(text);
+      } else if (cc) {
+        const r = bound && !bound.startsWith("k") ? bound : knobRank(seenCC[from], a, p.cc0);
+        const id = typeof r === "string" ? r : r >= 0 && r < p.knobs ? "c" + r : "";
+        if (id) { blink(id); hint(id === "j" ? `Joystick · CC ${a} = ${b}` : `Knob ${+id.slice(1) + 1} · CC ${a} = ${b}`); }
+      }
+    }
+    function route(from, key, cc, on, value) {
+      const id = saved[from]?.map?.[key], action = id && MI.actions().find((a) => a.id === id);
+      if (!action) return false;
+      run(action, from + "/" + key, cc, on, value);
+      return true;
+    }
+    // is this note-on from one of the controller's pads (its pad channel) and not from a key?
+    const isPad = (from, ch) => { const p = profOf(from); return !!p.pads && ch === (p.padCh ?? 9); };
+    return { open, close, observe, route, fallback, defaultsOff, isPad };
+  }
+  window.createMidiPanel = createMidiPanel;
+  window.pocketMidiHelpers = { padIndex, knobRank, guess };
+})();
+    
+
+    </script>
     <script type="text/plain" id="worklet">// The emulator in the audio thread: each 128-frame quantum runs the machine until its I2S
 // DMA has produced 128 frames, so the audio device paces the emulation; and also, for an even
 // amount of work per quantum, its share of emulated time while the queue holds less than one
@@ -817,6 +1230,8 @@ registerProcessor("fm1", Fm1);
       }
       const press = (id) => holds[id]++ === 0 && setKey(id, true);
       const unpress = (id) => holds[id] && --holds[id] === 0 && setKey(id, false);
+      const holdKey = press,
+        dropKey = unpress;
       const pointers = new Map(); // pointerId -> { kn, held, lastY, acc }
       const upY = (e) => (matchMedia("(orientation: portrait) and (pointer: coarse)").matches ? -e.clientX : e.clientY); // on a turned page, up is the phone's right
       const idAt = (e) => {
@@ -867,7 +1282,7 @@ registerProcessor("fm1", Fm1);
         ENC_KEYS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1], ",": [2, -1], ".": [2, 1] };
       const keyId = (k) => (PIANO.includes(k) ? 21 + PIANO.indexOf(k) : (KEYB[k] ?? -1));
       addEventListener("keydown", (e) => {
-        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden) return e.key === "Escape" && ($("#sure").hidden ? menuShow(false) : sureClose());
+        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden || document.getElementById("mdPanel")) return e.key === "Escape" && (!$("#sure").hidden ? sureClose() : !$("#sheet").hidden ? ($("#sheet").hidden = true) : menuShow(false));
         if (ENC_KEYS[e.key]) return e.preventDefault(), turn(...ENC_KEYS[e.key]);
         const id = keyId(e.key.toLowerCase());
         if (id < 0) return;
@@ -1221,26 +1636,83 @@ registerProcessor("fm1", Fm1);
       // ======================================================================
       // MIDI: every input of the device goes to the FM-1's MIDI IN jack, byte for byte
       // ======================================================================
-      let midi = null;
+      // Notes, and everything nobody assigned, go to the FM-1's MIDI IN jack byte for byte. Knobs (CC) and pads can instead
+      // work the FM-1's own knobs and buttons: the DEVICE panel (the Pocket apps' shared one, with a drawing of each controller)
+      // gives each known model a starting assignment and lets every control be assigned and learned.
+      //   key of a control = "n<channel>:<note>" or "c<channel>:<cc>", as in the other Pocket apps
       const midiIn = (bytes) => send({ type: "midi", bytes });
+      const ACTIONS = [
+        ...ENCS.map(([n], i) => ({ id: "enc" + i, name: n, group: "FM-1 knobs", kind: "enc", n: i })),
+        { id: "master", name: "MASTER", group: "FM-1 knobs", kind: "pot" },
+        ...BTNS.map((n, i) => ({ id: "btn" + i, name: n, group: "FM-1 buttons", kind: "btn", n: i })),
+      ];
+      const act = (id) => [id, ACTIONS.find((a) => a.id === id).name];
+      // a controller with 8 knobs in two rows and 8 pads (Akai MPK mini, Launchkey): the top row is KNOB1 to 4, the bottom
+      // row the FM-1's left side in its own order. Pads: the lower row the keys used most, the upper row the first pages.
+      const MI = {
+        acc: null,
+        names: [],
+        map: {},
+        actions: () => ACTIONS,
+        defaults: () => ({ knobs: ["enc3", "enc4", "enc5", "enc6", "master", "enc0", "enc1", "enc2"].map(act), pads: ["btn8", "btn9", "btn12", "btn13", "btn2", "btn3", "btn4", "btn5"].map(act) }),
+        down: new Map(), // control -> held (buttons)
+        last: new Map(), // control -> last CC value, and what is left of a turn (encoders)
+      };
+      function miRun(a, key, cc, on, v) {
+        if (a.kind === "pot") return (cc || on) && setPot((v / 127) * 1023);
+        if (a.kind === "enc") {
+          if (!cc) return on && turn(a.n, 1); // a pad or a key on a knob: one click
+          // a controller's knob has ends and the FM-1's has none: its movement turns the encoder, 4 steps of CC to a click
+          const l = MI.last.get(key) || { v, acc: 0 };
+          l.acc += v - l.v;
+          l.v = v;
+          const n = Math.trunc(l.acc / 4);
+          l.acc -= n * 4;
+          MI.last.set(key, l);
+          return n && turn(a.n, n);
+        }
+        const press = cc ? v >= 64 : on; // pads in CC mode send 127 / 0
+        if (press === !!MI.down.get(key)) return;
+        MI.down.set(key, press);
+        press ? holdKey(a.n) : dropKey(a.n);
+      }
+      function midiMsg(data, from) {
+        midiPanel.observe(data, from);
+        const [st, a, b] = data,
+          cmd = st & 0xf0,
+          on = cmd === 0x90 && b > 0,
+          off = cmd === 0x80 || (cmd === 0x90 && b === 0),
+          cc = cmd === 0xb0;
+        if (on || off || cc) {
+          const key = (cc ? "c" : "n") + (st & 15) + ":" + a;
+          if (midiPanel.route(from, key, cc, on, b) || midiPanel.fallback(from, key, cc, on, b)) return;
+        }
+        midiIn(Array.from(data));
+      }
+      const midiPanel = createMidiPanel(MI, miRun, midiMsg);
       function midiFace() {
-        const names = midi ? [...midi.inputs.values()].map((i) => i.name || "MIDI input") : [];
-        $("#midi").classList.toggle("on", names.length > 0);
-        $("#midiNames").textContent = names.length ? "Connected: " + names.join(", ") : "No MIDI device found: plug one in.";
-        if (midi) for (const i of midi.inputs.values()) i.onmidimessage = (e) => midiIn(Array.from(e.data));
-        return names;
+        MI.names = [];
+        if (MI.acc)
+          for (const i of MI.acc.inputs.values()) {
+            i.onmidimessage = (e) => midiMsg(e.data, i.name || "MIDI input");
+            if (i.state !== "disconnected") MI.names.push(i.name || "MIDI input");
+          }
+        $("#midi").classList.toggle("on", MI.names.length > 0);
+        $("#midiNames").textContent = MI.names.length ? "Connected: " + MI.names.join(", ") : MI.acc ? "No MIDI device found: plug one in." : "Not connected yet.";
+        return MI.names;
       }
       $("#midi").onclick = async () => {
         if (!navigator.requestMIDIAccess) return toast("This browser has no MIDI (use Chrome, Edge or Firefox)", 3000);
         try {
-          midi = midi || (await navigator.requestMIDIAccess());
-          midi.onstatechange = midiFace;
+          MI.acc = MI.acc || (await navigator.requestMIDIAccess());
+          MI.acc.onstatechange = midiFace;
           const names = midiFace();
-          toast(names.length ? "MIDI IN: " + names.join(", ") : "No MIDI device found: plug one in", 3000);
+          toast(names.length ? "MIDI: " + names.join(", ") : "No MIDI device found: plug one in", 3000);
         } catch {
           toast("MIDI was not allowed", 3000);
         }
       };
+      $("#midiDev").onclick = () => (MI.names.length ? (midiPanel.open(), toast("Press a key, a pad or turn a knob: it lights up on the drawing")) : toast("Connect a MIDI device first"));
 
       // ======================================================================
       // INSTALL: the browser's own install dialog where there is one, the steps elsewhere (as in the Pocket apps)
@@ -1274,6 +1746,96 @@ registerProcessor("fm1", Fm1);
       };
       addEventListener("pocketinstall", () => ((PWA.ev = window.pocketInstall), pwaFace()));
       addEventListener("appinstalled", () => ((PWA.done = true), (PWA.ev = null), pwaFace(), toast("Installed: open it from your home screen or apps")));
+
+      // ======================================================================
+      // the manual (English and Spanish) and the licences, on a sheet. Lines: "## heading", "- item", else a paragraph. **bold**.
+      // ======================================================================
+      const HELP = {
+        en: [
+          "## What this is",
+          "**FM1.Pocket** is an M-VAVE FM-1 for your phone: the real firmware, and the firmwares its community writes, running on an emulated FM-1. It is a fork of **fm1-emu** by Joakim Eriksson: the machine inside is his.",
+          "## Playing",
+          "- **ON** starts the FM-1 with the chosen firmware. **OFF** stops it.",
+          "- Press the keys and the buttons. Several fingers at once work. Slide across the keys.",
+          "- Drag a knob up or down to turn it. MASTER is the volume.",
+          "- **KEYS / TOP / ALL** goes round three views: the whole FM-1, only the keys, only the knobs, screen and buttons.",
+          "- A phone is always played sideways. Held upright, the FM-1 is drawn turned: turn the phone.",
+          "## Menu (the FM1. button)",
+          "- **FIRMWARE**: a card for each firmware. **USE** runs it. **DOWNLOAD** keeps it on this device, so it runs with no connection (marked ●). **OPEN FILE** runs your own .fwsc file.",
+          "- **RESTART** starts the firmware again. **ERASE** forgets what the running firmware saved. **CLEAR** deletes the downloaded firmwares. The last two ask you to slide to confirm.",
+          "- What a firmware saves (patches, songs, settings) is kept on this device, for each exact version of it.",
+          "- **LOOK**: the keys (the FM-1's own or a piano), the skin (the colours the FM-1 is sold in, then ours) and the screen filter (LCD, CRT or clean).",
+          "- **OPTIONS**: MIDI and installing the app.",
+          "## MIDI",
+          "- **CONNECT MIDI** finds your keyboards and controllers. Their keys play the FM-1 through its MIDI IN.",
+          "- On known controllers (Akai MPK mini, Launchkey) the knobs and pads start on the FM-1's controls: knobs 1 to 4 are KNOB1 to 4, knobs 5 to 8 are MASTER, SELECT, PRESETS and ALGORITHM. Pads 1 to 4 are HOME, SAVE, PLAY and REC, pads 5 to 8 are FX, SCL, ENV and LFO.",
+          "- **DEVICE** shows a drawing of your controller. Tap a control on it, choose what it does, and press LEARN to bind the real one.",
+          "- A controller's knob has ends and the FM-1's knobs have none: turn it back and forth to keep going.",
+          "## Installing",
+          "- **INSTALL** (in OPTIONS) puts the app on your home screen: full screen, sideways, and it works offline with the firmwares marked ●.",
+          "## Computer keys",
+          "- A W S E D F T G Y H U J K O L P play. Z and X: octave. Space: PLAY. R: REC. 1 to 0: the ten buttons from FX to SEQ. Arrows and , . turn SELECT, PRESETS and ALGORITHM.",
+        ],
+        es: [
+          "## Qué es",
+          "**FM1.Pocket** es un M-VAVE FM-1 para el móvil: el firmware real, y los firmwares que escribe su comunidad, funcionando en un FM-1 emulado. Es un fork de **fm1-emu**, de Joakim Eriksson: la máquina de dentro es suya.",
+          "## Tocar",
+          "- **ON** enciende el FM-1 con el firmware elegido. **OFF** lo apaga.",
+          "- Pulsa las teclas y los botones. Funcionan varios dedos a la vez. Desliza sobre las teclas.",
+          "- Arrastra un pote hacia arriba o hacia abajo para girarlo. MASTER es el volumen.",
+          "- **KEYS / TOP / ALL** recorre tres vistas: el FM-1 entero, solo las teclas, solo los potes, la pantalla y los botones.",
+          "- En el móvil siempre se toca en horizontal. En vertical, el FM-1 se dibuja girado: gira el móvil.",
+          "## Menú (el botón FM1.)",
+          "- **FIRMWARE**: una tarjeta por firmware. **USE** lo ejecuta. **DOWNLOAD** lo guarda en este dispositivo, para usarlo sin conexión (marcado con ●). **OPEN FILE** ejecuta tu propio archivo .fwsc.",
+          "- **RESTART** reinicia el firmware. **ERASE** borra lo que ha guardado el firmware en uso. **CLEAR** borra los firmwares descargados. Los dos últimos piden deslizar para confirmar.",
+          "- Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, para cada versión exacta.",
+          "- **LOOK**: las teclas (las del FM-1 o un piano), el aspecto (los colores en que se vende el FM-1 y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpio).",
+          "- **OPTIONS**: MIDI e instalar la app.",
+          "## MIDI",
+          "- **CONNECT MIDI** busca tus teclados y controladores. Sus teclas tocan el FM-1 por su MIDI IN.",
+          "- En los controladores conocidos (Akai MPK mini, Launchkey) los potes y los pads empiezan en los controles del FM-1: los potes 1 a 4 son KNOB1 a 4, los potes 5 a 8 son MASTER, SELECT, PRESETS y ALGORITHM. Los pads 1 a 4 son HOME, SAVE, PLAY y REC, los pads 5 a 8 son FX, SCL, ENV y LFO.",
+          "- **DEVICE** muestra un dibujo de tu controlador. Toca un control, elige qué hace y pulsa LEARN para enlazar el real.",
+          "- El pote de un controlador tiene topes y los del FM-1 no: gíralo adelante y atrás para seguir.",
+          "## Instalar",
+          "- **INSTALL** (en OPTIONS) pone la app en tu pantalla de inicio: pantalla completa, en horizontal, y funciona sin conexión con los firmwares marcados con ●.",
+          "## Teclas del ordenador",
+          "- A W S E D F T G Y H U J K O L P tocan. Z y X: octava. Espacio: PLAY. R: REC. 1 a 0: los diez botones de FX a SEQ. Las flechas y , . giran SELECT, PRESETS y ALGORITHM.",
+        ],
+      };
+      let lang = pick("fm1.lang", ["en", "es"], (navigator.language || "").startsWith("es") ? "es" : "en");
+      // the manual is our own text: **bold** is the only markup, and it is built as elements, never as HTML
+      function rich(text, into) {
+        text.split("**").forEach((part, i) => into.append(i % 2 ? el("b", "", part) : part));
+        return into;
+      }
+      function sheet(title, nodes, langs) {
+        $("#shTitle").textContent = title;
+        for (const b of $$("#sheet [data-lg]")) ((b.hidden = !langs), b.classList.toggle("on", b.dataset.lg === lang));
+        $("#shBody").replaceChildren(...nodes);
+        $("#shBody").scrollTop = 0;
+        $("#sheet").hidden = false;
+      }
+      function manual() {
+        const out = [];
+        let ul = null;
+        for (const l of HELP[lang]) {
+          if (l.startsWith("- ")) (ul || out.push((ul = el("ul"))), ul.append(rich(l.slice(2), el("li"))));
+          else ((ul = null), out.push(l.startsWith("## ") ? el("h3", "", l.slice(3)) : rich(l, el("p"))));
+        }
+        sheet(lang === "es" ? "FM1.Pocket · Manual" : "FM1.Pocket · Manual", out, true);
+      }
+      $("#manual").onclick = manual;
+      for (const b of $$("#sheet [data-lg]")) b.onclick = () => (store("fm1.lang", (lang = b.dataset.lg)), manual());
+      $("#licence").onclick = () =>
+        sheet("Licences", [
+          el("h3", "", "fm1-emu, the emulator inside"),
+          el("pre", "", $("#licEmu").textContent),
+          el("h3", "", "FM1.Pocket, this page"),
+          el("pre", "", $("#licEmu").textContent.replace("Joakim Eriksson", "utopick")),
+          el("h3", "", "The firmwares"),
+          el("p", "", "Each firmware belongs to its author and has its own licence, shown on its card. None is part of this app: each is downloaded from its author when you ask for it."),
+        ]);
+      $("#shClose").onclick = () => ($("#sheet").hidden = true);
 
       // ======================================================================
       // boot
