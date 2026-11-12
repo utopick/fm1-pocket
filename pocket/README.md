@@ -31,8 +31,8 @@ python pocket/tests/smoke.py path/to/firmware.fwsc        # needs selenium and C
 ```
 
 Edit `pocket/src/app.html`. `pocket/vendor/midi-device.js` is the MIDI device panel
-shared with the Pocket apps (copied from TUNE.Pocket's `<script id="midi-device">`, keep it identical), and
-`pocket/vendor/caps/` the small pictures of the ABOUT tab. `pocket/vendor/` also holds fm1-emu's built core (`fm1_web.wasm`), `worklet.js` and
+shared with the Pocket apps (copied from TUNE.Pocket's `<script id="midi-device">`, keep it identical).
+`pocket/vendor/` also holds fm1-emu's built core (`fm1_web.wasm`), `worklet.js` and
 `firmwares.json`, copied from its published page at commit 3e3fb27. To update them, build `web/` as the main
 README says and copy the three files.
 
