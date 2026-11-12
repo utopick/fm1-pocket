@@ -118,6 +118,11 @@ try:
     webdriver.ActionChains(d).move_to_element(k).click_and_hold().perform(); assert js("return down[30]") == 1
     webdriver.ActionChains(d).release().perform(); assert js("return down[30]") == 0
     js("turn(0, 3); setPot(900)")
+    # a dimmed light wavers a little from frame to frame (386DX dims every button): it is drawn steady
+    seen = js("""const out = new Set(), l = new Float32Array(41);
+      for (let i = 0; i < 40; i++) { l[3] = i % 9 ? 0.022 : 0.02; showFrame({ lcd: null, leds: l }); i > 20 && out.add(lights[3].style.getPropertyValue('--led')); }
+      return [...out]""")
+    assert len(seen) == 1 and 0.2 < float(seen[0]) < 0.3, "a dim light shimmers: %s" % seen
     # a controller: an MPK's knob 1 (CC 2) turns KNOB1, its pad 1 (note 36, channel 10) holds HOME, its keys go to MIDI IN
     js("MI.names = ['MPK mini']; window.c0 = clicks[3]; midiMsg([0xb0, 2, 10], 'MPK mini'); midiMsg([0xb0, 2, 30], 'MPK mini')")
     assert js("return clicks[3] - c0") == 5, "the knob did not turn KNOB1"
