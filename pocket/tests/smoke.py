@@ -46,6 +46,13 @@ try:
     # vertical: the whole FM-1 rearranged, the keys in two rows
     parts(1, 1, "vertical"); assert js("return document.querySelectorAll('.krow').length") == 2
     size(390, 844, "vertical")
+    # a phone held upright: the sideways view, drawn turned (one row of keys, the screen still square and inside the window)
+    d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5}); time.sleep(0.4)
+    parts(1, 1, "phone upright"); assert js("return document.querySelectorAll('.krow').length") == 1
+    r = js("const r = document.querySelector('#scr').getBoundingClientRect(); return [r.width, r.height, r.right, r.bottom]")
+    assert abs(r[0] - r[1]) < 1 and r[0] > 150 and r[2] <= 390 and r[3] <= 844, r
+    size(390, 844, "phone-upright")
+    d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": False}); time.sleep(0.4)
     # sideways, complete, then switchable: the upper part or the keys
     size(844, 390, "complete"); parts(1, 1, "complete"); assert js("return document.querySelectorAll('.krow').length") == 1
     js("document.querySelector('#view').click()"); parts(1, 0, "switchable, upper part"); size(844, 390, "switch-top")
