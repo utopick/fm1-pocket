@@ -80,11 +80,16 @@
       html, body { margin: 0; height: 100%; background: linear-gradient(var(--body1), var(--body2)) var(--body2); color: var(--silk); font: 13px/1.25 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overscroll-behavior: none; overflow: hidden; }
       body { position: relative; display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); user-select: none; -webkit-user-select: none; touch-action: none; }
       button, select { font: 800 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.5px; }
-      /* ---- the rail: the app's own buttons (menu, power, view), a column at the left edge of the upper part. Where there is no
+      /* ---- the rail: the app's own buttons (menu, power, view), a column beside MASTER and PRESETS, as tall as the two rows of
+         knobs and sized with the device. With it the left group is as wide as KNOB1 to 4, so both sit at the same distance
+         from their edge of the screen. Where there is no
          upper part beside the keys (only the keys showing, or the upright layout) it is a row at the top */
       #rail { display: flex; gap: 6px; align-items: stretch; flex: none; }
-      #up > #rail { flex-direction: column; justify-content: center; margin-right: 4px; }
-      #up > #rail .grow { display: none; }
+      #Ltop { display: flex; gap: calc(18 * var(--u)); align-items: stretch; }
+      #Ltop > #rail { flex-direction: column; gap: calc(10 * var(--u)); }
+      #Ltop > #rail .grow { display: none; }
+      #Ltop > #rail button { flex: 1; min-height: 0; min-width: 0; width: calc(102 * var(--u)); border-radius: calc(14 * var(--u)); font-size: max(9px, calc(16 * var(--u))); }
+      #Ltop > #rail #logo { font-size: max(12px, calc(22 * var(--u))); }
       #rail button { min-width: 44px; min-height: 40px; padding: 4px; border-radius: 10px; border: 0; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: 0 3px 0 #0009; color: var(--ink); cursor: pointer; }
       #rail #power.on { background: #ff5e7a; color: #fff; }
       #rail #logo { font: 900 15px system-ui; letter-spacing: 0.5px; }
@@ -97,7 +102,7 @@
       #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px; container-type: size; }
       /* the shell: matt, lit from above, with a bevel at its edge */
       body::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 80% at 35% 0%, #ffffff12, transparent 60%); box-shadow: inset 0 0 0 1px #ffffff1c, inset 0 -10px 18px #0005, inset 0 6px 10px #ffffff0a; }
-      #up { --u: min(calc((100cqw - 56px) / 1400), calc(100cqh / 760)); flex: none; display: flex; align-items: center; }
+      #up { --u: min(calc(100cqw / 1400), calc(100cqh / 760)); flex: none; display: flex; align-items: center; }
       #kb { flex: 1; min-height: 0; background: var(--tray); border-radius: 22px; padding: 1.2% 1%; display: flex; flex-direction: column; gap: 4%; box-shadow: inset 0 0 0 1px var(--rim), inset 0 3px 8px #000a; }
       #L, #R { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; align-self: stretch; gap: calc(14 * var(--u)); }
       /* the screen: a glossy black window, the display well inside it */
@@ -144,7 +149,7 @@
       }
       @media (orientation: landscape), (pointer: coarse) {
 
-        [data-view="up"] #up { --u: min(calc((100cqw - 56px) / 1400), calc(100cqh / 540)); flex: 1; }
+        [data-view="up"] #up { --u: min(calc(100cqw / 1400), calc(100cqh / 540)); flex: 1; }
         [data-view="keys"] #up, [data-view="up"] #kb { display: none; }
       }
       @media (orientation: portrait) and (pointer: fine) {
@@ -183,12 +188,19 @@
       #menu .fwc .act { grid-column: 1 / -1; display: flex; gap: 6px; }
       #menu .fwc button { min-height: 38px; padding: 4px; }
       #menu .foot { flex: none; display: flex; flex-direction: column; gap: 6px; }
+      /* storage: a bar that fills with what the app keeps here. Its height is fixed, so the text in it never moves the buttons */
+      #stor { position: relative; height: 20px; flex: none; border-radius: 10px; background: #1d222a; border: 1px solid #2a313b; overflow: hidden; }
+      #stor i { position: absolute; inset: 0 auto 0 0; min-width: 8px; background: linear-gradient(90deg, #7c5cc4, #b48cff); }
+      #stor span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px ui-monospace, Menlo, monospace; letter-spacing: 1px; color: #e8ecf1; white-space: nowrap; text-shadow: 0 1px 2px #000; }
       /* LOOK: the chooser of the subject picked at the bottom fills the tab: the two kinds of keys, a card for each skin,
          the same screen under each filter. Tap one to use it */
       #menu section.row { flex-direction: row; }
       #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
       #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx { display: flex; }
-      #menu [data-sub="skin"] #pvSkin { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); grid-auto-rows: minmax(96px, 1fr); overflow: auto; padding-right: 4px; }
+      #menu [data-sub="skin"] #pvSkin { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(130px, 16% - 8px), 1fr)); grid-auto-rows: max-content; align-content: start; overflow: auto; padding-right: 4px; }
+      /* a skin card keeps its shape whatever the window: its little FM-1 is drawn to a fixed ratio */
+      #menu #pvSkin .pick { height: auto; }
+      #menu #pvSkin .pick .pv { flex: none; aspect-ratio: 16 / 9; }
       #menu .pick { flex: 1; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
       #menu .pick > * { pointer-events: none; }
       #menu .pick .pv { flex: 1; min-height: 0; border-radius: 10px; }
@@ -198,7 +210,7 @@
       #menu .mini { background: linear-gradient(var(--body1), var(--body2)); display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 5px; padding: 7px; box-shadow: inset 0 0 0 1px #ffffff1c; }
       #menu .mini i { display: block; min-height: 0; }
       #menu .mini .ms { grid-row: 1 / 3; background: #060607; border-radius: 6px; }
-      #menu .mini .mk { border-radius: 50%; aspect-ratio: 1; height: 100%; justify-self: center; background: radial-gradient(circle, var(--keyline) 0 14%, var(--cap) 16%); box-shadow: 0 2px 3px #0008; }
+      #menu .mini .mk { border-radius: 50%; aspect-ratio: 1; height: 100%; max-width: 100%; justify-self: center; align-self: center; background: radial-gradient(circle, var(--keyline) 0 14%, var(--cap) 16%); box-shadow: 0 2px 3px #0008; }
       #menu .mini .mb { border-radius: 4px; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
       #menu .mini .my { grid-column: 1 / -1; border-radius: 6px; background: repeating-linear-gradient(90deg, var(--tray) 0 4%, var(--key1) 4% 7.5%, var(--keyline) 7.5% 9%, var(--key1) 9% 12.5%); }
       #menu .box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2a313b; border-radius: 12px; background: #171b22; overflow: auto; }
@@ -263,7 +275,7 @@
     <div id="fm" title="The FM-1: press its keys and buttons, drag a knob up or down to turn it">
       <div id="up">
         <div id="L">
-          <div class="knobs" id="knL"></div>
+          <div id="Ltop"><div class="knobs" id="knL"></div></div>
           <div class="tray" id="oct"></div>
         </div>
         <div id="scr" class="scr"><canvas id="lcd" class="lcd" width="240" height="240"></canvas></div>
@@ -290,13 +302,13 @@
         <section data-tab="fw">
           <div id="fwList" class="cards"></div>
           <div class="foot">
+            <div id="stor" role="img" title="The storage this app uses on this device, and what is free"><i></i><span></span></div>
             <div class="grid">
               <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
               <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
               <button id="wipe" title="Forget what the running firmware saved and start it fresh. Asks first."><i>ITS SAVES</i>ERASE</button>
               <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR</button>
             </div>
-            <p id="stor"></p>
           </div>
           <select id="fw" hidden title="The firmware the FM-1 runs"></select>
         </section>
@@ -1422,6 +1434,16 @@ registerProcessor("fm1", Fm1);
       // ======================================================================
       // the firmware list and files
       // ======================================================================
+      // a card with no picture (offline and never run here, or the Hub has none): a little pixel fellow says so
+      const NO_IMG =
+        "data:image/svg+xml," +
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" shape-rendering="crispEdges"><rect width="64" height="64" fill="#06070a"/><g fill="#b48cff">' +
+            ["...######...", "..########..", ".##########.", ".##.####.##.", ".##.####.##.", ".##########.", ".####..####.", ".##########.", ".#.##..##.#."]
+              .flatMap((row, y) => [...row].map((c, x) => (c === "#" ? `<rect x="${8 + x * 4}" y="${6 + y * 4}" width="4" height="4"/>` : "")))
+              .join("") +
+            '</g><text x="32" y="57" font-family="monospace" font-size="9" font-weight="700" fill="#8a94a3" text-anchor="middle">NO IMAGE</text></svg>',
+        );
       const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
       let want = stored("fm1.fw") || "grimm"; // the firmware chosen (the list may not hold it yet: it fills in steps)
       function listFace() {
@@ -1441,7 +1463,7 @@ registerProcessor("fm1", Fm1);
             have = f === local || kept.has(f.id),
             dl = el("button", "", have ? "KEPT ●" : "DOWNLOAD"),
             go = el("button", f.id === sel.value ? "on" : "", f.id === sel.value && node ? "IN USE" : "USE");
-          const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? (img.src = d) : img.removeAttribute("src"))));
+          const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (img.src = typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? d : NO_IMG)));
           img.alt = "";
           img.loading = "lazy";
           img.referrerPolicy = "no-referrer";
@@ -1460,7 +1482,14 @@ registerProcessor("fm1", Fm1);
           return c;
         };
         $("#fwList").replaceChildren(...(local ? [local] : []).concat(FIRMWARES).map(card));
-        navigator.storage?.estimate?.().then((s) => ($("#stor").textContent = `${kept.size + (local ? 1 : 0)} firmware(s) kept on this device. Storage: ${mb(s.usage || 0)} used of ${mb(s.quota || 0)}.`), () => {});
+        const n = kept.size + (local ? 1 : 0);
+        $("#stor span").textContent = n + " KEPT";
+        navigator.storage?.estimate?.().then((s) => {
+          const used = s.usage || 0,
+            all = s.quota || 0;
+          $("#stor i").style.width = (all ? Math.min(100, (100 * used) / all) : 0) + "%";
+          $("#stor span").textContent = `${n} KEPT · ${mb(used)} USED · ${mb(Math.max(0, all - used))} FREE`;
+        }, () => {});
       }
       // USE: choose it, close the menu, and run it (turning the FM-1 on if it is off)
       function use(id) {
@@ -1552,7 +1581,7 @@ registerProcessor("fm1", Fm1);
         for (const [pane, now] of [["#pvKeys", kbd.keys], ["#pvSkin", root.skin], ["#pvFx", scr.fx]]) for (const c of $$(pane + " .pick")) c.classList.toggle("on", c.dataset.v === now);
         $("#flip").textContent = { complete: "KEYS", keys: "TOP", up: "ALL" }[b.view]; // what the next tap shows
         buildKeys($("#kb"), tall.matches ? 2 : 1, true);
-        (tall.matches || b.view === "keys" ? $("#fm") : $("#up")).prepend($("#rail"));
+        (tall.matches || b.view === "keys" ? $("#fm") : $("#Ltop")).prepend($("#rail"));
         for (let i = 14; i < 41; i++) lights[i].classList.toggle("down", !!down[i]);
         ledNow.fill(0, 14);
       }
