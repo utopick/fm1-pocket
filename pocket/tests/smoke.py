@@ -48,13 +48,15 @@ try:
     size(390, 844, "vertical")
     # a phone held upright: the sideways view, drawn turned (one row of keys, the screen still square and inside the window)
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5}); time.sleep(0.4)
-    parts(1, 1, "phone upright"); assert shown("#up > #rail button") == 3, "the rail is not beside the upper part"; assert js("return document.querySelectorAll('#kb .krow').length") == 1
+    parts(1, 1, "phone upright"); assert shown("#Ltop > #rail button") == 3, "the rail is not beside the knobs"; assert js("return document.querySelectorAll('#kb .krow').length") == 1
     r = js("const r = document.querySelector('#scr').getBoundingClientRect(); return [r.width, r.height, r.right, r.bottom]")
     assert abs(r[0] - r[1]) < 1 and r[0] > 150 and r[2] <= 390 and r[3] <= 844, r
     size(390, 844, "phone-upright")
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": False}); time.sleep(0.4)
     # sideways: the one button goes round the whole FM-1, the keys, the upper part
     size(844, 390, "complete"); parts(1, 1, "complete"); assert js("return document.querySelectorAll('#kb .krow').length") == 1
+    m = js("const r = s => document.querySelector(s).getBoundingClientRect(), f = r('#fm'), a = r('#knL'), b = r('#knR'), t = r('#rail'); return [t.left - f.left, f.right - b.right, t.top - a.top, t.bottom - a.bottom]")
+    assert abs(m[0] - m[1]) < 2 and abs(m[2]) < 1 and abs(m[3]) < 1, "margins left/right, rail against the knobs: %s" % m
     flip = lambda: js("document.querySelector('#flip').click()")
     flip(); flip(); parts(1, 0, "upper part"); size(844, 390, "switch-top")
     flip(); parts(1, 1, "complete again"); flip(); parts(0, 1, "keys"); assert shown("#fm > #rail button") == 3, "no rail over the keys"
@@ -80,10 +82,21 @@ try:
         got = js("const p = [...document.querySelectorAll('#menu .pane')].filter(x => x.offsetParent); return [p.length, p[0].getBoundingClientRect().height > 180, p[0].querySelectorAll('.pick.on').length]")
         assert got == [1, True, 1], "look, %s: %s" % (sub, got)
         if os.environ.get("SHOT"): d.save_screenshot(os.path.join(os.environ["SHOT"], "menu-look-" + sub + ".png"))
+    # on a big window the skin cards keep their shape (wider than tall) and their knobs stay round
+    size(1500, 700, "x"); time.sleep(0.2)
+    sh = js("const c = document.querySelector('#pvSkin .mini').getBoundingClientRect(), k = document.querySelector('#pvSkin .mk').getBoundingClientRect(); return [c.width / c.height, k.width / k.height, k.right <= c.right]")
+    assert 1.5 < sh[0] < 2 and abs(sh[1] - 1) < 0.05 and sh[2], "skin card out of shape on a big window: %s" % sh
+    if os.environ.get("SHOT"): d.save_screenshot(os.path.join(os.environ["SHOT"], "menu-skin-desktop.png"))
+    size(844, 390, "x")
     js("document.querySelector('#menu .tabs [data-tab=fw]').click()")
     assert js("return document.querySelectorAll('#fwList .fwc').length") > 20 and js("return document.querySelectorAll('#fwList .fwc.on').length") == 1
     tops = js("return [...document.querySelectorAll('#fwList .fwc')].slice(0, 5).map(c => Math.round(c.getBoundingClientRect().top))")
     assert len(set(tops[:4])) == 1 and tops[4] > tops[0], "not four cards to a row: %s" % tops
+    # a card whose picture does not load shows the "no image" fellow
+    js("const i = document.querySelector('#fwList .fwc.on img'); if (!i.src.startsWith('data:image/svg')) i.src = 'http://127.0.0.1:9/x.webp'"); d.get_screenshot_as_png(); time.sleep(1)  # the card in view (pictures out of view wait), and a frame drawn
+    assert "FREE" in q("#stor span") and js("return document.querySelector('#stor').offsetHeight") == 20, "no storage bar"
+    assert js("return document.querySelector('#fwList .fwc.on img').src.startsWith('data:image/svg+xml') && document.querySelector('#fwList .fwc.on img').naturalWidth > 0"), "no placeholder picture"
+    if os.environ.get("SHOT"): d.save_screenshot(os.path.join(os.environ["SHOT"], "noimg.png"))
     # a dangerous action asks first: half a slide does nothing, CANCEL closes, the whole slide does it
     slide = lambda v: js("const s = document.querySelector('#sureSlide'); s.value = arguments[0]; s.onchange()", v)
     js("kept.add('zzz'); document.querySelector('#forget').click()"); assert not js("return document.querySelector('#sure').hidden")
