@@ -85,13 +85,16 @@
          from their edge of the screen. Where there is no
          upper part beside the keys (only the keys showing, or the upright layout) it is a row at the top */
       #rail { display: flex; gap: 6px; align-items: stretch; flex: none; }
-      #Ltop { display: flex; gap: calc(18 * var(--u)); align-items: stretch; }
+      #Ltop { display: flex; justify-content: space-evenly; align-items: stretch; align-self: stretch; margin-left: -6px; }
       #Ltop > #rail { flex-direction: column; gap: calc(10 * var(--u)); }
       #Ltop > #rail .grow { display: none; }
       #Ltop > #rail button { flex: 1; min-height: 0; min-width: 0; width: calc(102 * var(--u)); border-radius: calc(14 * var(--u)); font-size: max(9px, calc(16 * var(--u))); }
       #Ltop > #rail #logo { font-size: max(12px, calc(22 * var(--u))); }
       #rail button { min-width: 44px; min-height: 40px; padding: 4px; border-radius: 10px; border: 0; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: 0 3px 0 #0009; color: var(--ink); cursor: pointer; }
-      #rail #power.on { background: #ff5e7a; color: #fff; }
+      #rail #power { position: relative; }
+      #rail #power svg { display: block; height: 1.5em; margin: auto; }
+      #rail #power::after { content: ""; position: absolute; top: 9%; right: 9%; width: 0.5em; height: 0.5em; border-radius: 50%; background: #ff3b4e; box-shadow: 0 0 0 1px #0008; }
+      #rail #power.on::after { background: #35e06a; box-shadow: 0 0 0 1px #0008, 0 0 6px #35e06a; }
       #rail #logo { font: 900 15px system-ui; letter-spacing: 0.5px; }
       #rail #logo b { color: var(--lit); }
       #rail .grow { flex: 1; min-width: 0; min-height: 0; display: flex; align-items: center; overflow: hidden; }
@@ -164,12 +167,14 @@
       }
       /* ---- the menu: the whole screen, a tab for each subject, each tab laid out across the width so nothing scrolls
          but the firmware list */
-      #menu { position: fixed; inset: 0; z-index: 5; background: #11141a; color: #e8ecf1; display: flex; touch-action: auto; font: 13px/1.35 system-ui, sans-serif; }
+      /* the menu, the sheet and the dialog wear the skin: the body's colour, its print for the text, its buttons, its light for what is chosen */
+      #menu, #sheet, #sure { --m-panel: color-mix(in srgb, var(--body2), #000 16%); --m-dim: color-mix(in srgb, var(--silk) 72%, var(--body2)); }
+      #menu { position: fixed; inset: 0; z-index: 5; background: var(--body2); color: var(--silk); display: flex; touch-action: auto; font: 13px/1.35 system-ui, sans-serif; }
       #menu[hidden], #menu [hidden] { display: none; }
       #menu .card { flex: 1; min-width: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
       #menu .bar { display: flex; gap: 8px; align-items: center; flex: none; }
       #menu h2 { margin: 0 4px; font: 900 18px system-ui; }
-      #menu h2 b { color: #b48cff; }
+      #menu h2 b { color: var(--silk); }
       #menu .tabs { flex: 1; min-width: 0; display: flex; gap: 6px; }
       #menu .tabs button { flex: 1; min-width: 0; padding: 6px 2px; }
       #menuClose { flex: none; width: 76px !important; }
@@ -177,31 +182,31 @@
       #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"], #menu[data-tab="man"] section[data-tab="man"] { display: flex; }
       /* the firmwares: cards, four to a row at most, in a list that scrolls. The actions stay under it */
       #menu section[data-tab="fw"], #menu section[data-tab="man"] { overflow: hidden; }
-      #menu #manBody { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; font-size: 15px; line-height: 1.5; color: #dfe4ea; -webkit-user-select: text; user-select: text; }
-      #menu #manBody h3 { margin: 14px 0 4px; font: 800 17px system-ui; letter-spacing: 0; text-transform: none; color: #b48cff; }
+      #menu #manBody { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; font-size: 15px; line-height: 1.5; color: var(--silk); -webkit-user-select: text; user-select: text; }
+      #menu #manBody h3 { margin: 14px 0 4px; font: 800 17px system-ui; letter-spacing: 0; text-transform: none; color: var(--silk); }
       #menu #manBody h3:first-child { margin-top: 0; }
       #menu #manBody p, #menu #manBody ul, #menu #manBody li { margin: 6px 0; font-size: 15px; line-height: 1.5; color: inherit; }
       #menu #manBody ul { padding-left: 18px; }
       #menu .cards { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(max(150px, 25% - 8px), 1fr)); gap: 8px; align-content: start; padding-right: 4px; }
-      #menu .fwc { display: grid; grid-template-columns: 64px 1fr; gap: 6px 8px; padding: 8px; border-radius: 12px; border: 1px solid #2a313b; background: #171b22; min-width: 0; }
-      #menu .fwc.on { border-color: #b48cff; box-shadow: inset 0 0 0 1px #b48cff; }
+      #menu .fwc { display: grid; grid-template-columns: 64px 1fr; gap: 6px 8px; padding: 8px; border-radius: 12px; border: 1px solid var(--rim); background: var(--m-panel); min-width: 0; }
+      #menu .fwc.on { border-color: var(--silk); box-shadow: inset 0 0 0 1px var(--lit); }
       #menu .fwc img { width: 64px; height: 64px; border-radius: 8px; background: #06070a; object-fit: cover; image-rendering: pixelated; }
-      #menu .fwc .t { min-width: 0; display: flex; flex-direction: column; font-size: 11px; color: #a3acb9; overflow: hidden; height: 64px; }
-      #menu .fwc .t b { color: #e8ecf1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+      #menu .fwc .t { min-width: 0; display: flex; flex-direction: column; font-size: 11px; color: var(--m-dim); overflow: hidden; height: 64px; }
+      #menu .fwc .t b { color: var(--silk); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
       #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
       #menu .fwc .t small { font-size: 10px; line-height: 1.25; overflow: hidden; }
       #menu .fwc .act { grid-column: 1 / -1; display: flex; gap: 6px; }
       #menu .fwc button { min-height: 38px; padding: 4px; }
       #menu .foot { flex: none; display: flex; flex-direction: column; gap: 6px; }
       /* storage: a bar that fills with what the app keeps here. Its height is fixed, so the text in it never moves the buttons */
-      #stor { position: relative; height: 20px; flex: none; border-radius: 10px; background: #1d222a; border: 1px solid #2a313b; overflow: hidden; }
-      #stor i { position: absolute; inset: 0 auto 0 0; min-width: 8px; background: linear-gradient(90deg, #7c5cc4, #b48cff); }
-      #stor span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px ui-monospace, Menlo, monospace; letter-spacing: 1px; color: #e8ecf1; white-space: nowrap; text-shadow: 0 1px 2px #000; }
+      #stor { position: relative; height: 20px; flex: none; border-radius: 10px; background: var(--btn2); border: 1px solid var(--rim); overflow: hidden; }
+      #stor i { position: absolute; inset: 0 auto 0 0; min-width: 8px; background: var(--lit); }
+      #stor span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px ui-monospace, Menlo, monospace; letter-spacing: 1px; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
       /* LOOK: the chooser of the subject picked at the bottom fills the tab: the two kinds of keys, a card for each skin,
          the same screen under each filter. Tap one to use it */
       #menu section.row { flex-direction: row; }
       #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
-      #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx { display: flex; }
+      #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx, #menu [data-sub="midi"] #pvMidi, #menu [data-sub="inst"] #pvInst { display: flex; }
       #menu [data-sub="skin"] #pvSkin { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(130px, 16% - 8px), 1fr)); grid-auto-rows: max-content; align-content: start; overflow: auto; padding-right: 4px; }
       /* a skin card keeps its shape whatever the window: its little FM-1 is drawn to a fixed ratio */
       #menu #pvSkin .pick { height: auto; }
@@ -218,37 +223,39 @@
       #menu .mini .mk { border-radius: 50%; aspect-ratio: 1; height: 100%; max-width: 100%; justify-self: center; align-self: center; background: radial-gradient(circle, var(--keyline) 0 14%, var(--cap) 16%); box-shadow: 0 2px 3px #0008; }
       #menu .mini .mb { border-radius: 4px; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
       #menu .mini .my { grid-column: 1 / -1; border-radius: 6px; background: repeating-linear-gradient(90deg, var(--tray) 0 4%, var(--key1) 4% 7.5%, var(--keyline) 7.5% 9%, var(--key1) 9% 12.5%); }
-      #menu .box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2a313b; border-radius: 12px; background: #171b22; overflow: auto; }
+      #menu .box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--rim); border-radius: 12px; background: var(--m-panel); overflow: auto; }
+      #menu .box.pane { display: none; }
+      #menu #pvMidi .grid { flex: 1; min-height: 44px; }
       #menu .box button { margin-top: auto; flex: none; }
       #menu .box .grid button { margin-top: 0; }
       #menu .box .grid { margin-top: auto; flex: none; }
-      #menu .how { width: 100%; flex: 1; min-height: 60px; max-height: 150px; }
-      #menu button.big { min-height: 56px; font-size: 14px; background: #b48cff; border-color: #b48cff; color: #14091f; }
+      #menu .how { width: 100%; flex: 1; min-height: 60px; color: var(--m-dim); }
+      #menu button.big { min-height: 56px; font-size: 14px; background: var(--lit); border-color: var(--silk); color: #14091f; }
       #menu button.big i { color: #14091f; }
-      #menu .thanks p { font-size: clamp(14px, 4.6vmin, 22px); color: #c9d0da; }
-      #menu .thanks .lead { font-size: clamp(19px, 7.4vmin, 36px); line-height: 1.3; color: #fff; }
+      #menu .thanks p, #menu #pvMidi p { font-size: clamp(14px, 4.6vmin, 22px); color: var(--silk); }
+      #menu .thanks .lead { font-size: clamp(19px, 7.4vmin, 36px); line-height: 1.3; color: var(--silk); }
       /* the MIDI device panel is the Pocket apps' own (kept identical): here it only has to fit a turned page */
       body #mdPanel .mdCard { max-height: 96%; }
       /* a sheet to read: the manual, the licences */
-      #sheet { position: fixed; inset: 0; z-index: 6; background: #11141a; color: #e8ecf1; display: flex; touch-action: auto; font: 15px/1.5 system-ui, sans-serif; }
+      #sheet { position: fixed; inset: 0; z-index: 6; background: var(--body2); color: var(--silk); display: flex; touch-action: auto; font: 15px/1.5 system-ui, sans-serif; }
       #sheet[hidden], #sheet [hidden] { display: none; }
       #sheet .box { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 10px; gap: 8px; }
       #sheet .bar { display: flex; gap: 6px; align-items: center; }
       #sheet .bar b { flex: 1; font: 900 17px system-ui; }
-      #sheet button { min-height: 44px; min-width: 52px; padding: 6px 10px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; }
-      #sheet button.on { background: #b48cff; border-color: #b48cff; color: #14091f; }
+      #sheet button { min-height: 44px; min-width: 52px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
+      #sheet button.on { background: var(--lit); border-color: var(--silk); color: #14091f; }
       #shBody { flex: 1; min-height: 0; overflow: auto; padding: 0 6px 20px; max-width: 900px; width: 100%; align-self: center; -webkit-user-select: text; user-select: text; }
-      #shBody h3 { margin: 18px 0 6px; font-size: 18px; color: #b48cff; }
+      #shBody h3 { margin: 18px 0 6px; font-size: 18px; color: var(--silk); }
       #shBody p, #shBody ul { margin: 6px 0; }
-      #shBody pre { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: #c9d0da; }
-      #menu h3 { margin: 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; }
+      #shBody pre { white-space: pre-wrap; font: 12px/1.45 ui-monospace, Menlo, monospace; color: var(--silk); }
+      #menu h3 { margin: 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: var(--m-dim); }
       #menu .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
-      #menu button { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; width: 100%; }
-      #menu button i { display: block; font: 700 9px ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 1.5px; color: #8a94a3; }
-      #menu button.on { background: #b48cff; border-color: #b48cff; color: #14091f; }
+      #menu button { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; width: 100%; }
+      #menu button i { display: block; font: 700 9px ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 1.5px; color: color-mix(in srgb, var(--ink) 62%, var(--btn2)); }
+      #menu button.on { background: var(--lit); border-color: var(--silk); color: #14091f; }
       #menu button.on i { color: #14091f; }
       #menu button:disabled { opacity: 0.6; }
-      #menu p { margin: 0; font-size: 13px; color: #a3acb9; }
+      #menu p { margin: 0; font-size: 13px; color: var(--m-dim); }
       #menu a { color: inherit; }
       @media (orientation: portrait) and (pointer: fine) {
         #menu section.row { flex-direction: column; }
@@ -257,13 +264,13 @@
       /* a dangerous action asks first: a slider to pull to the end, so a stray tap cannot do it */
       #sure { position: fixed; inset: 0; z-index: 7; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
       #sure[hidden] { display: none; }
-      #sure .box { width: min(92%, 460px); background: #171b22; color: #e8ecf1; border: 1px solid #2a313b; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      #sure .box { width: min(92%, 460px); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
       #sure p { margin: 0; }
-      #sure .hint { font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; text-align: center; }
+      #sure .hint { font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: var(--m-dim); text-align: center; }
       #sureSlide { appearance: none; -webkit-appearance: none; width: 100%; height: 52px; margin: 0; border-radius: 26px; background: linear-gradient(90deg, #3a1420, #ff5e7a); cursor: pointer; }
-      #sureSlide::-webkit-slider-thumb { -webkit-appearance: none; width: 72px; height: 52px; border-radius: 26px; background: #e8ecf1; border: 0; box-shadow: 0 2px 6px #000a; }
-      #sureSlide::-moz-range-thumb { width: 72px; height: 52px; border-radius: 26px; background: #e8ecf1; border: 0; }
-      #sureNo { min-height: 44px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; }
+      #sureSlide::-webkit-slider-thumb { -webkit-appearance: none; width: 72px; height: 52px; border-radius: 26px; background: var(--silk); border: 0; box-shadow: 0 2px 6px #000a; }
+      #sureSlide::-moz-range-thumb { width: 72px; height: 52px; border-radius: 26px; background: var(--silk); border: 0; }
+      #sureNo { min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
       #toast.show { opacity: 1; }
     </style>
@@ -271,9 +278,9 @@
   <body data-view="complete">
     <div id="rail">
       <button id="logo" title="Menu: firmware, look, options, about" aria-label="Menu">FM1<b>.</b></button>
-      <button id="power" title="Turn the FM-1 on with the chosen firmware, or off">ON</button>
-      <div class="grow"><span id="status" role="status"></span></div>
+      <button id="power" title="Power: turn the FM-1 on with the chosen firmware, or off" aria-label="Power" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9M6.6 6.6a7.6 7.6 0 1 0 10.8 0" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" /></svg></button>
       <button id="flip" title="Next view: the whole FM-1, only the keys, or only the upper part (knobs, screen, buttons), full screen">KEYS</button>
+      <div class="grow"><span id="status" role="status"></span></div>
     </div>
     <div id="fm" title="The FM-1: press its keys and buttons, drag a knob up or down to turn it">
       <div id="up">
@@ -326,8 +333,8 @@
             <button id="fx" data-sub="fx" title="Choose the screen filter: LCD (pixel grid and glass), CRT (scan lines and glow) or clean"></button>
           </div>
         </section>
-        <section data-tab="conn" class="row">
-          <div class="box">
+        <section data-tab="conn" data-sub="midi">
+          <div class="box pane" id="pvMidi">
             <h3>MIDI CONTROLLER</h3>
             <p>Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and <b>DEVICE</b> shows a drawing of it where you can change any of them.</p>
             <p id="midiNames">Not connected yet.</p>
@@ -336,17 +343,17 @@
               <button id="midiDev" title="A drawing of your controller: see what each key, pad and knob does, and assign them"><i>MAP · LEARN</i>DEVICE</button>
             </div>
           </div>
-          <div class="box">
+          <div class="box pane" id="pvInst">
             <h3>THE APP</h3>
             <svg class="how" viewBox="0 0 300 92" role="img" aria-label="Install: open it in the browser, install it, then it is on your home screen and works offline">
-              <g fill="none" stroke="#8a94a3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="14" y="8" width="62" height="46" rx="6" /><path d="M14 20h62" /><circle cx="22" cy="14" r="1.5" /><circle cx="29" cy="14" r="1.5" />
                 <path d="M88 31h22m-7-7 7 7-7 7" /><path d="M190 31h22m-7-7 7 7-7 7" />
-                <rect x="126" y="6" width="48" height="50" rx="8" /><path d="M150 18v22m-9-9 9 9 9-9M138 48h24" stroke="#b48cff" />
+                <rect x="126" y="6" width="48" height="50" rx="8" /><path d="M150 18v22m-9-9 9 9 9-9M138 48h24" style="stroke: var(--lit)" />
                 <rect x="232" y="4" width="34" height="54" rx="7" /><path d="M244 52h10" />
               </g>
-              <rect x="240" y="14" width="18" height="18" rx="5" fill="#b48cff" />
-              <g fill="#a3acb9" font-family="ui-monospace, Menlo, monospace" font-size="9" font-weight="700" text-anchor="middle">
+              <rect x="240" y="14" width="18" height="18" rx="5" style="fill: var(--lit)" />
+              <g fill="currentColor" font-family="ui-monospace, Menlo, monospace" font-size="9" font-weight="700" text-anchor="middle">
                 <text x="45" y="72">1 · OPEN IT</text><text x="45" y="84">in the browser</text>
                 <text x="150" y="72">2 · INSTALL</text><text x="150" y="84">one tap</text>
                 <text x="249" y="72">3 · YOUR APP</text><text x="249" y="84">works offline</text>
@@ -354,6 +361,10 @@
             </svg>
             <p id="instHint"></p>
             <button id="inst" class="big" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
+          </div>
+          <div class="grid">
+            <button data-sub="midi" title="MIDI: connect a controller and map its knobs, pads and keys"><i>OPTIONS</i>MIDI CONTROLLER</button>
+            <button data-sub="inst" title="Install the app on this device"><i>OPTIONS</i>INSTALL THE APP</button>
           </div>
         </section>
         <section data-tab="man">
@@ -368,7 +379,7 @@
           <div class="box thanks">
             <h3>THANK YOU, JOAKIM</h3>
             <p class="lead">FM1.Pocket is a fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by <b>Joakim Eriksson</b>.</p>
-            <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app only adds a phone-first front to it.</p>
+            <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app adds a phone-first front to it, a mapper for MIDI controllers and installation as an app.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
             <button id="licence" title="The full text of the licences"><i>MIT</i>LICENSE</button>
           </div>
@@ -1425,7 +1436,7 @@ registerProcessor("fm1", Fm1);
       }
       function powerFace() {
         $("#power").classList.toggle("on", !!node);
-        $("#power").textContent = node ? "OFF" : "ON";
+        $("#power").setAttribute("aria-pressed", !!node);
       }
       const turnOn = () => powerOn().catch((e) => (status("no sound: " + e.message), toast("Could not start the sound: " + e.message, 4000)));
       $("#power").onclick = () => (node ? powerOff() : turnOn());
@@ -1620,12 +1631,14 @@ registerProcessor("fm1", Fm1);
           pv.append(c);
           pick("#pvFx", v, name, pv, setFx);
         }
-        for (const b of $$('section[data-tab="look"] [data-sub]')) b.onclick = () => lookSub(b.dataset.sub);
+        for (const b of $$("#menu button[data-sub]")) b.onclick = () => lookSub(b.dataset.sub, b.closest("section"));
         lookSub("skin");
+        lookSub("midi", $('section[data-tab="conn"]'));
       }
-      function lookSub(sub) {
-        $('section[data-tab="look"]').dataset.sub = sub;
-        for (const b of $$('section[data-tab="look"] button[data-sub]')) b.classList.toggle("on", b.dataset.sub === sub);
+      // the buttons at the bottom of LOOK and OPTIONS: each shows its pane over the whole tab
+      function lookSub(sub, sec = $('section[data-tab="look"]')) {
+        sec.dataset.sub = sub;
+        for (const b of sec.querySelectorAll("button[data-sub]")) b.classList.toggle("on", b.dataset.sub === sub);
         paintFx();
       }
       // the filter examples show the FM-1's screen as it is now, or a test card while it is off

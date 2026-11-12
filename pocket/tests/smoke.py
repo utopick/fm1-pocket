@@ -55,8 +55,8 @@ try:
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": False}); time.sleep(0.4)
     # sideways: the one button goes round the whole FM-1, the keys, the upper part
     size(844, 390, "complete"); parts(1, 1, "complete"); assert js("return document.querySelectorAll('#kb .krow').length") == 1
-    m = js("const r = s => document.querySelector(s).getBoundingClientRect(), f = r('#fm'), a = r('#knL'), b = r('#knR'), t = r('#rail'); return [t.left - f.left, f.right - b.right, t.top - a.top, t.bottom - a.bottom]")
-    assert abs(m[0] - m[1]) < 2 and abs(m[2]) < 1 and abs(m[3]) < 1, "margins left/right, rail against the knobs: %s" % m
+    m = js("const r = s => document.querySelector(s).getBoundingClientRect(), f = r('#fm'), a = r('#knL'), b = r('#knR'), t = r('#rail'); return [t.left, a.left - t.right, t.top - a.top, t.bottom - a.bottom, r('#scr').left - a.right]")
+    assert abs(m[0] - m[1]) < 2 and abs(m[4] - m[1]) < 2 and m[1] > 12 and abs(m[2]) < 1 and abs(m[3]) < 1, "edge, rail, knobs, screen: the same space between them: %s" % m
     flip = lambda: js("document.querySelector('#flip').click()")
     flip(); flip(); parts(1, 0, "upper part"); size(844, 390, "switch-top")
     flip(); parts(1, 1, "complete again"); flip(); parts(0, 1, "keys"); assert shown("#fm > #rail button") == 3, "no rail over the keys"
