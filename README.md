@@ -1,3 +1,7 @@
+> **This is a fork.** The project is [joakimeriksson/fm1-emu](https://github.com/joakimeriksson/fm1-emu) by Joakim Eriksson.
+> The fork adds one thing, [`pocket/`](pocket/README.md): FM1.Pocket, a phone-first page (installable, offline) around his emulator.
+> Everything else below is his README, unchanged.
+
 # FM-1 emulator
 
 The **M-VAVE FM-1** is a pocket FM synthesizer, and a small community writes its own firmwares

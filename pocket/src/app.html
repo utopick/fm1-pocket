@@ -1,0 +1,807 @@
+<!doctype html>
+<!--
+  FM1.Pocket - an M-VAVE FM-1 for the phone, to play its community firmwares. A fork of fm1-emu by Joakim Eriksson
+  (MIT, https://github.com/joakimeriksson/fm1-emu): the machine (the FM-1's CPU, flash, screen, keys, knobs, audio) is
+  his emulator core, unchanged, compiled to WebAssembly and kept inside this file with his audio worklet. This page is a
+  simpler front for it, made to be installed (PWA) and used offline.
+
+  This file is pocket/src/app.html. `python3 pocket/build.py` puts the core, the worklet and the firmware list into it
+  and writes pocket/index.html. Edit this one, not index.html.
+
+  Layout of this file
+    <head>    install (manifest, service worker), skin bootstrap, <style>: the device drawn with CSS, the skins, the views
+    <body>    the rail (logo, power, flip, menu), the device (upper part: knobs, screen, buttons; keys), the menu, toast
+    <script>  data blocks (worklet, firmware list, core), then: helpers, storage, the device (built once, placed by CSS),
+              screen and lights, input, power and boot, saves, firmware list and files, views / keys / skins, MIDI,
+              install, boot
+
+  Views (what the user asked for)
+    vertical     the phone upright: screen on top, knobs, buttons, keys in two rows
+    complete     sideways, the whole FM-1 as it is
+    switchable   sideways, either the upper part or the keys, full screen (the flip button changes it)
+
+  Storage (namespaced fm1.*)
+    localStorage  fm1.fw (firmware picked), fm1.view (complete | switchable), fm1.keys (fm | piano), fm1.skin
+    IndexedDB     "fm1-pocket" / kv:  pkg:<id>   { name, version, bytes }  a downloaded or opened package: it runs offline
+                                      save:<hash of the package>  [[offset, 4096 bytes], ...]  the flash sectors a firmware changed
+                                      catalog   the firmware list as last fetched from fm1-emu's page
+  Network: the firmware list (fm1-emu's firmwares.json) and a firmware's package from its author, only when online and
+  only for what is not kept yet. Everything read back or fetched is checked before use.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#0d0f12" />
+    <meta name="apple-mobile-web-app-title" content="FM1.Pocket" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <script>
+      // the browser's install prompt can come before the app has started: keep it for the INSTALL button
+      addEventListener("beforeinstallprompt", (e) => {
+        e.preventDefault();
+        window.pocketInstall = e;
+        dispatchEvent(new Event("pocketinstall"));
+      });
+      if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname)))
+        addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(console.warn));
+      try {
+        document.documentElement.dataset.skin = localStorage.getItem("fm1.skin") || "grey";
+      } catch {}
+    </script>
+    <title>FM1.Pocket · M-VAVE FM-1 emulator</title>
+    <style>
+      /* ---- skins. The first five follow the FM-1's own colours (grey is fm1-emu's drawing; the others are near
+         matches of the shells sold, not measured). The rest are ours. */
+      :root, [data-skin="grey"] { --room: #18191b; --body1: #5e6166; --body2: #4a4d52; --tray: #2b2c2f; --silk: #c9c6bd; --btn1: #4b4e54; --btn2: #3b3d42; --ink: #9c9a94; --key1: #6a5557; --key2: #4f3f42; --keyline: #8f7c7e; --cap: #1e1f22; --lit: #f2a33a; --go: #62d36e; --wk: #e9e6df; --bk: #1b1b1e; }
+      [data-skin="black"] { --room: #0b0b0c; --body1: #232427; --body2: #17181a; --tray: #0e0e10; --silk: #b9b7b0; --btn1: #33353a; --btn2: #26282c; --ink: #a5a39c; --key1: #3a3c41; --key2: #2a2b2f; --keyline: #6c6e75; --cap: #101113; --lit: #f2a33a; --go: #62d36e; --wk: #d8d6cf; --bk: #0c0c0d; }
+      [data-skin="white"] { --room: #cfd2d6; --body1: #f1f0ec; --body2: #dcdad4; --tray: #c2c0ba; --silk: #4a4a48; --btn1: #fbfaf7; --btn2: #e4e2dc; --ink: #55554f; --key1: #f6f4ef; --key2: #dedbd3; --keyline: #a9a69d; --cap: #2c2d30; --lit: #ff8a1f; --go: #2fae48; --wk: #ffffff; --bk: #2a2a2c; }
+      [data-skin="orange"] { --room: #1b1512; --body1: #f08a2c; --body2: #cf6d17; --tray: #2a211c; --silk: #2a1705; --btn1: #3a3330; --btn2: #2b2523; --ink: #e9c9a5; --key1: #2f2a28; --key2: #201c1b; --keyline: #8a6a4a; --cap: #1c1816; --lit: #ffd27a; --go: #7be08a; --wk: #f5e9da; --bk: #201a17; }
+      [data-skin="purple"] { --room: #15121b; --body1: #7a5fb3; --body2: #5c4590; --tray: #251d38; --silk: #ece4ff; --btn1: #3b2f5a; --btn2: #2c2345; --ink: #cdbff0; --key1: #46376b; --key2: #32264f; --keyline: #9f8bd0; --cap: #1a1428; --lit: #ffc857; --go: #7be08a; --wk: #efe9ff; --bk: #1d1630; }
+      [data-skin="pocket"] { --room: #0d0f12; --body1: #1d222a; --body2: #161a20; --tray: #0d0f12; --silk: #8a94a3; --btn1: #2a313b; --btn2: #1d222a; --ink: #e8ecf1; --key1: #2a313b; --key2: #1d222a; --keyline: #b48cff; --cap: #0d0f12; --lit: #b48cff; --go: #7cf29a; --wk: #e8ecf1; --bk: #161a20; }
+      [data-skin="term"] { --room: #000; --body1: #031a08; --body2: #021005; --tray: #000; --silk: #39ff6a; --btn1: #06290d; --btn2: #041a08; --ink: #39ff6a; --key1: #06290d; --key2: #041a08; --keyline: #39ff6a; --cap: #000; --lit: #d6ff5c; --go: #39ff6a; --wk: #0a3a14; --bk: #000; }
+      [data-skin="dmg"] { --room: #2a2c1c; --body1: #c8ccb0; --body2: #adb294; --tray: #8b956d; --silk: #34366e; --btn1: #9b2257; --btn2: #7d1b46; --ink: #f1e9d2; --key1: #5b6a3a; --key2: #46532b; --keyline: #c4cfa1; --cap: #2c2d30; --lit: #f1e9d2; --go: #c4cfa1; --wk: #e4e8cf; --bk: #34366e; }
+      [data-skin="dungeon"] { --room: #0c0a0d; --body1: #2b2330; --body2: #1c1720; --tray: #100d13; --silk: #b9a37a; --btn1: #3a2c2c; --btn2: #291f1f; --ink: #d8c59a; --key1: #4a2a2a; --key2: #331c1c; --keyline: #b9a37a; --cap: #120e14; --lit: #e0553d; --go: #8fbf6a; --wk: #d8c59a; --bk: #1c1720; }
+
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin: 0; height: 100%; background: var(--room); color: var(--silk); font: 13px/1.25 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overscroll-behavior: none; overflow: hidden; }
+      body { display: flex; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); user-select: none; -webkit-user-select: none; touch-action: none; }
+      button, select { font: 800 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.5px; }
+      /* ---- the rail: a column beside the device when sideways, a row above it when upright */
+      #rail { display: flex; gap: 6px; padding: 6px; align-items: stretch; flex: none; }
+      #rail button { min-width: 44px; min-height: 44px; padding: 4px; border-radius: 10px; border: 1px solid #0006; background: var(--btn2); color: var(--ink); cursor: pointer; }
+      #rail #power.on { background: #ff5e7a; color: #fff; }
+      #rail #logo { font: 900 15px system-ui; letter-spacing: 0.5px; }
+      #rail #logo b { color: var(--lit); }
+      #rail .grow { flex: 1; min-width: 0; min-height: 0; display: flex; align-items: center; overflow: hidden; }
+      #status { font-size: 10px; color: var(--silk); opacity: 0.85; }
+      /* ---- the device */
+      #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 1.5%; margin: 6px; padding: 1.2%; border-radius: 18px; background: linear-gradient(var(--body1), var(--body2)); container-type: size; }
+      #up { flex: 1.9; min-height: 0; display: flex; gap: 1.5%; }
+      #kb { flex: 1; min-height: 0; background: var(--tray); border-radius: 14px; padding: 1%; display: flex; flex-direction: column; gap: 4%; }
+      #L, #R { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4%; justify-content: space-evenly; }
+      #R { flex: 1.25; }
+      #scr { height: 100%; aspect-ratio: 1; flex: none; background: #0c0c0d; border-radius: 12px; padding: 1.2%; display: flex; }
+      #lcd { width: 100%; height: 100%; image-rendering: pixelated; border-radius: 4px; background: #000; }
+      .knobs { display: grid; gap: 4% 3%; justify-items: center; flex: 1.4; min-height: 0; }
+      #L .knobs { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
+      #R .knobs { grid-template-columns: repeat(4, 1fr); flex: 0.8; }
+      .kn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 0; height: 100%; width: 100%; cursor: ns-resize; }
+      .kn label { font-size: clamp(7px, 1.5cqmin, 11px); font-weight: 800; letter-spacing: 0.5px; color: var(--silk); pointer-events: none; white-space: nowrap; }
+      .kn .capw { flex: 1; min-height: 0; width: 100%; container-type: size; display: grid; place-items: center; pointer-events: none; }
+      .kn .cap { width: min(92cqw, 92cqh); height: min(92cqw, 92cqh); border-radius: 50%; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--cap), #fff 14%), var(--cap) 70%); box-shadow: 0 3px 5px #0008, 0 0 0 3px color-mix(in srgb, var(--cap), #000 30%); transform: rotate(var(--a, 0deg)); position: relative; }
+      .kn .cap::after { content: ""; position: absolute; left: 50%; top: 8%; width: 8%; height: 30%; margin-left: -4%; border-radius: 3px; background: var(--silk); }
+      .kn.turn .cap { box-shadow: 0 3px 5px #0008, 0 0 0 3px var(--lit); }
+      .tray { background: var(--tray); border-radius: 12px; padding: 3%; display: grid; gap: 6px; flex: 1; min-height: 0; }
+      #oct { grid-template-columns: 1fr 1fr; flex: 0.45; }
+      #btns { grid-template-columns: repeat(6, 1fr); grid-template-rows: 1fr 1fr; }
+      .pb { --led: 0; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 8px; cursor: pointer; font-size: clamp(7px, 1.7cqmin, 12px); color: color-mix(in srgb, var(--ink), #2a1a03 calc(var(--led) * 100%)); background: linear-gradient(color-mix(in srgb, var(--btn1), var(--tint, var(--lit)) calc(var(--led) * 85%)), color-mix(in srgb, var(--btn2), var(--tint, var(--lit)) calc(var(--led) * 70%))); box-shadow: 0 3px 0 #0009; }
+      .pb.down { transform: translateY(2px); box-shadow: 0 1px 0 #0009; }
+      .pb.go { --tint: var(--go); outline: 2px solid color-mix(in srgb, var(--go), transparent 55%); outline-offset: 1px; }
+      /* ---- the keys: F3 to G5. One row sideways, two rows upright. FM-1 pills, or a piano */
+      .krow { position: relative; flex: 1; min-height: 0; }
+      .k { --led: 0; position: absolute; cursor: pointer; }
+      [data-keys="fm"] .k { height: 46%; border-radius: 999px; background: linear-gradient(color-mix(in srgb, var(--key1), var(--lit) calc(var(--led) * 60%)), color-mix(in srgb, var(--key2), var(--lit) calc(var(--led) * 48%))); box-shadow: 0 3px 0 #0009; }
+      [data-keys="fm"] .k::after { content: ""; position: absolute; left: 50%; top: 18%; bottom: 18%; width: 5px; margin-left: -2.5px; border-radius: 3px; background: color-mix(in srgb, var(--keyline), #ffe2b0 calc(var(--led) * 100%)); }
+      [data-keys="fm"] .k.w { bottom: 0; }
+      [data-keys="fm"] .k.b { top: 0; }
+      [data-keys="fm"] .k.down { --led: 0.92; transform: translateY(3px); box-shadow: none; }
+      [data-keys="piano"] .k.w { top: 0; height: 100%; border-radius: 0 0 7px 7px; background: color-mix(in srgb, var(--wk), var(--lit) calc(var(--led) * 70%)); box-shadow: inset 0 -6px 0 #0002; }
+      [data-keys="piano"] .k.b { top: 0; height: 60%; border-radius: 0 0 5px 5px; background: color-mix(in srgb, var(--bk), var(--lit) calc(var(--led) * 70%)); box-shadow: 0 3px 0 #0008; z-index: 1; }
+      [data-keys="piano"] .k.down { --led: 1; }
+      /* ---- the views */
+      @media (orientation: landscape) {
+        body { flex-direction: row-reverse; }
+        #rail { flex-direction: column; }
+        #rail .grow { display: none; }
+        [data-view="switchable"][data-part="keys"] #up, [data-view="switchable"][data-part="up"] #kb { display: none; }
+        [data-view="complete"] #flip { display: none; }
+      }
+      @media (orientation: portrait) {
+        body { flex-direction: column; }
+        #flip { display: none; }
+        #fm { gap: 1%; }
+        #up { flex: 2.6; flex-direction: column; gap: 1.2%; }
+        #scr { order: -1; height: auto; flex: 0 1 46%; align-self: center; max-width: 100%; }
+        #L, #R { flex-direction: row; flex: 0 1 16%; gap: 2%; }
+        #R { flex: 0 1 30%; flex-direction: column; }
+        #L .knobs { grid-template-columns: repeat(4, 1fr); grid-template-rows: 1fr; flex: 2; }
+        #oct { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; flex: 0.5; padding: 4px; }
+        #R .knobs { flex: 0.9; }
+        #kb { flex: 1.1; }
+        .krow { margin: 0 4.5%; }
+      }
+      /* ---- the menu */
+      #menu { position: fixed; inset: 0; z-index: 5; background: #000a; display: flex; justify-content: flex-end; touch-action: auto; }
+      #menu[hidden] { display: none; }
+      #menu .card { width: min(100%, 340px); height: 100%; overflow: auto; background: #161a20; color: #e8ecf1; padding: 12px; display: flex; flex-direction: column; gap: 8px; font: 13px/1.35 system-ui, sans-serif; }
+      #menu h2 { margin: 0; font: 900 18px system-ui; }
+      #menu h2 b { color: #b48cff; }
+      #menu h3 { margin: 6px 0 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; }
+      #menu .row { display: flex; gap: 6px; }
+      #menu .row > * { flex: 1; min-width: 0; }
+      #menu button, #menu select { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; width: 100%; }
+      #menu button i { display: block; font: 700 9px ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 1.5px; color: #8a94a3; }
+      #menu button.on { background: #b48cff; border-color: #b48cff; color: #14091f; }
+      #menu button.on i { color: #14091f; }
+      #menu button:disabled { opacity: 0.6; }
+      #menu p { margin: 0; font-size: 12px; color: #8a94a3; }
+      #menu a { color: inherit; }
+      #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
+      #toast.show { opacity: 1; }
+    </style>
+  </head>
+  <body data-view="complete" data-part="up" data-keys="fm">
+    <div id="rail">
+      <button id="logo" title="FM1.Pocket: open the menu">FM1<b>.</b></button>
+      <button id="power" title="Turn the FM-1 on with the chosen firmware, or off">ON</button>
+      <div class="grow"><span id="status" role="status"></span></div>
+      <button id="flip" title="Switch between the keys and the upper part of the FM-1 (knobs, screen, buttons)">KEYS</button>
+      <button id="menuBtn" title="Menu: firmware, view, keys, skin, MIDI, install" aria-label="Menu">≡</button>
+    </div>
+    <div id="fm" title="The FM-1: press its keys and buttons, drag a knob up or down to turn it">
+      <div id="up">
+        <div id="L">
+          <div class="knobs" id="knL"></div>
+          <div class="tray" id="oct"></div>
+        </div>
+        <div id="scr"><canvas id="lcd" width="240" height="240"></canvas></div>
+        <div id="R">
+          <div class="knobs" id="knR"></div>
+          <div class="tray" id="btns"></div>
+        </div>
+      </div>
+      <div id="kb"></div>
+    </div>
+
+    <div id="menu" hidden>
+      <div class="card" role="dialog" aria-modal="true" aria-label="Menu">
+        <div class="row"><h2>FM1<b>.</b>Pocket</h2><button id="menuClose" title="Close the menu" style="flex: 0 0 64px">CLOSE</button></div>
+        <h3>FIRMWARE</h3>
+        <select id="fw" title="The firmware the FM-1 runs. ● marks the ones kept on this device: they run offline."></select>
+        <p id="about"></p>
+        <div class="row">
+          <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
+          <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
+        </div>
+        <div class="row">
+          <button id="wipe" title="Forget what this firmware saved and start it fresh. Tap twice."><i>ITS SAVES</i>ERASE</button>
+          <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Tap twice."><i>DOWNLOADS</i>CLEAR</button>
+        </div>
+        <p id="stor"></p>
+        <h3>LOOK</h3>
+        <div class="row">
+          <button id="view" title="Sideways: the whole FM-1 at once, or the keys and the upper part one at a time, full screen"></button>
+          <button id="keys" title="The keys drawn as the FM-1's own, or as a piano"></button>
+        </div>
+        <div class="row"><button id="skin" title="Next skin: the FM-1's own colours, then ours"></button></div>
+        <h3>CONNECT</h3>
+        <div class="row">
+          <button id="midi" title="Connect your MIDI keyboards and controllers to the FM-1's MIDI IN"><i>CONTROLLER</i>MIDI</button>
+          <button id="inst" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
+        </div>
+        <p id="instHint"></p>
+        <h3>ABOUT</h3>
+        <p>
+          A fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by Joakim Eriksson (MIT): the emulated FM-1 inside is his work, unchanged.
+          This page is a simpler front for phones. Each firmware belongs to its author and comes from
+          <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, through fm1-emu's list. Not affiliated with M-VAVE.
+        </p>
+        <p>Computer keys: A W S E D… play, Z X octave, Space PLAY, R REC, 1 to 0 the buttons, arrows and , . the knobs.</p>
+        <input type="file" id="file" accept=".fwsc" hidden />
+      </div>
+    </div>
+    <div id="toast"></div>
+
+    <script type="text/plain" id="worklet">/*@WORKLET@*/</script>
+    <script type="application/json" id="fwlist">/*@FIRMWARES@*/</script>
+    <script type="text/plain" id="wasm">/*@WASM@*/</script>
+    <script>
+      "use strict";
+      // ======================================================================
+      // helpers
+      // ======================================================================
+      const $ = (s) => document.querySelector(s),
+        $$ = (s) => [...document.querySelectorAll(s)];
+      function toast(t, ms = 2000) {
+        const e = $("#toast");
+        e.textContent = t;
+        e.classList.add("show");
+        clearTimeout(e._t);
+        e._t = setTimeout(() => e.classList.remove("show"), ms);
+      }
+      const stored = (k) => {
+        try {
+          return localStorage.getItem(k);
+        } catch {
+          return null;
+        }
+      };
+      const store = (k, v) => {
+        try {
+          localStorage.setItem(k, v);
+        } catch {}
+      };
+      const status = (t) => ($("#status").textContent = t);
+      const el = (tag, cls, text) => {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text) e.textContent = text;
+        return e;
+      };
+      function b64(text) {
+        const s = atob(text.trim()),
+          out = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+        return out;
+      }
+      const WASM = b64($("#wasm").textContent);
+      $("#wasm").textContent = ""; // 4 MB of text the page no longer needs
+      const MHZ = 100; // the clock the emulated CPU runs at
+      const MAX_PACKAGE = 32 * 1024 * 1024,
+        SECTOR = 4096;
+      const CATALOG_URL = "https://joakimeriksson.github.io/fm1-emu/firmwares.json";
+
+      // ======================================================================
+      // storage: one IndexedDB store of keys and values. Nothing here is trusted when it comes back.
+      // ======================================================================
+      function idb(mode, fn) {
+        return new Promise((ok, no) => {
+          const rq = indexedDB.open("fm1-pocket", 1);
+          rq.onupgradeneeded = () => rq.result.createObjectStore("kv");
+          rq.onerror = () => no(rq.error);
+          rq.onsuccess = () => {
+            const db = rq.result,
+              tx = db.transaction("kv", mode),
+              r = fn(tx.objectStore("kv"));
+            tx.oncomplete = () => (db.close(), ok(r && r.result));
+            tx.onerror = tx.onabort = () => (db.close(), no(tx.error));
+          };
+        });
+      }
+      const kvGet = (k) => idb("readonly", (s) => s.get(k)).catch(() => undefined);
+      const kvPut = (k, v) => idb("readwrite", (s) => s.put(v, k));
+      const kvDel = (k) => idb("readwrite", (s) => s.delete(k)).catch(() => {});
+      const kvKeys = () => idb("readonly", (s) => s.getAllKeys()).catch(() => []);
+      // a firmware list from anywhere (the one built in, the one kept, the one fetched): only well-formed entries, cut to size
+      const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
+      function vetCatalog(o) {
+        const list = Array.isArray(o) ? o : o && Array.isArray(o.firmwares) ? o.firmwares : [],
+          seen = new Set(),
+          out = [];
+        for (const f of list.slice(0, 2000)) {
+          if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || seen.has(f.id) || f.embedded) continue;
+          if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
+          seen.add(f.id);
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), about: str(f.about, 600), package: f.package });
+        }
+        return out;
+      }
+      const vetPkg = (p) => (p && p.bytes instanceof Uint8Array && p.bytes.length > 16 && p.bytes.length <= MAX_PACKAGE ? { name: str(p.name, 80) || "firmware", version: str(p.version, 40), bytes: p.bytes } : null);
+      const vetSave = (a) => (Array.isArray(a) ? a.filter((r) => Array.isArray(r) && Number.isInteger(r[0]) && r[0] >= 0 && r[0] % SECTOR === 0 && r[1] instanceof Uint8Array && r[1].length === SECTOR).slice(0, 8192) : []);
+      let FIRMWARES = vetCatalog(JSON.parse($("#fwlist").textContent)),
+        kept = new Set(); // the ids of the packages kept on this device
+
+      // ======================================================================
+      // the device: built once from the FM-1's panel (fm1-emu's panel.rs: the same controls and matrix ids); CSS places it
+      //   knobs: [label, matrix encoder] and MASTER, a pot.  buttons: matrix ids 0 to 13.  note keys: ids 14 to 40, F3 to G5
+      // ======================================================================
+      const ENCS = [["SELECT", 0], ["PRESETS", 6], ["ALGORITHM", 1], ["KNOB1", 2], ["KNOB2", 3], ["KNOB3", 4], ["KNOB4", 5]];
+      const BTNS = ["OCT-", "OCT+", "FX", "SCL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"];
+      const WHITES = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26], // semitones above F3
+        BLACKS = [[1, 0], [3, 1], [5, 2], [8, 4], [10, 5], [13, 7], [15, 8], [17, 9], [20, 11], [22, 12], [25, 14]]; // [semitone, after white]
+      const lights = new Array(41); // the element of each matrix id (its LED tints it)
+      function knob(i, label, title) {
+        const k = el("div", "kn");
+        k.dataset.kn = i; // 0 to 6 the encoders, 7 the MASTER pot
+        k.title = title;
+        const w = el("div", "capw"); // the box the round cap is fitted into
+        w.append(el("div", "cap"));
+        k.append(el("label", "", label), w);
+        return k;
+      }
+      function buildPanel() {
+        const kn = ENCS.map(([n], i) => knob(i, n, n + ": drag up or down to turn it"));
+        $("#knL").append(knob(7, "MASTER", "MASTER volume: drag up or down"), kn[0], kn[1], kn[2]);
+        $("#knR").append(...kn.slice(3));
+        BTNS.forEach((n, id) => {
+          const b = el("button", "pb" + (id === 12 ? " go" : ""), n);
+          b.dataset.k = id;
+          b.title = "The FM-1's " + n + " button";
+          (id < 2 ? $("#oct") : $("#btns")).append(b);
+          lights[id] = b;
+        });
+      }
+      // the keys in one row or two (upright): a white key is 1/n of its row; a black key sits over the gap after a white one
+      function buildKeys(rows) {
+        const kb = $("#kb"),
+          per = WHITES.length / rows;
+        kb.textContent = "";
+        const row = Array.from({ length: rows }, () => kb.appendChild(el("div", "krow")));
+        const key = (semi, r, left, width, black) => {
+          const k = el("div", "k " + (black ? "b" : "w"));
+          k.dataset.k = 14 + semi;
+          k.style.left = left + "%";
+          k.style.width = width + "%";
+          row[r].append(k);
+          lights[14 + semi] = k;
+        };
+        const w = 100 / per;
+        WHITES.forEach((semi, i) => key(semi, Math.floor(i / per), (i % per) * w + w * 0.07, w * 0.86, false));
+        // a black key after the last white of a row would hang off its end: it opens the next row instead
+        BLACKS.forEach(([semi, after]) => {
+          const r = Math.floor((after + 1) / per) === Math.floor(after / per) || rows === 1 ? Math.floor(after / per) : Math.floor(after / per) + 1,
+            cx = (after + 1 - r * per) * w;
+          key(semi, r, cx - w * 0.36, w * 0.72, true); // at the start of a row it sits in the row's margin
+        });
+      }
+
+      // ======================================================================
+      // screen and lights: about 30 times a second the audio thread sends the LCD (240 x 240, RGB565, only when it changed)
+      // and the 41 LED levels (a lit LED is on about 1 tick in 11, hence the scale)
+      // ======================================================================
+      const lcd = $("#lcd").getContext("2d"),
+        img = lcd.createImageData(240, 240),
+        px = new Uint32Array(img.data.buffer),
+        ledNow = new Float32Array(41);
+      function showFrame(m) {
+        if (m.lcd) {
+          for (let i = 0; i < 57600; i++) {
+            const p = m.lcd[i];
+            px[i] = 0xff000000 | ((((p & 31) * 255) / 31) << 16) | (((((p >> 5) & 63) * 255) / 63) << 8) | (((p >> 11) * 255) / 31);
+          }
+          lcd.putImageData(img, 0, 0);
+        }
+        for (let i = 0; i < 41; i++) {
+          const v = Math.min(1, m.leds[i] / 0.08);
+          if (Math.abs(v - ledNow[i]) > 0.02 && lights[i]) lights[i].style.setProperty("--led", (ledNow[i] = v).toFixed(2));
+        }
+      }
+      function dark() {
+        lcd.clearRect(0, 0, 240, 240);
+        ledNow.fill(0);
+        lights.forEach((e) => e && e.style.setProperty("--led", 0));
+      }
+
+      // ======================================================================
+      // input to the machine: keys and buttons held while pressed (slide across the note keys), knobs dragged up or down.
+      // Every pointer on its own, so several fingers play a chord or hold a key while one turns a knob.
+      // ======================================================================
+      let node = null; // the emulator in the audio thread (null = off)
+      const send = (m) => node && node.port.postMessage(m);
+      const down = new Uint8Array(64),
+        holds = new Uint8Array(64),
+        clicks = new Int32Array(8);
+      let pot = 512;
+      function setKey(id, on) {
+        if (down[id] === (on ? 1 : 0)) return;
+        down[id] = on ? 1 : 0;
+        lights[id] && lights[id].classList.toggle("down", on);
+        send({ type: "key", id, down: on });
+      }
+      const knobEl = (i) => $(`.kn[data-kn="${i}"]`);
+      function glow(i) {
+        const k = knobEl(i);
+        k.classList.add("turn");
+        clearTimeout(k._t);
+        k._t = setTimeout(() => k.classList.remove("turn"), 300);
+      }
+      function turn(i, n) {
+        clicks[i] += n;
+        knobEl(i).style.setProperty("--a", clicks[i] * 18 + "deg"); // an encoder turns 18 degrees a click
+        glow(i);
+        send({ type: "enc", enc: ENCS[i][1], clicks: n });
+      }
+      function setPot(v) {
+        pot = Math.max(0, Math.min(1023, Math.round(v)));
+        knobEl(7).style.setProperty("--a", -135 + (270 * pot) / 1023 + "deg"); // the pot sweeps 270 degrees
+        glow(7);
+        send({ type: "pot", value: pot });
+      }
+      const press = (id) => holds[id]++ === 0 && setKey(id, true);
+      const unpress = (id) => holds[id] && --holds[id] === 0 && setKey(id, false);
+      const pointers = new Map(); // pointerId -> { kn, held, lastY, acc }
+      const idAt = (e) => {
+        const t = document.elementFromPoint(e.clientX, e.clientY),
+          k = t && t.closest("#fm [data-k]");
+        return k ? +k.dataset.k : -1;
+      };
+      $("#fm").addEventListener("pointerdown", (e) => {
+        const kn = e.target.closest(".kn"),
+          p = { kn: kn ? +kn.dataset.kn : -1, held: kn ? -1 : idAt(e), lastY: e.clientY, acc: 0 };
+        if (p.kn < 0 && p.held < 0) return;
+        e.preventDefault();
+        pointers.set(e.pointerId, p);
+        $("#fm").setPointerCapture(e.pointerId);
+        if (p.held >= 0) press(p.held);
+        if (!node) toast("The FM-1 is off: tap ON");
+      });
+      $("#fm").addEventListener("pointermove", (e) => {
+        const p = pointers.get(e.pointerId);
+        if (!p) return;
+        if (p.held >= 14) {
+          const h = idAt(e); // slide over the note keys
+          if (h >= 14 && h !== p.held) (unpress(p.held), press((p.held = h)));
+        } else if (p.kn === 7) setPot(pot + (p.lastY - e.clientY) * 6);
+        else if (p.kn >= 0) {
+          p.acc += p.lastY - e.clientY;
+          for (; p.acc >= 9; p.acc -= 9) turn(p.kn, 1);
+          for (; p.acc <= -9; p.acc += 9) turn(p.kn, -1);
+        }
+        p.lastY = e.clientY;
+      });
+      const release = (e) => {
+        const p = pointers.get(e.pointerId);
+        if (!p) return;
+        if (p.held >= 0) unpress(p.held);
+        pointers.delete(e.pointerId);
+      };
+      ["pointerup", "pointercancel", "lostpointercapture"].forEach((n) => $("#fm").addEventListener(n, release));
+      function allUp() {
+        for (let i = 0; i < 41; i++) if (down[i]) setKey(i, false);
+        holds.fill(0);
+        pointers.clear();
+      }
+      // computer keyboard: A W S E D F T G Y H U J K O L P ; ' play C4 to F5, Z X OCT- OCT+, Space PLAY, R REC,
+      // 1 to 0 the ten buttons, arrows and , . the first three knobs
+      const PIANO = "awsedftgyhujkolp;'",
+        KEYB = { z: 0, x: 1, " ": 12, r: 13, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 0: 11 },
+        ENC_KEYS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1], ",": [2, -1], ".": [2, 1] };
+      const keyId = (k) => (PIANO.includes(k) ? 21 + PIANO.indexOf(k) : (KEYB[k] ?? -1));
+      addEventListener("keydown", (e) => {
+        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden) return e.key === "Escape" && menuShow(false);
+        if (ENC_KEYS[e.key]) return e.preventDefault(), turn(...ENC_KEYS[e.key]);
+        const id = keyId(e.key.toLowerCase());
+        if (id < 0) return;
+        e.preventDefault();
+        if (!e.repeat) setKey(id, true);
+      });
+      addEventListener("keyup", (e) => {
+        const id = keyId(e.key.toLowerCase());
+        if (id >= 0) setKey(id, false);
+      });
+
+      // ======================================================================
+      // power and boot: the machine runs in the audio thread (fm1-emu's own worklet), paced by the sound card
+      // ======================================================================
+      let ac = null,
+        seq = 0,
+        run = null, // what is running: { f, hash, base, saved: Map(offset -> sector) }
+        peak = 0; // the loudest sample lately (for the tests)
+      const current = () => FIRMWARES.find((f) => f.id === $("#fw").value) || (local && $("#fw").value === "local" ? local : null);
+      let local = null; // a package opened from a file: { id: "local", name, bytes }
+      async function packageOf(f) {
+        if (f.bytes) return f.bytes;
+        const got = vetPkg(await kvGet("pkg:" + f.id));
+        // kept, and still the version of the list (or no way to get another): it runs from this device
+        if (got && (got.version === f.version || !navigator.onLine)) return (f.bytes = got.bytes);
+        status("downloading " + f.name + "…");
+        try {
+          const r = await fetch(f.package);
+          if (!r.ok) throw Error("status " + r.status);
+          const bytes = new Uint8Array(await r.arrayBuffer());
+          if (!vetPkg({ bytes })) throw Error("not a firmware package");
+          kvPut("pkg:" + f.id, { name: f.name, version: f.version, bytes }).then(() => (kept.add(f.id), listFace()), () => toast("No room to keep " + f.name + " on this device", 3000));
+          return (f.bytes = bytes);
+        } catch (e) {
+          if (got) return (f.bytes = got.bytes); // an older version kept is better than none
+          throw Error(navigator.onLine ? "the package did not download (" + e.message + "). Get it from its author and use OPEN FILE" : "you are offline and this firmware is not kept on this device yet");
+        }
+      }
+      const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      async function boot(fresh) {
+        const f = current(),
+          mine = ++seq;
+        if (!f) return toast("Choose a firmware first");
+        try {
+          const bytes = await packageOf(f),
+            hash = hex(await crypto.subtle.digest("SHA-256", bytes));
+          if (fresh) await kvDel("save:" + hash);
+          const saved = new Map(vetSave(await kvGet("save:" + hash)));
+          if (mine !== seq || !node) return;
+          allUp();
+          run = { f, hash, base: null, saved };
+          // what the firmware saved before goes back over the package's fresh flash: records of a 4-byte offset and its sector
+          const sectors = new Uint8Array(saved.size * (4 + SECTOR));
+          let o = 0;
+          for (const [off, data] of saved) {
+            new DataView(sectors.buffer).setUint32(o, off, true);
+            sectors.set(data, o + 4);
+            o += 4 + SECTOR;
+          }
+          status("booting " + f.name + "…");
+          node.port.postMessage({ type: "boot", seq: mine, wasm: WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, mhz: MHZ });
+        } catch (e) {
+          if (mine !== seq) return;
+          status(f.name + ": " + e.message);
+          toast(f.name + ": " + e.message, 4000);
+        }
+      }
+      // saves: when the firmware writes its flash the worklet sends the whole chip; the sectors that differ from the
+      // package's own are kept under the package's hash, so each exact firmware version has its own save
+      function keepFlash(flash) {
+        if (!run || !run.base || flash.length !== run.base.length) return;
+        const saved = new Map();
+        for (let off = 0; off < flash.length; off += SECTOR) {
+          let same = true;
+          for (let i = off; i < off + SECTOR && same; i++) same = flash[i] === run.base[i];
+          if (!same) saved.set(off, flash.slice(off, off + SECTOR));
+        }
+        run.saved = saved;
+        kvPut("save:" + run.hash, [...saved]).catch(() => toast("No room on this device to keep what the firmware saved", 3000));
+      }
+      function onWorklet(e) {
+        const m = e.data;
+        if (m.seq !== seq) return;
+        if (m.type === "frame") showFrame(m);
+        else if (m.type === "booted") {
+          run.base = m.base;
+          status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
+          toast(run.f.name + " is on");
+        } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
+        else if (m.type === "error") (status(m.message), toast(m.message, 4000));
+      }
+      async function powerOn() {
+        ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+        const url = URL.createObjectURL(new Blob([$("#worklet").textContent], { type: "text/javascript" }));
+        try {
+          await ac.audioWorklet.addModule(url);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        node = new AudioWorkletNode(ac, "fm1", { numberOfInputs: 0, outputChannelCount: [2] });
+        const meter = ac.createAnalyser(),
+          buf = new Float32Array(256);
+        meter.fftSize = 256;
+        node.connect(ac.destination);
+        node.connect(meter);
+        ac._peak = setInterval(() => (meter.getFloatTimeDomainData(buf), (peak = Math.max(peak * 0.9, ...buf.map(Math.abs)))), 100);
+        node.port.onmessage = onWorklet;
+        await ac.resume();
+        powerFace();
+        send({ type: "pot", value: pot });
+        await boot();
+      }
+      function powerOff() {
+        seq++;
+        clearInterval(ac._peak);
+        ac.close();
+        ac = node = run = null;
+        allUp();
+        dark();
+        powerFace();
+        status("off");
+        toast("FM-1 off");
+      }
+      function powerFace() {
+        $("#power").classList.toggle("on", !!node);
+        $("#power").textContent = node ? "OFF" : "ON";
+      }
+      $("#power").onclick = () => (node ? powerOff() : powerOn().catch((e) => (status("no sound: " + e.message), toast("Could not start the sound: " + e.message, 4000))));
+      $("#reboot").onclick = () => (node ? (boot(), toast("Restarting " + (current() || {}).name)) : toast("The FM-1 is off: tap ON"));
+      // the sound stops while the page is hidden, and the machine with it
+      document.addEventListener("visibilitychange", () => ac && (document.hidden ? ac.suspend() : ac.resume()));
+
+      // ======================================================================
+      // the firmware list and files
+      // ======================================================================
+      const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
+      let want = stored("fm1.fw") || "grimm"; // the firmware chosen (the list may not hold it yet: it fills in steps)
+      function listFace() {
+        const sel = $("#fw"),
+          was = want;
+        sel.textContent = "";
+        if (local) sel.add(new Option("● " + local.name + " (your file)", "local"));
+        for (const f of FIRMWARES) sel.add(new Option((kept.has(f.id) ? "● " : "") + f.name + (f.version ? " " + f.version : ""), f.id));
+        sel.value = [...sel.options].some((o) => o.value === was) ? was : FIRMWARES.some((f) => f.id === "grimm") ? "grimm" : sel.options[0]?.value;
+        const f = current();
+        $("#about").textContent = !f ? "" : f === local ? "Your file, kept on this device. Nothing is uploaded." : `${f.name} ${f.version} by ${f.author || "?"}${f.license ? " (" + f.license + ")" : ""}. ${f.about}`;
+        navigator.storage?.estimate?.().then((s) => ($("#stor").textContent = `${kept.size + (local ? 1 : 0)} firmware(s) kept on this device. Storage: ${mb(s.usage || 0)} used of ${mb(s.quota || 0)}.`), () => {});
+      }
+      $("#fw").onchange = () => {
+        store("fm1.fw", (want = $("#fw").value));
+        listFace();
+        if (node) boot();
+        else toast(current().name + " chosen: tap ON");
+      };
+      $("#open").onclick = () => $("#file").click();
+      $("#file").onchange = async (e) => {
+        const file = e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        // the file is untrusted: sized here, checked by the core when it boots it, and its name only ever goes into text
+        const p = file.size <= MAX_PACKAGE && vetPkg({ name: file.name.replace(/\.fwsc$/i, ""), bytes: new Uint8Array(await file.arrayBuffer()) });
+        if (!p) return toast("That file is not a firmware package", 3000);
+        local = { id: "local", name: p.name, version: "", bytes: p.bytes };
+        kvPut("pkg:local", p).catch(() => toast("No room to keep the file: it runs until the page closes", 3000));
+        store("fm1.fw", (want = "local"));
+        listFace();
+        if (node) boot();
+        else toast(local.name + " ready: tap ON");
+      };
+      // buttons that destroy something ask twice: the second tap within 3 s does it
+      function twice(btn, what, go) {
+        btn.onclick = () => {
+          if (btn._sure) return (btn._sure = false), btn.classList.remove("on"), go();
+          btn._sure = true;
+          btn.classList.add("on");
+          toast("Tap again to " + what);
+          setTimeout(() => ((btn._sure = false), btn.classList.remove("on")), 3000);
+        };
+      }
+      twice($("#wipe"), "erase what this firmware saved", () => (node ? (boot(true), toast("Saves erased: starting fresh")) : toast("Turn the FM-1 on first: the saves belong to the firmware that runs")));
+      twice($("#forget"), "delete the downloaded firmwares", async () => {
+        for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) await kvDel(k);
+        kept.clear();
+        local = null;
+        FIRMWARES.forEach((f) => delete f.bytes);
+        listFace();
+        toast("Downloads deleted. A running firmware keeps running.");
+      });
+      // fm1-emu's own list, when there is a connection: new firmwares and versions appear without an update of this app
+      async function refreshCatalog() {
+        const keptList = vetCatalog(await kvGet("catalog"));
+        if (keptList.length) FIRMWARES = keptList;
+        for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) kept.add(String(k).slice(4));
+        const mine = vetPkg(await kvGet("pkg:local"));
+        if (mine) local = { id: "local", name: mine.name, version: "", bytes: mine.bytes };
+        kept.delete("local");
+        listFace();
+        if (!navigator.onLine) return;
+        try {
+          const fresh = vetCatalog(await (await fetch(CATALOG_URL, { cache: "no-cache" })).json());
+          if (fresh.length < 20) return; // a broken list does not replace a good one
+          const run = current();
+          FIRMWARES = fresh.map((f) => (run && run.id === f.id && run.version === f.version ? run : f));
+          kvPut("catalog", fresh).catch(() => {});
+          listFace();
+        } catch {}
+      }
+
+      // ======================================================================
+      // views, keys and skins
+      // ======================================================================
+      const SKINS = [["grey", "FM-1 GREY"], ["black", "FM-1 BLACK"], ["white", "FM-1 WHITE"], ["orange", "FM-1 ORANGE"], ["purple", "FM-1 PURPLE"], ["pocket", "POCKET"], ["term", "TERMINAL"], ["dmg", "DMG"], ["dungeon", "DUNGEON SYNTH"]];
+      const pick = (k, list, d) => (list.includes(stored(k)) ? stored(k) : d);
+      const tall = matchMedia("(orientation: portrait)");
+      const label = (b, cap, name) => (b.replaceChildren(el("i", "", cap), name));
+      function lookFace() {
+        const b = document.body.dataset,
+          skin = SKINS.find((s) => s[0] === document.documentElement.dataset.skin) || SKINS[0];
+        label($("#view"), "SIDEWAYS VIEW", b.view === "complete" ? "COMPLETE" : "SWITCHABLE");
+        label($("#keys"), "KEYS", b.keys === "fm" ? "FM-1" : "PIANO");
+        label($("#skin"), SKINS.indexOf(skin) < 5 ? "SKIN · FM-1 COLOUR" : "SKIN · OURS", skin[1]);
+        $("#flip").textContent = b.part === "keys" ? "TOP" : "KEYS";
+        buildKeys(tall.matches ? 2 : 1);
+        for (let i = 14; i < 41; i++) lights[i].classList.toggle("down", !!down[i]);
+        ledNow.fill(0, 14);
+      }
+      $("#view").onclick = () => {
+        const b = document.body.dataset;
+        store("fm1.view", (b.view = b.view === "complete" ? "switchable" : "complete"));
+        lookFace();
+        toast(b.view === "complete" ? "Sideways: the whole FM-1" : "Sideways: keys or upper part, the KEYS / TOP button switches" + (tall.matches ? " (turn the phone)" : ""), 2600);
+      };
+      $("#keys").onclick = () => {
+        const b = document.body.dataset;
+        store("fm1.keys", (b.keys = b.keys === "fm" ? "piano" : "fm"));
+        lookFace();
+        toast(b.keys === "fm" ? "The FM-1's own keys" : "Piano keys");
+      };
+      $("#skin").onclick = () => {
+        const d = document.documentElement.dataset,
+          i = (SKINS.findIndex((s) => s[0] === d.skin) + 1) % SKINS.length;
+        store("fm1.skin", (d.skin = SKINS[i][0]));
+        lookFace();
+        toast("Skin: " + SKINS[i][1]);
+      };
+      $("#flip").onclick = () => {
+        const b = document.body.dataset;
+        b.part = b.part === "keys" ? "up" : "keys";
+        lookFace();
+        toast(b.part === "keys" ? "The keys" : "Knobs, screen and buttons");
+      };
+      tall.addEventListener("change", lookFace);
+      const menuShow = (on) => (($("#menu").hidden = !on), on && listFace());
+      $("#menuBtn").onclick = $("#logo").onclick = () => menuShow(true);
+      $("#menuClose").onclick = () => menuShow(false);
+      $("#menu").addEventListener("click", (e) => e.target.id === "menu" && menuShow(false));
+
+      // ======================================================================
+      // MIDI: every input of the device goes to the FM-1's MIDI IN jack, byte for byte
+      // ======================================================================
+      let midi = null;
+      const midiIn = (bytes) => send({ type: "midi", bytes });
+      function midiFace() {
+        const names = midi ? [...midi.inputs.values()].map((i) => i.name || "MIDI input") : [];
+        $("#midi").classList.toggle("on", names.length > 0);
+        if (midi) for (const i of midi.inputs.values()) i.onmidimessage = (e) => midiIn(Array.from(e.data));
+        return names;
+      }
+      $("#midi").onclick = async () => {
+        if (!navigator.requestMIDIAccess) return toast("This browser has no MIDI (use Chrome, Edge or Firefox)", 3000);
+        try {
+          midi = midi || (await navigator.requestMIDIAccess());
+          midi.onstatechange = midiFace;
+          const names = midiFace();
+          toast(names.length ? "MIDI IN: " + names.join(", ") : "No MIDI device found: plug one in", 3000);
+        } catch {
+          toast("MIDI was not allowed", 3000);
+        }
+      };
+
+      // ======================================================================
+      // INSTALL: the browser's own install dialog where there is one, the steps elsewhere (as in the Pocket apps)
+      // ======================================================================
+      const PWA = { ev: window.pocketInstall || null, done: false };
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const pwaState = () => (PWA.done || matchMedia("(display-mode: standalone), (display-mode: minimal-ui)").matches || navigator.standalone === true ? "done" : PWA.ev ? "prompt" : isIOS ? "ios" : "menu");
+      const PWA_T = {
+        done: ["INSTALLED ✓", "Installed: it opens in its own window and works offline with the firmwares marked ●.", ""],
+        prompt: ["INSTALL", "Adds it to your home screen or apps: its own window, full screen, and it works offline.", "Install cancelled"],
+        ios: ["HOW TO INSTALL", "iPhone and iPad: in Safari tap Share, then Add to Home Screen.", "Safari ▸ Share ▸ Add to Home Screen"],
+        menu: ["HOW TO INSTALL", "Use your browser's menu: Install app (Chrome, Edge, Android) or Add to Home Screen.", "Use your browser's menu: Install app / Add to Home Screen"],
+      };
+      function pwaFace() {
+        const st = pwaState();
+        label($("#inst"), "APP", PWA_T[st][0]);
+        $("#inst").disabled = st === "done";
+        $("#instHint").textContent = PWA_T[st][1];
+      }
+      $("#inst").onclick = async () => {
+        const st = pwaState();
+        if (st !== "prompt") return toast(PWA_T[st][2]);
+        const ev = PWA.ev;
+        PWA.ev = null; // the browser's event works once
+        try {
+          ev.prompt();
+          if ((await ev.userChoice).outcome === "accepted") PWA.done = true;
+          else toast(PWA_T.prompt[2]);
+        } catch {}
+        pwaFace();
+      };
+      addEventListener("pocketinstall", () => ((PWA.ev = window.pocketInstall), pwaFace()));
+      addEventListener("appinstalled", () => ((PWA.done = true), (PWA.ev = null), pwaFace(), toast("Installed: open it from your home screen or apps")));
+
+      // ======================================================================
+      // boot
+      // ======================================================================
+      document.body.dataset.view = pick("fm1.view", ["complete", "switchable"], "complete");
+      document.body.dataset.keys = pick("fm1.keys", ["fm", "piano"], "fm");
+      if (!SKINS.some((s) => s[0] === document.documentElement.dataset.skin)) document.documentElement.dataset.skin = "grey";
+      buildPanel();
+      lookFace();
+      setPot(pot);
+      knobEl(7).classList.remove("turn");
+      pwaFace();
+      status("off: tap ON");
+      listFace();
+      refreshCatalog();
+      navigator.storage?.persist?.(); // ask the browser not to clear the kept firmwares and saves
+    </script>
+  </body>
+</html>
