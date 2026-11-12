@@ -146,7 +146,17 @@ try:
     d.execute_cdp_cmd("Network.enable", {}); d.execute_cdp_cmd("Network.emulateNetworkConditions", {"offline": True, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1})
     power_on(); assert "saves loaded" in q("#status"), q("#status")
     js("document.querySelector('#flip').click(); setKeys('fm')")
-    print("status: %s -> %s | screen colours: %d | peak: %.3f | errors: %s" % (status, q("#status"), lit, loud, js("return __errs")))
+    # a device that cannot keep up: a lower clock where one helps (a firmware that mostly idles costs the same at any clock)
+    assert js("return [lowerClock(1.2, 0, 100), lowerClock(1.2, 0.8, 100), lowerClock(1.2, 0, 60)]") == [60, None, None]
+    js("Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: 0, secs: 9, bad: 2, asked: false }); keepUp({ busy: 30, quanta: 10, frames: 128, emulated: 29, idle: 0 })")
+    assert "60 MHz" in q("#sureText") and not js("return document.querySelector('#sure').hidden"), "no offer of a lower clock"
+    js("document.querySelector('#sureNo').click()"); assert js("return mhz") == 100
+    # a DX7 bank: its shape is checked, it goes with the next start once, and a refusal by the emulator leaves the machine running
+    assert js("const b = new Uint8Array(4104); b.set([0xf0, 0x43, 0, 9, 0x20, 0]); b[4103] = 0xf7; window.b0 = b; return [vetBank(b), vetBank(b.slice(1)), vetBank(new Uint8Array(4104))]") == [True, False, False]
+    js("bank = b0; boot()"); time.sleep(4)
+    took = q("#status"); assert js("return bank") is None and ("saves loaded" in took or "DX7 bank" in took), took
+    js("boot()"); time.sleep(4); assert "saves loaded" in q("#status"), q("#status")
+    print("status: %s -> %s | screen colours: %d | peak: %.3f | bank: %s | errors: %s" % (status, q("#status"), lit, loud, took, js("return __errs")))
     assert js("return __errs") == [], "errors on the page"
     print("OK")
 finally:
