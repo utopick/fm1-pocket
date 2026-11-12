@@ -4,13 +4,17 @@
     python3 pocket/build.py
 
 src/app.html is the page you edit. The build puts into it the fm1-emu core (vendor/fm1_web.wasm, as base64),
-its audio worklet (vendor/worklet.js) and the firmware list (vendor/firmwares.json). No dependencies.
+its audio worklet (vendor/worklet.js), the firmware list (vendor/firmwares.json), the Pocket apps' MIDI device
+panel (vendor/midi-device.js) and the small pictures of the ABOUT tab (vendor/caps/). No dependencies.
 """
 import base64, os
 here = os.path.dirname(os.path.abspath(__file__))
 read = lambda p, mode="r": open(os.path.join(here, p), mode, **({} if "b" in mode else {"encoding": "utf-8"})).read()
 page = read("src/app.html")
 parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
+         "/*@MIDIDEVICE@*/": read("vendor/midi-device.js"),  # the Pocket apps' MIDI device panel, the same file as theirs
+         "/*@LICENSE_EMU@*/": read("vendor/LICENSE-fm1-emu").replace("&", "&amp;").replace("<", "&lt;"),
+         **{"@CAP:%s@" % n: "data:image/jpeg;base64," + base64.b64encode(read("vendor/caps/%s.jpg" % n, "rb")).decode() for n in ("track", "tune", "sing")},
          "/*@WASM@*/": base64.b64encode(read("vendor/fm1_web.wasm", "rb")).decode()}
 for mark, text in parts.items():
     assert page.count(mark) == 1, mark

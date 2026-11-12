@@ -105,6 +105,17 @@ try:
     webdriver.ActionChains(d).move_to_element(k).click_and_hold().perform(); assert js("return down[30]") == 1
     webdriver.ActionChains(d).release().perform(); assert js("return down[30]") == 0
     js("turn(0, 3); setPot(900)")
+    # a controller: an MPK's knob 1 (CC 2) turns KNOB1, its pad 1 (note 36, channel 10) holds HOME, its keys go to MIDI IN
+    js("MI.names = ['MPK mini']; window.c0 = clicks[3]; midiMsg([0xb0, 2, 10], 'MPK mini'); midiMsg([0xb0, 2, 30], 'MPK mini')")
+    assert js("return clicks[3] - c0") == 5, "the knob did not turn KNOB1"
+    js("midiMsg([0x99, 36, 100], 'MPK mini')"); assert js("return down[8]") == 1
+    js("midiMsg([0x89, 36, 0], 'MPK mini')"); assert js("return down[8]") == 0
+    js("document.querySelector('#midiDev').click()"); assert js("return document.querySelectorAll('#mdPanel svg [data-control]').length") > 30, "no drawing of the controller"
+    js("document.querySelector('#mdPanel [data-do=close]').click()"); assert js("return !document.getElementById('mdPanel')")
+    # the manual in two languages, and the licences
+    js("document.querySelector('#manual').click(); document.querySelector('#sheet [data-lg=es]').click()"); assert "Qué es" in q("#shBody") and "<" not in js("return document.querySelector('#shBody b').innerHTML")
+    js("document.querySelector('#sheet [data-lg=en]').click(); document.querySelector('#shClose').click(); document.querySelector('#licence').click()")
+    assert "Joakim Eriksson" in q("#shBody") and "Permission is hereby granted" in q("#shBody"); js("document.querySelector('#shClose').click()")
     # what the firmware writes to its flash is kept, and given back to it when it starts again
     js("const f = run.base.slice(); f[8192] ^= 255; keepFlash(f)"); time.sleep(0.5)
     status = q("#status")

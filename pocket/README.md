@@ -18,7 +18,10 @@ unchanged. What this folder adds is one page around them.
   ones appear by themselves). Each package is downloaded once from its author and kept on the device, marked ●,
   and then runs with no connection. OPEN FILE takes your own `.fwsc`.
 - **Saves.** What a firmware writes to its flash is kept per exact firmware version.
-- **MIDI** in, computer keys, multi-touch. Installable (PWA).
+- **MIDI**: keys play the FM-1 through its MIDI IN. Knobs and pads work the FM-1's own knobs and buttons, with a
+  starting assignment for known controllers (Akai MPK mini, Launchkey) and a drawing of the controller to assign
+  and learn each control (the Pocket apps' device panel).
+- A manual in English and Spanish, the licences, computer keys, multi-touch. Installable (PWA).
 
 ## Build and test
 
@@ -27,7 +30,9 @@ python3 pocket/build.py                                   # writes pocket/index.
 python pocket/tests/smoke.py path/to/firmware.fwsc        # needs selenium and Chrome
 ```
 
-Edit `pocket/src/app.html`. `pocket/vendor/` holds fm1-emu's built core (`fm1_web.wasm`), `worklet.js` and
+Edit `pocket/src/app.html`. `pocket/vendor/midi-device.js` is the MIDI device panel
+shared with the Pocket apps (copied from TUNE.Pocket's `<script id="midi-device">`, keep it identical), and
+`pocket/vendor/caps/` the small pictures of the ABOUT tab. `pocket/vendor/` also holds fm1-emu's built core (`fm1_web.wasm`), `worklet.js` and
 `firmwares.json`, copied from its published page at commit 3e3fb27. To update them, build `web/` as the main
 README says and copy the three files.
 
