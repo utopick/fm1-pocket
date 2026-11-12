@@ -174,9 +174,14 @@
       #menu .tabs button { flex: 1; min-width: 0; padding: 6px 2px; }
       #menuClose { flex: none; width: 76px !important; }
       #menu section { flex: 1; min-height: 0; overflow: auto; display: none; flex-direction: column; gap: 10px; }
-      #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"] { display: flex; }
+      #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"], #menu[data-tab="man"] section[data-tab="man"] { display: flex; }
       /* the firmwares: cards, four to a row at most, in a list that scrolls. The actions stay under it */
-      #menu section[data-tab="fw"] { overflow: hidden; }
+      #menu section[data-tab="fw"], #menu section[data-tab="man"] { overflow: hidden; }
+      #menu #manBody { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 12px; font-size: 15px; line-height: 1.5; color: #dfe4ea; -webkit-user-select: text; user-select: text; }
+      #menu #manBody h3 { margin: 14px 0 4px; font: 800 17px system-ui; letter-spacing: 0; text-transform: none; color: #b48cff; }
+      #menu #manBody h3:first-child { margin-top: 0; }
+      #menu #manBody p, #menu #manBody ul, #menu #manBody li { margin: 6px 0; font-size: 15px; line-height: 1.5; color: inherit; }
+      #menu #manBody ul { padding-left: 18px; }
       #menu .cards { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(max(150px, 25% - 8px), 1fr)); gap: 8px; align-content: start; padding-right: 4px; }
       #menu .fwc { display: grid; grid-template-columns: 64px 1fr; gap: 6px 8px; padding: 8px; border-radius: 12px; border: 1px solid #2a313b; background: #171b22; min-width: 0; }
       #menu .fwc.on { border-color: #b48cff; box-shadow: inset 0 0 0 1px #b48cff; }
@@ -295,7 +300,8 @@
             <button data-tab="fw" role="tab" title="Choose the firmware, restart it, open a file, erase saves">FIRMWARE</button>
             <button data-tab="look" role="tab" title="View, keys, skin and screen filter">LOOK</button>
             <button data-tab="conn" role="tab" title="MIDI and installing the app">OPTIONS</button>
-            <button data-tab="info" role="tab" title="Credits and the computer keys">ABOUT</button>
+            <button data-tab="man" role="tab" title="The manual: this app, and how the FM-1 works. English and Spanish">MANUAL</button>
+            <button data-tab="info" role="tab" title="Thanks, credits and licences">ABOUT</button>
           </div>
           <button id="menuClose" title="Close the menu">CLOSE</button>
         </div>
@@ -352,16 +358,21 @@
             <button id="inst" class="big" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
           </div>
         </section>
+        <section data-tab="man">
+          <div id="manBody"></div>
+          <div class="grid">
+            <button id="manApp" title="The manual of this app"><i>MANUAL</i>THIS APP</button>
+            <button id="manFm" title="How the FM-1 itself works, with its own firmware"><i>MANUAL</i>THE FM-1</button>
+            <button id="manLang" title="English or Spanish · Inglés o español"></button>
+          </div>
+        </section>
         <section data-tab="info" class="row">
           <div class="box thanks">
             <h3>THANK YOU, JOAKIM</h3>
             <p class="lead">FM1.Pocket is a fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by <b>Joakim Eriksson</b>.</p>
             <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app only adds a phone-first front to it.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
-            <div class="grid">
-              <button id="manual" title="The manual, in English and Spanish"><i>EN · ES</i>MANUAL</button>
-              <button id="licence" title="The full text of the licences"><i>MIT</i>LICENSE</button>
-            </div>
+            <button id="licence" title="The full text of the licences"><i>MIT</i>LICENSE</button>
           </div>
           <div class="box">
             <h3>MORE POCKET APPS, BY UTOPICK</h3>
@@ -377,7 +388,6 @@
       <div class="box" role="dialog" aria-modal="true" aria-labelledby="shTitle">
         <div class="bar">
           <b id="shTitle"></b>
-          <button data-lg="en" title="English">EN</button><button data-lg="es" title="Español">ES</button>
           <button id="shClose" title="Close">CLOSE</button>
         </div>
         <div id="shBody"></div>
@@ -492,7 +502,7 @@
       //   knobs: [label, matrix encoder] and MASTER, a pot.  buttons: matrix ids 0 to 13.  note keys: ids 14 to 40, F3 to G5
       // ======================================================================
       const ENCS = [["SELECT", 0], ["PRESETS", 6], ["ALGORITHM", 1], ["KNOB1", 2], ["KNOB2", 3], ["KNOB3", 4], ["KNOB4", 5]];
-      const BTNS = ["OCT-", "OCT+", "FX", "SCL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"];
+      const BTNS = ["OCT-", "OCT+", "FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"];
       const WHITES = [0, 2, 4, 6, 7, 9, 11, 12, 14, 16, 18, 19, 21, 23, 24, 26], // semitones above F3
         BLACKS = [[1, 0], [3, 1], [5, 2], [8, 4], [10, 5], [13, 7], [15, 8], [17, 9], [20, 11], [22, 12], [25, 14]]; // [semitone, after white]
       const lights = new Array(41); // the element of each matrix id (its LED tints it)
@@ -1139,8 +1149,74 @@
       addEventListener("appinstalled", () => ((PWA.done = true), (PWA.ev = null), pwaFace(), toast("Installed: open it from your home screen or apps")));
 
       // ======================================================================
-      // the manual (English and Spanish) and the licences, on a sheet. Lines: "## heading", "- item", else a paragraph. **bold**.
+      // the manual (English and Spanish: this app, and the FM-1 itself after M-VAVE's user manual) in its tab, the licences on a sheet. Lines: "## heading", "- item", else a paragraph. **bold**.
       // ======================================================================
+      const HELP_FM = {
+        en: [
+          "This part follows M-VAVE's own user manual for the firmware the FM-1 ships with. To run that firmware here, download **FM-1.fwsc** from M-VAVE and use **OPEN FILE**. The community firmwares use the same knobs and buttons in their own way: read each author's page. Newer versions of the stock firmware may differ from this.",
+          "## The screen",
+          "- **Top bar**: the number and name of the preset in use. **Centre**: what the current mode shows (the oscilloscope at home, parameters, the effect grid, the algorithm diagram). **Bottom bar**: the mode and its page, like 1/2 LFO, and what each knob is changing.",
+          "- Changing a preset, the algorithm, the octave, the transpose or the volume shows a small window for about a second.",
+          "## Left side",
+          "- **MASTER**: the volume.",
+          "- **SELECT**: the page of the current mode. Many modes have two pages. In FX it moves between the six effects.",
+          "- **PRESETS**: goes through the 128 presets (001 to 128, round and round). Each one loads at once, and a list shows where you are.",
+          "- **ALGORITHM**: chooses one of the 32 algorithms, the ways the six operators are connected. The screen draws it. Hold **OCT-** or **OCT+** and turn it to transpose, down or up to 12 semitones.",
+          "- **OCT-** and **OCT+**: move the keys an octave down or up, three at most. The light blinks slowly at 1, fast at 2 and stays on at 3. Press both together to put octave and transpose back to 0.",
+          "## KNOB1 to KNOB4",
+          "- They change four values of the mode you are in. The bottom bar of the screen names the one you are turning.",
+          "## Upper row of buttons",
+          "- **FX**: the effect chain, a grid of six: Filter, Reverb, Delay, Distortion, Chorus, Phaser. SELECT moves the blinking dot. KNOB1 to 3 change the effect and KNOB4 turns it on (bright) or off (dim). Filter: type (low, band or high pass), cutoff, resonance. Reverb: type (room, hall, plate), decay, mix. Delay: decay, rate, mix. Distortion: gain, tone, level. Chorus and Phaser: frequency, depth, mix. FX again goes home.",
+          "- **SEL**: only inside FX. Press it to pick up the effect under the dot, turn SELECT to move it along the chain, press SEL again to drop it there.",
+          "- **ENV**: the volume envelope. KNOB1 to 4 are Attack, Decay, Sustain and Release, 0 to 8 each.",
+          "- **LFO**: page 1 has the wave (triangle, saw down, saw up, square, sine, sample and hold), the speed, the pitch depth (PMD) and the volume depth (AMD). Page 2 has the delay, the pitch sensitivity, LFO sync and oscillator sync.",
+          "- **EDIT**: the FM sound itself. The upper keys become choices, with the names printed under them: **OP1** to **OP6** an operator, **PIT** the pitch envelope, **GLO** the algorithm, feedback, oscillator sync and transpose, **MONO** one note at a time, **POLY** up to 12 notes. SELECT turns the pages of the chosen one (for an operator: envelope rates, envelope levels, tuning, sensitivity and output level, and two pages of keyboard scaling). KNOB1 to 4 change the values. EDIT again goes home.",
+          "- **GLO**: the settings of the device. Page 1: the MIDI channel for notes, the MIDI channel for effects, pitch bend up and down. Page 2: KNOB1 resets the 128 presets to the factory ones (KNOB4 confirms, KNOB1 cancels) and KNOB2 saves these settings.",
+          "## Lower row of buttons",
+          "- **HOME**: back to the home screen and its oscilloscope. On the real FM-1 a long press turns Bluetooth on and off.",
+          "- **SAVE**: hold it to save the preset with its effects, the sequencer patterns and the settings. The screen says Preset Saved. Here it is saved on this device.",
+          "- **ARP**: the arpeggiator. Hold some keys and it plays them in a pattern. Page 1: mode (Up, Down, Inclusive, Exclusive, Random, Order, Repeat), octaves (1 to 4), rate and tempo (30 to 300). Page 2: gate, swing and latch, which keeps it playing after you let go. ARP again turns it off. It cannot be on together with SEQ.",
+          "- **SEQ**: a sequencer of 16 steps with 16 patterns. The keys show the steps: lit has notes, blinking is the one playing. Page 1: pattern, clear, rate, tempo. Page 2: gate and swing. SEQ again turns it off.",
+          "- **REC**: with SEQ on, starts recording: each note you play goes into the next step. REC again ends the recording and keeps playing.",
+          "- **PLAY**: with SEQ on, starts and stops the sequence.",
+          "## The keys",
+          "- 27 keys, F3 to G5 before any octave change. The names under the upper keys only count in EDIT.",
+          "## MIDI on the real FM-1",
+          "- It takes notes with velocity, pitch bend, control changes and DX7 voice banks by SysEx (32 voices, kept in bank A, B, C or D). It sends the notes of its keys, arpeggiator and sequencer. In this app your controller arrives at its MIDI IN.",
+        ],
+        es: [
+          "Esta parte sigue el manual de usuario de M-VAVE para el firmware con el que se vende el FM-1. Para usar ese firmware aquí, descarga **FM-1.fwsc** de M-VAVE y usa **OPEN FILE**. Los firmwares de la comunidad usan los mismos potes y botones a su manera: lee la página de cada autor. Las versiones nuevas del firmware original pueden ser distintas.",
+          "## La pantalla",
+          "- **Barra superior**: el número y el nombre del preset en uso. **Centro**: lo que muestra el modo actual (el osciloscopio en inicio, parámetros, la rejilla de efectos, el diagrama del algoritmo). **Barra inferior**: el modo y su página, como 1/2 LFO, y lo que cambia cada pote.",
+          "- Al cambiar de preset, de algoritmo, de octava, de transposición o de volumen aparece una ventanita durante un segundo.",
+          "## Lado izquierdo",
+          "- **MASTER**: el volumen.",
+          "- **SELECT**: la página del modo actual. Muchos modos tienen dos páginas. En FX pasa de un efecto a otro.",
+          "- **PRESETS**: recorre los 128 presets (001 a 128, en círculo). Cada uno se carga al momento, y una lista muestra dónde estás.",
+          "- **ALGORITHM**: elige uno de los 32 algoritmos, las maneras de conectar los seis operadores. La pantalla lo dibuja. Mantén **OCT-** u **OCT+** y gíralo para transponer, hasta 12 semitonos abajo o arriba.",
+          "- **OCT-** y **OCT+**: bajan o suben las teclas una octava, tres como mucho. La luz parpadea despacio en 1, rápido en 2 y queda fija en 3. Pulsa los dos a la vez para volver a octava 0 y transposición 0.",
+          "## KNOB1 a KNOB4",
+          "- Cambian cuatro valores del modo en que estás. La barra inferior de la pantalla nombra el que giras.",
+          "## Fila superior de botones",
+          "- **FX**: la cadena de efectos, una rejilla de seis: Filter, Reverb, Delay, Distortion, Chorus, Phaser. SELECT mueve el punto que parpadea. KNOB1 a 3 cambian el efecto y KNOB4 lo enciende (brillante) o lo apaga (tenue). Filter: tipo (paso bajo, banda o alto), corte, resonancia. Reverb: tipo (room, hall, plate), caída, mezcla. Delay: caída, velocidad, mezcla. Distortion: ganancia, tono, nivel. Chorus y Phaser: frecuencia, profundidad, mezcla. FX otra vez vuelve a inicio.",
+          "- **SEL**: solo dentro de FX. Púlsalo para coger el efecto bajo el punto, gira SELECT para moverlo por la cadena y pulsa SEL otra vez para soltarlo ahí.",
+          "- **ENV**: la envolvente de volumen. KNOB1 a 4 son ataque, caída, sostenido y relajación, de 0 a 8.",
+          "- **LFO**: la página 1 tiene la onda (triángulo, sierra abajo, sierra arriba, cuadrada, seno, sample and hold), la velocidad, la profundidad de tono (PMD) y la de volumen (AMD). La página 2 tiene el retardo, la sensibilidad de tono, la sincronía del LFO y la del oscilador.",
+          "- **EDIT**: el sonido FM en sí. Las teclas de arriba pasan a ser opciones, con los nombres impresos debajo: **OP1** a **OP6** un operador, **PIT** la envolvente de tono, **GLO** el algoritmo, la realimentación, la sincronía del oscilador y la transposición, **MONO** una nota cada vez, **POLY** hasta 12 notas. SELECT pasa las páginas de lo elegido (en un operador: tiempos de la envolvente, niveles de la envolvente, afinación, sensibilidad y nivel de salida, y dos páginas de escalado de teclado). KNOB1 a 4 cambian los valores. EDIT otra vez vuelve a inicio.",
+          "- **GLO**: los ajustes del aparato. Página 1: el canal MIDI de las notas, el canal MIDI de los efectos, pitch bend arriba y abajo. Página 2: KNOB1 devuelve los 128 presets a los de fábrica (KNOB4 confirma, KNOB1 cancela) y KNOB2 guarda estos ajustes.",
+          "## Fila inferior de botones",
+          "- **HOME**: vuelve a la pantalla de inicio y su osciloscopio. En el FM-1 real, una pulsación larga enciende y apaga el Bluetooth.",
+          "- **SAVE**: mantenlo para guardar el preset con sus efectos, los patrones del secuenciador y los ajustes. La pantalla dice Preset Saved. Aquí se guarda en este dispositivo.",
+          "- **ARP**: el arpegiador. Mantén unas teclas y las toca siguiendo un patrón. Página 1: modo (Up, Down, Inclusive, Exclusive, Random, Order, Repeat), octavas (1 a 4), velocidad y tempo (30 a 300). Página 2: gate, swing y latch, que lo deja sonando al soltar. ARP otra vez lo apaga. No puede estar encendido a la vez que SEQ.",
+          "- **SEQ**: un secuenciador de 16 pasos con 16 patrones. Las teclas muestran los pasos: encendido tiene notas, parpadeando es el que suena. Página 1: patrón, borrar, velocidad, tempo. Página 2: gate y swing. SEQ otra vez lo apaga.",
+          "- **REC**: con SEQ encendido, empieza a grabar: cada nota que tocas entra en el paso siguiente. REC otra vez termina la grabación y sigue sonando.",
+          "- **PLAY**: con SEQ encendido, arranca y para la secuencia.",
+          "## Las teclas",
+          "- 27 teclas, de F3 a G5 antes de cambiar de octava. Los nombres bajo las teclas de arriba solo cuentan en EDIT.",
+          "## MIDI en el FM-1 real",
+          "- Recibe notas con velocidad, pitch bend, cambios de control y bancos de voces DX7 por SysEx (32 voces, guardadas en el banco A, B, C o D). Envía las notas de sus teclas, del arpegiador y del secuenciador. En esta app tu controlador llega a su MIDI IN.",
+        ],
+      };
       const HELP = {
         en: [
           "## What this is",
@@ -1159,7 +1235,7 @@
           "- **OPTIONS**: MIDI and installing the app.",
           "## MIDI",
           "- **CONNECT MIDI** finds your keyboards and controllers. Their keys play the FM-1 through its MIDI IN.",
-          "- On known controllers (Akai MPK mini, Launchkey) the knobs and pads start on the FM-1's controls: knobs 1 to 4 are KNOB1 to 4, knobs 5 to 8 are MASTER, SELECT, PRESETS and ALGORITHM. Pads 1 to 4 are HOME, SAVE, PLAY and REC, pads 5 to 8 are FX, SCL, ENV and LFO.",
+          "- On known controllers (Akai MPK mini, Launchkey) the knobs and pads start on the FM-1's controls: knobs 1 to 4 are KNOB1 to 4, knobs 5 to 8 are MASTER, SELECT, PRESETS and ALGORITHM. Pads 1 to 4 are HOME, SAVE, PLAY and REC, pads 5 to 8 are FX, SEL, ENV and LFO.",
           "- **DEVICE** shows a drawing of your controller. Tap a control on it, choose what it does, and press LEARN to bind the real one.",
           "- A controller's knob has ends and the FM-1's knobs have none: turn it back and forth to keep going.",
           "## Installing",
@@ -1184,7 +1260,7 @@
           "- **OPTIONS**: MIDI e instalar la app.",
           "## MIDI",
           "- **CONNECT MIDI** busca tus teclados y controladores. Sus teclas tocan el FM-1 por su MIDI IN.",
-          "- En los controladores conocidos (Akai MPK mini, Launchkey) los potes y los pads empiezan en los controles del FM-1: los potes 1 a 4 son KNOB1 a 4, los potes 5 a 8 son MASTER, SELECT, PRESETS y ALGORITHM. Los pads 1 a 4 son HOME, SAVE, PLAY y REC, los pads 5 a 8 son FX, SCL, ENV y LFO.",
+          "- En los controladores conocidos (Akai MPK mini, Launchkey) los potes y los pads empiezan en los controles del FM-1: los potes 1 a 4 son KNOB1 a 4, los potes 5 a 8 son MASTER, SELECT, PRESETS y ALGORITHM. Los pads 1 a 4 son HOME, SAVE, PLAY y REC, los pads 5 a 8 son FX, SEL, ENV y LFO.",
           "- **DEVICE** muestra un dibujo de tu controlador. Toca un control, elige qué hace y pulsa LEARN para enlazar el real.",
           "- El pote de un controlador tiene topes y los del FM-1 no: gíralo adelante y atrás para seguir.",
           "## Instalar",
@@ -1199,24 +1275,30 @@
         text.split("**").forEach((part, i) => into.append(i % 2 ? el("b", "", part) : part));
         return into;
       }
-      function sheet(title, nodes, langs) {
+      function sheet(title, nodes) {
         $("#shTitle").textContent = title;
-        for (const b of $$("#sheet [data-lg]")) ((b.hidden = !langs), b.classList.toggle("on", b.dataset.lg === lang));
         $("#shBody").replaceChildren(...nodes);
         $("#shBody").scrollTop = 0;
         $("#sheet").hidden = false;
       }
+      let manPart = "app";
       function manual() {
         const out = [];
         let ul = null;
-        for (const l of HELP[lang]) {
+        for (const l of (manPart === "app" ? HELP : HELP_FM)[lang]) {
           if (l.startsWith("- ")) (ul || out.push((ul = el("ul"))), ul.append(rich(l.slice(2), el("li"))));
           else ((ul = null), out.push(l.startsWith("## ") ? el("h3", "", l.slice(3)) : rich(l, el("p"))));
         }
-        sheet(lang === "es" ? "FM1.Pocket · Manual" : "FM1.Pocket · Manual", out, true);
+        $("#manBody").replaceChildren(...out);
+        $("#manBody").scrollTop = 0;
+        $("#manApp").classList.toggle("on", manPart === "app");
+        $("#manFm").classList.toggle("on", manPart === "fm");
+        label($("#manLang"), "LANGUAGE · IDIOMA", lang === "es" ? "ESPAÑOL" : "ENGLISH");
       }
-      $("#manual").onclick = manual;
-      for (const b of $$("#sheet [data-lg]")) b.onclick = () => (store("fm1.lang", (lang = b.dataset.lg)), manual());
+      $("#manApp").onclick = () => ((manPart = "app"), manual());
+      $("#manFm").onclick = () => ((manPart = "fm"), manual());
+      $("#manLang").onclick = () => (store("fm1.lang", (lang = lang === "es" ? "en" : "es")), manual(), toast(lang === "es" ? "Manual en español" : "Manual in English"));
+      manual();
       $("#licence").onclick = () =>
         sheet("Licences", [
           el("h3", "", "fm1-emu, the emulator inside"),
