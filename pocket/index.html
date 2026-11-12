@@ -317,6 +317,7 @@
             <div class="grid">
               <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
               <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
+              <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>DX7 · .SYX</i>LOAD BANK</button>
               <button id="wipe" title="Forget what the running firmware saved and start it fresh. Asks first."><i>ITS SAVES</i>ERASE</button>
               <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR</button>
             </div>
@@ -385,6 +386,7 @@
           </div>
         </section>
         <input type="file" id="file" accept=".fwsc" hidden />
+        <input type="file" id="bankFile" accept=".syx" hidden />
       </div>
     </div>
     <div id="sheet" hidden>
@@ -423,7 +425,7 @@ SOFTWARE.
         <p id="sureText"></p>
         <input type="range" id="sureSlide" min="0" max="100" value="0" title="Slide all the way to the right to confirm" aria-label="Slide all the way to the right to confirm" />
         <p class="hint">SLIDE TO THE END TO CONFIRM →</p>
-        <button id="sureNo" title="Cancel: nothing is deleted">CANCEL</button>
+        <button id="sureNo" title="Cancel: nothing happens">CANCEL</button>
       </div>
     </div>
     <div id="toast"></div>
@@ -1092,7 +1094,10 @@ registerProcessor("fm1", Fm1);
       }
       const WASM = b64($("#wasm").textContent);
       $("#wasm").textContent = ""; // 4 MB of text the page no longer needs
-      const MHZ = 100; // the clock the emulated CPU runs at
+      let mhz = 100; // the clock the emulated CPU runs at. Lowered when this device cannot keep up (keepUp)
+      // shortcut: the lower clock lasts until the page is closed, keep it (with a way back to 100) if slow phones ask every time
+      const CLOCKS = [60, 80, 100];
+      let bank = null; // a DX7 bank (.syx) for the next start: M-VAVE's own firmware takes its 32 voices, once
       const MAX_PACKAGE = 32 * 1024 * 1024,
         SECTOR = 4096;
       const CATALOG_URL = "https://joakimeriksson.github.io/fm1-emu/firmwares.json",
@@ -1371,7 +1376,8 @@ registerProcessor("fm1", Fm1);
             o += 4 + SECTOR;
           }
           status("booting " + f.name + "…");
-          node.port.postMessage({ type: "boot", seq: mine, wasm: WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, mhz: MHZ });
+          node.port.postMessage({ type: "boot", seq: mine, wasm: WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
+          bank = null;
         } catch (e) {
           if (mine !== seq) return;
           status(f.name + ": " + e.message);
@@ -1391,12 +1397,42 @@ registerProcessor("fm1", Fm1);
         run.saved = saved;
         kvPut("save:" + run.hash, [...saved]).catch(() => toast("No room on this device to keep what the firmware saved", 3000));
       }
+      // can this device keep up? (as fm1-emu's own page judges it) Each frame says how long the audio thread worked for how much
+      // sound. Over 95% three seconds in a row: the sound breaks up, so offer a lower clock where one helps. The time a firmware
+      // idles is skipped, so it costs the same at any clock: about a quarter of the cost is fixed, the rest follows the cycles it runs
+      const perf = { busy: 0, span: 0, emu: 0, idle: 0, t: 0, secs: 0, bad: 0, asked: false };
+      function lowerClock(load, idleShare, from) {
+        const work = from * (1 - idleShare),
+          at = (c) => load * (0.25 + (0.75 * Math.min(work, c)) / Math.max(work, 1)),
+          lower = CLOCKS.filter((c) => c < from && at(c) <= 0.8),
+          c = lower.length ? lower[lower.length - 1] : CLOCKS.find((c) => c < from);
+        return c && at(c) < 0.85 * load ? c : null; // only where it clearly helps
+      }
+      function keepUp(m) {
+        perf.busy += m.busy || 0;
+        perf.span += ((m.quanta || 0) * (m.frames || 0)) / 44.1; // ms of sound
+        perf.emu += m.emulated || 0;
+        perf.idle += m.idle || 0;
+        if (performance.now() - perf.t < 1000) return;
+        const load = perf.span ? perf.busy / perf.span : 0,
+          idle = perf.emu ? Math.min(1, perf.idle / perf.emu) : 0;
+        Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now() });
+        if (++perf.secs <= 3 || m.halted) return; // the first seconds: booting, compiling
+        perf.bad = load > 0.95 ? perf.bad + 1 : 0;
+        if (perf.bad < 3 || perf.asked || !run || !$("#sure").hidden) return;
+        perf.asked = true;
+        const c = lowerClock(load, idle, mhz),
+          name = run.f.name;
+        if (!c) return toast("This device cannot run " + name + " in real time: the sound breaks up", 5000);
+        sure("This device cannot keep up with " + name + " at " + mhz + " MHz, so the sound breaks up. Slide to restart it at " + c + " MHz. What it has not saved is lost.", () => ((mhz = c), (perf.asked = false), boot(), toast(name + " at " + c + " MHz")));
+      }
       function onWorklet(e) {
         const m = e.data;
         if (m.seq !== seq) return;
-        if (m.type === "frame") showFrame(m);
+        if (m.type === "frame") (showFrame(m), keepUp(m));
         else if (m.type === "booted") {
           run.base = m.base;
+          Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
           send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
           status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
           toast(m.board === 1 ? run.f.name + " is made for the SMK-37, another device: not all its controls are here" : run.f.name + " is on", m.board === 1 ? 5000 : undefined);
@@ -1520,6 +1556,18 @@ registerProcessor("fm1", Fm1);
         else turnOn();
       }
       $("#open").onclick = () => $("#file").click();
+      // a DX7 bank from this device: untrusted, so its shape is checked here (Yamaha's bulk dump of 32 voices: 4104 bytes), the emulator checks the rest
+      const vetBank = (b) => b.length === 4104 && b[0] === 0xf0 && b[1] === 0x43 && b[3] === 9 && b[4] === 0x20 && b[5] === 0 && b[4103] === 0xf7;
+      $("#bank").onclick = () => $("#bankFile").click();
+      $("#bankFile").onchange = async (e) => {
+        const file = e.target.files[0];
+        e.target.value = "";
+        if (!file) return;
+        const b = file.size === 4104 ? new Uint8Array(await file.arrayBuffer()) : [];
+        if (!vetBank(b)) return toast("That is not a DX7 bank of 32 voices (.syx, 4104 bytes)", 4000);
+        bank = b;
+        node ? (boot(), toast("Starting again with " + file.name + ". A firmware with no DX7 voices ignores it", 4000)) : toast(file.name + " loads when the FM-1 is turned on", 3000);
+      };
       $("#file").onchange = async (e) => {
         const file = e.target.files[0];
         e.target.value = "";
@@ -1549,7 +1597,7 @@ registerProcessor("fm1", Fm1);
         sureClose();
         go();
       };
-      $("#sureNo").onclick = () => (sureClose(), toast("Cancelled: nothing was deleted"));
+      $("#sureNo").onclick = () => (sureClose(), toast("Cancelled"));
       $("#wipe").onclick = () => (node && run ? sure("Erase everything " + run.f.name + " has saved (patches, settings, songs) and start it fresh? This cannot be undone.", () => (boot(true), toast("Saves erased: starting fresh"))) : toast("Turn the FM-1 on first: the saves belong to the firmware that runs"));
       $("#forget").onclick = () =>
         sure("Delete every downloaded firmware and your opened file from this device? Their saves stay. They can be downloaded again when online.", async () => {
@@ -1878,7 +1926,8 @@ registerProcessor("fm1", Fm1);
           "- **KEYS / TOP / ALL** goes round three views: the whole FM-1, only the keys, only the knobs, screen and buttons.",
           "- A phone is always played sideways. Held upright, the FM-1 is drawn turned: turn the phone.",
           "## Menu (the FM1. button)",
-          "- **FIRMWARE**: a card for each firmware. **USE** runs it. **DOWNLOAD** keeps it on this device, so it runs with no connection (marked ●). **OPEN FILE** runs your own .fwsc file.",
+          "- **FIRMWARE**: a card for each firmware. **USE** runs it. **DOWNLOAD** keeps it on this device, so it runs with no connection (marked ●). **OPEN FILE** runs your own .fwsc file. **LOAD BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware.",
+          "- If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock.",
           "- **RESTART** starts the firmware again. **ERASE** forgets what the running firmware saved. **CLEAR** deletes the downloaded firmwares. The last two ask you to slide to confirm.",
           "- What a firmware saves (patches, songs, settings) is kept on this device, for each exact version of it.",
           "- **LOOK**: the keys (the FM-1's own or a piano), the skin (the colours the FM-1 is sold in, then ours) and the screen filter (LCD, CRT or clean).",
@@ -1903,7 +1952,8 @@ registerProcessor("fm1", Fm1);
           "- **KEYS / TOP / ALL** recorre tres vistas: el FM-1 entero, solo las teclas, solo los potes, la pantalla y los botones.",
           "- En el móvil siempre se toca en horizontal. En vertical, el FM-1 se dibuja girado: gira el móvil.",
           "## Menú (el botón FM1.)",
-          "- **FIRMWARE**: una tarjeta por firmware. **USE** lo ejecuta. **DOWNLOAD** lo guarda en este dispositivo, para usarlo sin conexión (marcado con ●). **OPEN FILE** ejecuta tu propio archivo .fwsc.",
+          "- **FIRMWARE**: una tarjeta por firmware. **USE** lo ejecuta. **DOWNLOAD** lo guarda en este dispositivo, para usarlo sin conexión (marcado con ●). **OPEN FILE** ejecuta tu propio archivo .fwsc. **LOAD BANK** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE.",
+          "- Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento.",
           "- **RESTART** reinicia el firmware. **ERASE** borra lo que ha guardado el firmware en uso. **CLEAR** borra los firmwares descargados. Los dos últimos piden deslizar para confirmar.",
           "- Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, para cada versión exacta.",
           "- **LOOK**: las teclas (las del FM-1 o un piano), el aspecto (los colores en que se vende el FM-1 y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpio).",
