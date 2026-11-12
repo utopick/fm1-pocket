@@ -3,9 +3,19 @@
 An M-VAVE FM-1 for the phone: a simpler front for [fm1-emu](https://github.com/joakimeriksson/fm1-emu) by
 **Joakim Eriksson** (MIT), made to be installed as an app and played offline.
 
+**Open it: https://utopick.github.io/fm1-pocket/pocket/**
+
+| | |
+|---|---|
+| ![The whole FM-1, running GR!MM](docs/whole.png) | ![The upper part, in the white and blue skin](docs/upper.png) |
+| ![Only the keys, as a piano](docs/keys.png) | ![The LOOK tab: a card for each skin](docs/look.png) |
+
+The firmware on the screen in these pictures is GR!MM, by its own author.
+
 This repository is a fork of fm1-emu. Everything outside this `pocket/` folder is Joakim's project, untouched.
 The emulated FM-1 inside the page (CPU, flash, screen, keys, knobs, audio) is his core and his audio worklet,
-unchanged. What this folder adds is one page around them.
+unchanged. What this folder adds is one page around them: a phone-first front, a mapper for MIDI controllers and
+installation as an app.
 
 ## What it does
 
@@ -16,12 +26,16 @@ unchanged. What this folder adds is one page around them.
   real one), then four of ours. **Screen filter**: LCD, CRT or clean.
 - **Firmwares** from fm1-emu's list (the page reads `firmwares.json` from Joakim's site when online, so new
   ones appear by themselves). Each package is downloaded once from its author and kept on the device, marked ●,
-  and then runs with no connection. OPEN FILE takes your own `.fwsc`.
+  and then runs with no connection. OPEN FILE takes your own `.fwsc`. LOAD BANK puts a DX7 bank of 32 voices
+  (`.syx`) into the running firmware.
 - **Saves.** What a firmware writes to its flash is kept per exact firmware version.
+- **Slow devices.** When the device cannot keep up and the sound breaks up, the app offers to restart the firmware
+  at a lower clock (80 or 60 MHz).
 - **MIDI**: keys play the FM-1 through its MIDI IN. Knobs and pads work the FM-1's own knobs and buttons, with a
   starting assignment for known controllers (Akai MPK mini, Launchkey) and a drawing of the controller to assign
   and learn each control (the Pocket apps' device panel).
-- A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch. Installable (PWA).
+- A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch.
+- **Installable (PWA)**: its own window, full screen, and it works offline. The menu wears the chosen skin.
 
 ## Build and test
 

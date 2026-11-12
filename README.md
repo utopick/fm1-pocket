@@ -1,6 +1,12 @@
 > **This is a fork.** The project is [joakimeriksson/fm1-emu](https://github.com/joakimeriksson/fm1-emu) by Joakim Eriksson.
-> The fork adds one thing, [`pocket/`](pocket/README.md): FM1.Pocket, a phone-first page (installable, offline) around his emulator.
-> Everything else below is his README, unchanged.
+> The fork adds one folder, [`pocket/`](pocket/README.md): **FM1.Pocket**, his emulator with a phone-first front
+> (sideways, full screen, the FM-1's colours as skins), a mapper for MIDI controllers with a drawing of each one,
+> and installation as an app that works offline.
+> **Open it: https://utopick.github.io/fm1-pocket/pocket/**
+>
+> [![FM1.Pocket running GR!MM](pocket/docs/whole.png)](https://utopick.github.io/fm1-pocket/pocket/)
+>
+> The emulator core is used unchanged. Everything else below is his README, unchanged.
 
 # FM-1 emulator
 
