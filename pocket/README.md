@@ -12,7 +12,8 @@ unchanged. What this folder adds is one page around them.
 - **Sideways on a phone, always.** **Complete**: the whole FM-1 full screen. **Switchable**: the upper part or
   the keys, full screen each, with one button to switch. A phone held upright shows the same view turned.
   A narrow window on a computer gets an upright layout (screen, knobs, buttons, keys in two rows).
-- **Keys** as the FM-1's own or as a piano. **Skins**: five FM-1 colours, then four of ours.
+- **Keys** as the FM-1's own or as a piano. **Skins**: five FM-1 colours (black follows a photo of the real one),
+  then four of ours. **Screen filter**: LCD, CRT or clean.
 - **Firmwares** from fm1-emu's list (the page reads `firmwares.json` from Joakim's site when online, so new
   ones appear by themselves). Each package is downloaded once from its author and kept on the device, marked ●,
   and then runs with no connection. OPEN FILE takes your own `.fwsc`.
@@ -36,5 +37,6 @@ README says and copy the three files.
 - The page in this folder: MIT, by utopick.
 - Each firmware belongs to its author and keeps its own licence. None is in this repository. They come from
   [the FM-1 Firmware Hub](https://thefirmwarehub.com/).
-- The skin colours named after the FM-1 are approximations by eye. Only grey follows fm1-emu's drawing.
+- The skin colours named after the FM-1 are approximations by eye. Black follows a product photo, grey follows
+  fm1-emu's drawing.
 - Not affiliated with M-VAVE.
