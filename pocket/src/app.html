@@ -16,7 +16,8 @@
               install, boot
 
   Views (what the user asked for)
-    vertical     the phone upright: screen on top, knobs, buttons, keys in two rows
+    vertical     a narrow window on a computer: screen on top, knobs, buttons, keys in two rows (a phone is always sideways:
+                 held upright, the page is drawn turned)
     complete     sideways, the whole FM-1 as it is
     switchable   sideways, either the upper part or the keys, full screen (the flip button changes it)
 
@@ -116,7 +117,12 @@
       [data-keys="piano"] .k.b { top: 0; height: 60%; border-radius: 0 0 5px 5px; background: color-mix(in srgb, var(--bk), var(--lit) calc(var(--led) * 70%)); box-shadow: 0 3px 0 #0008; z-index: 1; }
       [data-keys="piano"] .k.down { --led: 1; }
       /* ---- the views */
-      @media (orientation: landscape) {
+      /* a phone is always played sideways: held upright, the page is drawn turned, so the phone is turned to read it.
+         The upright layout is left for a narrow window on a computer. */
+      @media (orientation: portrait) and (pointer: coarse) {
+        body { position: fixed; top: 0; left: 100vw; width: 100dvh; height: 100dvw; transform-origin: 0 0; transform: rotate(90deg); padding: env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left) env(safe-area-inset-top); }
+      }
+      @media (orientation: landscape), (pointer: coarse) {
         body { flex-direction: row-reverse; }
         #rail { flex-direction: column; padding: 6px 6px 6px 0; }
         #rail .grow { display: none; }
@@ -124,7 +130,7 @@
         [data-view="switchable"][data-part="keys"] #up, [data-view="switchable"][data-part="up"] #kb { display: none; }
         [data-view="complete"] #flip { display: none; }
       }
-      @media (orientation: portrait) {
+      @media (orientation: portrait) and (pointer: fine) {
         body { flex-direction: column; }
         #flip { display: none; }
         #up { --u: min(calc(100cqw / 580), calc(100cqh / 1180)); flex-direction: column; gap: calc(14 * var(--u)); }
@@ -423,6 +429,7 @@
       const press = (id) => holds[id]++ === 0 && setKey(id, true);
       const unpress = (id) => holds[id] && --holds[id] === 0 && setKey(id, false);
       const pointers = new Map(); // pointerId -> { kn, held, lastY, acc }
+      const upY = (e) => (matchMedia("(orientation: portrait) and (pointer: coarse)").matches ? -e.clientX : e.clientY); // on a turned page, up is the phone's right
       const idAt = (e) => {
         const t = document.elementFromPoint(e.clientX, e.clientY),
           k = t && t.closest("#fm [data-k]");
@@ -430,7 +437,7 @@
       };
       $("#fm").addEventListener("pointerdown", (e) => {
         const kn = e.target.closest(".kn"),
-          p = { kn: kn ? +kn.dataset.kn : -1, held: kn ? -1 : idAt(e), lastY: e.clientY, acc: 0 };
+          p = { kn: kn ? +kn.dataset.kn : -1, held: kn ? -1 : idAt(e), lastY: upY(e), acc: 0 };
         if (p.kn < 0 && p.held < 0) return;
         e.preventDefault();
         pointers.set(e.pointerId, p);
@@ -444,13 +451,13 @@
         if (p.held >= 14) {
           const h = idAt(e); // slide over the note keys
           if (h >= 14 && h !== p.held) (unpress(p.held), press((p.held = h)));
-        } else if (p.kn === 7) setPot(pot + (p.lastY - e.clientY) * 6);
+        } else if (p.kn === 7) setPot(pot + (p.lastY - upY(e)) * 6);
         else if (p.kn >= 0) {
-          p.acc += p.lastY - e.clientY;
+          p.acc += p.lastY - upY(e);
           for (; p.acc >= 9; p.acc -= 9) turn(p.kn, 1);
           for (; p.acc <= -9; p.acc += 9) turn(p.kn, -1);
         }
-        p.lastY = e.clientY;
+        p.lastY = upY(e);
       });
       const release = (e) => {
         const p = pointers.get(e.pointerId);
@@ -564,7 +571,7 @@
         else if (m.type === "error") (status(m.message), toast(m.message, 4000));
       }
       async function powerOn() {
-        if (matchMedia("(pointer: coarse)").matches) document.documentElement.requestFullscreen?.().catch(() => {}); // a phone in a browser: the whole screen (the installed app already has it)
+        if (matchMedia("(pointer: coarse)").matches) document.documentElement.requestFullscreen?.().then(() => screen.orientation.lock?.("landscape")).catch(() => {}); // a phone in a browser: the whole screen, sideways where the browser allows (the installed app already has it)
         ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
         const url = URL.createObjectURL(new Blob([$("#worklet").textContent], { type: "text/javascript" }));
         try {
@@ -686,7 +693,8 @@
       // ======================================================================
       const SKINS = [["grey", "FM-1 GREY"], ["black", "FM-1 BLACK"], ["white", "FM-1 WHITE"], ["orange", "FM-1 ORANGE"], ["purple", "FM-1 PURPLE"], ["pocket", "POCKET"], ["term", "TERMINAL"], ["dmg", "DMG"], ["dungeon", "DUNGEON SYNTH"]];
       const pick = (k, list, d) => (list.includes(stored(k)) ? stored(k) : d);
-      const tall = matchMedia("(orientation: portrait)");
+      const tall = matchMedia("(orientation: portrait) and (pointer: fine)"), // the upright layout (a computer's narrow window)
+        turned = matchMedia("(orientation: portrait) and (pointer: coarse)"); // a phone held upright: the page is drawn turned
       const label = (b, cap, name) => (b.replaceChildren(el("i", "", cap), name));
       function lookFace() {
         const b = document.body.dataset,
@@ -725,6 +733,7 @@
         toast(b.part === "keys" ? "The keys" : "Knobs, screen and buttons");
       };
       tall.addEventListener("change", lookFace);
+      turned.addEventListener("change", lookFace);
       const menuShow = (on) => (($("#menu").hidden = !on), on && listFace());
       $("#menuBtn").onclick = $("#logo").onclick = () => menuShow(true);
       $("#menuClose").onclick = () => menuShow(false);
