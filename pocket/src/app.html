@@ -759,6 +759,7 @@
         if (m.type === "frame") showFrame(m);
         else if (m.type === "booted") {
           run.base = m.base;
+          send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
           status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
           toast(run.f.name + " is on");
           const r = run; // a picture of its screen for its card, once it has drawn it
