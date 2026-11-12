@@ -1399,7 +1399,7 @@ registerProcessor("fm1", Fm1);
           run.base = m.base;
           send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
           status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
-          toast(run.f.name + " is on");
+          toast(m.board === 1 ? run.f.name + " is made for the SMK-37, another device: not all its controls are here" : run.f.name + " is on", m.board === 1 ? 5000 : undefined);
           const r = run; // a picture of its screen for its card, once it has drawn it
           setTimeout(() => run === r && kvPut("shot:" + r.f.id, $("#lcd").toDataURL("image/png")).catch(() => {}), 8000);
         } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
@@ -1446,7 +1446,10 @@ registerProcessor("fm1", Fm1);
       $("#power").onclick = () => (node ? powerOff() : turnOn());
       $("#reboot").onclick = () => (node ? (boot(), toast("Restarting " + (current() || {}).name)) : toast("The FM-1 is off: tap ON"));
       // the sound stops while the page is hidden, and the machine with it
-      document.addEventListener("visibilitychange", () => ac && (document.hidden ? ac.suspend() : ac.resume()));
+      // hidden: ask for what the firmware has just saved (the worklet tells by itself only once a second), then stop the sound
+      const flush = () => send({ type: "snapshot", seq, request: 0 });
+      document.addEventListener("visibilitychange", () => ac && (document.hidden ? (flush(), setTimeout(() => document.hidden && ac && ac.suspend(), 400)) : ac.resume()));
+      addEventListener("pagehide", flush);
 
       // ======================================================================
       // the firmware list and files
