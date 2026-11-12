@@ -58,9 +58,12 @@ try:
     js("document.querySelector('#view').click()"); parts(1, 0, "switchable, upper part"); size(844, 390, "switch-top")
     js("document.querySelector('#flip').click()"); parts(0, 1, "switchable, keys")
     js("document.querySelector('#keys').click()"); assert js("return document.body.dataset.keys") == "piano"; parts(0, 1, "piano keys"); size(844, 390, "switch-piano")
+    fx = []
+    for _ in range(3): js("document.querySelector('#fx').click()"); fx.append(js("return document.body.dataset.fx + getComputedStyle(document.querySelector('#lcd')).filter"))
+    assert len(set(fx)) == 3 and fx[-1].startswith("lcd"), "the screen filters do not cycle: %s" % fx
     skins = []
     for _ in range(9): js("document.querySelector('#skin').click()"); skins.append(js("return document.documentElement.dataset.skin + getComputedStyle(document.body).backgroundColor"))
-    assert len(set(skins)) == 9 and skins[-1].startswith("grey"), "the skins do not cycle: %s" % skins
+    assert len(set(skins)) == 9 and skins[-1].startswith("black"), "the skins do not cycle: %s" % skins
 
     # a firmware from a file: it boots, shows its screen, and sounds from the keys and from MIDI IN
     d.find_element(By.ID, "file").send_keys(fwsc); time.sleep(0.5)
