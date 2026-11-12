@@ -26,8 +26,9 @@
     IndexedDB     "fm1-pocket" / kv:  pkg:<id>   { name, version, bytes }  a downloaded or opened package: it runs offline
                                       save:<hash of the package>  [[offset, 4096 bytes], ...]  the flash sectors a firmware changed
                                       catalog   the firmware list as last fetched from fm1-emu's page
-  Network: the firmware list (fm1-emu's firmwares.json) and a firmware's package from its author, only when online and
-  only for what is not kept yet. Everything read back or fetched is checked before use.
+                                      shot:<id>  a picture (PNG data URL) of that firmware's screen, taken when it ran here
+  Network: the firmware list (fm1-emu's firmwares.json), a firmware's package from its author and the Firmware Hub's
+  picture of each firmware for its card, only when online. Everything read back or fetched is checked before use.
 -->
 <html lang="en">
   <head>
@@ -72,17 +73,18 @@
       [data-skin="dmg"] { --body1: #c8ccb0; --body2: #adb294; --tray: #8b956d; --silk: #34366e; --btn1: #9b2257; --btn2: #7d1b46; --ink: #f1e9d2; --key1: #5b6a3a; --key2: #46532b; --keyline: #c4cfa1; --cap: #2c2d30; --lit: #f1e9d2; --go: #c4cfa1; --wk: #e4e8cf; --bk: #34366e; }
       [data-skin="dungeon"] { --body1: #2b2330; --body2: #1c1720; --tray: #100d13; --silk: #b9a37a; --btn1: #3a2c2c; --btn2: #291f1f; --ink: #d8c59a; --key1: #4a2a2a; --key2: #331c1c; --keyline: #b9a37a; --cap: #120e14; --lit: #e0553d; --go: #8fbf6a; --wk: #d8c59a; --bk: #1c1720; }
 
-      :root { --rim: color-mix(in srgb, var(--silk) 26%, transparent); }
+      :root, [data-skin] { --rim: color-mix(in srgb, var(--silk) 26%, transparent); }
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
       /* the phone is the device: its body fills the screen edge to edge, the rail's buttons sit on it */
       html { background: var(--body2); }
       html, body { margin: 0; height: 100%; background: linear-gradient(var(--body1), var(--body2)) var(--body2); color: var(--silk); font: 13px/1.25 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overscroll-behavior: none; overflow: hidden; }
       body { position: relative; display: flex; flex-direction: column; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); user-select: none; -webkit-user-select: none; touch-action: none; }
       button, select { font: 800 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.5px; }
-      /* ---- the rail: a row of buttons on the device, above KNOB1 to 4. Where the upper part is not beside it (only the keys
-         showing, or the upright layout) it is a row at the top */
+      /* ---- the rail: the app's own buttons (menu, power, view), a column at the left edge of the upper part. Where there is no
+         upper part beside the keys (only the keys showing, or the upright layout) it is a row at the top */
       #rail { display: flex; gap: 6px; align-items: stretch; flex: none; }
-      #R #rail .grow { display: none; }
+      #up > #rail { flex-direction: column; justify-content: center; margin-right: 4px; }
+      #up > #rail .grow { display: none; }
       #rail button { min-width: 44px; min-height: 40px; padding: 4px; border-radius: 10px; border: 0; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: 0 3px 0 #0009; color: var(--ink); cursor: pointer; }
       #rail #power.on { background: #ff5e7a; color: #fff; }
       #rail #logo { font: 900 15px system-ui; letter-spacing: 0.5px; }
@@ -95,18 +97,18 @@
       #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px; container-type: size; }
       /* the shell: matt, lit from above, with a bevel at its edge */
       body::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 80% at 35% 0%, #ffffff12, transparent 60%); box-shadow: inset 0 0 0 1px #ffffff1c, inset 0 -10px 18px #0005, inset 0 6px 10px #ffffff0a; }
-      #up { --u: min(calc(100cqw / 1300), calc(100cqh / 760)); flex: none; display: flex; align-items: center; }
+      #up { --u: min(calc((100cqw - 56px) / 1400), calc(100cqh / 760)); flex: none; display: flex; align-items: center; }
       #kb { flex: 1; min-height: 0; background: var(--tray); border-radius: 22px; padding: 1.2% 1%; display: flex; flex-direction: column; gap: 4%; box-shadow: inset 0 0 0 1px var(--rim), inset 0 3px 8px #000a; }
       #L, #R { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; align-self: stretch; gap: calc(14 * var(--u)); }
       /* the screen: a glossy black window, the display well inside it */
-      #scr { position: relative; width: calc(540 * var(--u)); height: calc(540 * var(--u)); flex: none; background: linear-gradient(150deg, #1d1d20, #060607 45%, #0b0b0c); border-radius: calc(64 * var(--u)); padding: calc(30 * var(--u)); display: flex; box-shadow: inset 0 0 0 1px #ffffff1a, inset 0 2px 3px #ffffff14, 0 2px 5px #000a; }
-      #lcd { width: 100%; height: 100%; image-rendering: pixelated; border-radius: calc(8 * var(--u)); background: #000; }
-      #scr::after { content: ""; position: absolute; inset: calc(30 * var(--u)); border-radius: calc(8 * var(--u)); pointer-events: none; }
+      .scr { --pad: calc(30 * var(--u)); position: relative; width: calc(540 * var(--u)); height: calc(540 * var(--u)); flex: none; background: linear-gradient(150deg, #1d1d20, #060607 45%, #0b0b0c); border-radius: calc(64 * var(--u)); padding: calc(30 * var(--u)); display: flex; box-shadow: inset 0 0 0 1px #ffffff1a, inset 0 2px 3px #ffffff14, 0 2px 5px #000a; }
+      .lcd { width: 100%; height: 100%; image-rendering: pixelated; border-radius: calc(8 * var(--u)); background: #000; }
+      .scr::after { content: ""; position: absolute; inset: var(--pad); border-radius: calc(8 * var(--u)); pointer-events: none; }
       /* screen filters: LCD = the panel's pixel grid, its pale colours and the glass over it. CRT = scan lines, glow and dark corners */
-      [data-fx="lcd"] #lcd { filter: saturate(0.82) contrast(0.94) brightness(1.06); }
-      [data-fx="lcd"] #scr::after { background: linear-gradient(118deg, #ffffff24, transparent 30%), repeating-linear-gradient(0deg, transparent 0 0.55%, #00000030 0.55% 0.8333%), repeating-linear-gradient(90deg, transparent 0 0.55%, #00000030 0.55% 0.8333%); box-shadow: inset 0 0 calc(18 * var(--u)) #000b; }
-      [data-fx="crt"] #lcd { image-rendering: auto; filter: blur(0.5px) saturate(1.45) contrast(1.15) brightness(1.12); }
-      [data-fx="crt"] #scr::after { background: radial-gradient(ellipse at center, transparent 55%, #000c 100%), repeating-linear-gradient(0deg, transparent 0 2px, #00000066 2px 3px), repeating-linear-gradient(90deg, #ff000012 0 1px, #00ff0012 1px 2px, #0000ff12 2px 3px); box-shadow: inset 0 0 calc(30 * var(--u)) #000; }
+      .scr[data-fx="lcd"] .lcd { filter: saturate(0.82) contrast(0.94) brightness(1.06); }
+      .scr[data-fx="lcd"]::after { background: linear-gradient(118deg, #ffffff24, transparent 30%), repeating-linear-gradient(0deg, transparent 0 0.55%, #00000030 0.55% 0.8333%), repeating-linear-gradient(90deg, transparent 0 0.55%, #00000030 0.55% 0.8333%); box-shadow: inset 0 0 calc(18 * var(--u)) #000b; }
+      .scr[data-fx="crt"] .lcd { image-rendering: auto; filter: blur(0.5px) saturate(1.45) contrast(1.15) brightness(1.12); }
+      .scr[data-fx="crt"]::after { background: radial-gradient(ellipse at center, transparent 55%, #000c 100%), repeating-linear-gradient(0deg, transparent 0 2px, #00000066 2px 3px), repeating-linear-gradient(90deg, #ff000012 0 1px, #00ff0012 1px 2px, #0000ff12 2px 3px); box-shadow: inset 0 0 calc(30 * var(--u)) #000; }
       .knobs { display: grid; justify-items: center; }
       #L .knobs { --d: calc(88 * var(--u)); grid-template-columns: repeat(2, auto); gap: calc(40 * var(--u)) calc(52 * var(--u)); }
       #R .knobs { --d: calc(72 * var(--u)); grid-template-columns: repeat(4, auto); gap: calc(20 * var(--u)); }
@@ -118,8 +120,8 @@
       .kn.turn .cap { box-shadow: 0 calc(7 * var(--u)) calc(9 * var(--u)) #000b, 0 0 0 2px var(--lit); }
       .tray { background: var(--tray); border-radius: calc(20 * var(--u)); padding: calc(12 * var(--u)); display: grid; box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 5px #000a; }
       #oct { grid-template-columns: repeat(2, calc(112 * var(--u))); grid-auto-rows: calc(44 * var(--u)); gap: calc(12 * var(--u)); }
-      #btns { grid-template-columns: repeat(6, calc(50 * var(--u))); grid-auto-rows: calc(64 * var(--u)); gap: calc(12 * var(--u)) calc(8 * var(--u)); }
-      .pb { --led: 0; min-width: 0; padding: 0; border: 0; border-radius: calc(12 * var(--u)); cursor: pointer; font: 800 max(7px, calc(12 * var(--u))) system-ui, sans-serif; letter-spacing: 0; color: color-mix(in srgb, var(--ink), #2a1a03 calc(var(--led) * 100%)); background: linear-gradient(color-mix(in srgb, var(--btn1), var(--tint, var(--lit)) calc(var(--led) * 85%)), color-mix(in srgb, var(--btn2), var(--tint, var(--lit)) calc(var(--led) * 70%))); box-shadow: inset 0 0 0 1px var(--rim), inset 0 1px 0 #ffffff26, 0 calc(3 * var(--u)) calc(4 * var(--u)) #000c; }
+      #btns { grid-template-columns: repeat(6, calc(60 * var(--u))); grid-auto-rows: calc(68 * var(--u)); gap: calc(12 * var(--u)) calc(8 * var(--u)); }
+      .pb { --led: 0; min-width: 0; padding: 0; border: 0; border-radius: calc(12 * var(--u)); cursor: pointer; font: 800 max(7px, calc(13 * var(--u))) system-ui, sans-serif; letter-spacing: 0; color: color-mix(in srgb, var(--ink), #2a1a03 calc(var(--led) * 100%)); background: linear-gradient(color-mix(in srgb, var(--btn1), var(--tint, var(--lit)) calc(var(--led) * 85%)), color-mix(in srgb, var(--btn2), var(--tint, var(--lit)) calc(var(--led) * 70%))); box-shadow: inset 0 0 0 1px var(--rim), inset 0 1px 0 #ffffff26, 0 calc(3 * var(--u)) calc(4 * var(--u)) #000c; }
       .pb.down { transform: translateY(1px) scale(0.97); box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 4px #000a; }
       .pb.go { --tint: var(--go); }
       /* ---- the keys: F3 to G5. One row sideways, two rows upright. FM-1 pills (the upper ones with the stock firmware's names under them), or a piano */
@@ -142,7 +144,7 @@
       }
       @media (orientation: landscape), (pointer: coarse) {
 
-        [data-view="up"] #up { --u: min(calc(100cqw / 1300), calc(100cqh / 540)); flex: 1; }
+        [data-view="up"] #up { --u: min(calc((100cqw - 56px) / 1400), calc(100cqh / 540)); flex: 1; }
         [data-view="keys"] #up, [data-view="up"] #kb { display: none; }
       }
       @media (orientation: portrait) and (pointer: fine) {
@@ -168,10 +170,40 @@
       #menuClose { flex: none; width: 76px !important; }
       #menu section { flex: 1; min-height: 0; overflow: auto; display: none; flex-direction: column; gap: 10px; }
       #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"] { display: flex; }
-      #menu section.two { flex-direction: row; overflow: hidden; }
-      #menu .list { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
-      #menu .list button { text-align: left; flex: none; }
-      #menu .col { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+      /* the firmwares: cards, four to a row at most, in a list that scrolls. The actions stay under it */
+      #menu section[data-tab="fw"] { overflow: hidden; }
+      #menu .cards { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(max(150px, 25% - 8px), 1fr)); gap: 8px; align-content: start; padding-right: 4px; }
+      #menu .fwc { display: grid; grid-template-columns: 64px 1fr; gap: 6px 8px; padding: 8px; border-radius: 12px; border: 1px solid #2a313b; background: #171b22; min-width: 0; }
+      #menu .fwc.on { border-color: #b48cff; box-shadow: inset 0 0 0 1px #b48cff; }
+      #menu .fwc img { width: 64px; height: 64px; border-radius: 8px; background: #06070a; object-fit: cover; image-rendering: pixelated; }
+      #menu .fwc .t { min-width: 0; display: flex; flex-direction: column; font-size: 11px; color: #a3acb9; overflow: hidden; height: 64px; }
+      #menu .fwc .t b { color: #e8ecf1; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+      #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+      #menu .fwc .t small { font-size: 10px; line-height: 1.25; overflow: hidden; }
+      #menu .fwc .act { grid-column: 1 / -1; display: flex; gap: 6px; }
+      #menu .fwc button { min-height: 38px; padding: 4px; }
+      #menu .foot { flex: none; display: flex; flex-direction: column; gap: 6px; }
+      /* LOOK: the chooser of the subject picked at the bottom fills the tab: the two kinds of keys, a card for each skin,
+         the same screen under each filter. Tap one to use it */
+      #menu section.row { flex-direction: row; }
+      #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
+      #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx { display: flex; }
+      #menu [data-sub="skin"] #pvSkin { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); grid-auto-rows: minmax(96px, 1fr); overflow: auto; padding-right: 4px; }
+      #menu .pick { flex: 1; min-width: 0; min-height: 0; height: 100%; display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 8px; }
+      #menu .pick > * { pointer-events: none; }
+      #menu .pick .pv { flex: 1; min-height: 0; border-radius: 10px; }
+      #menu .pick .pv[data-keys] { background: var(--tray); padding: 8px 6px; display: flex; flex-direction: column; }
+      #menu .pick .pv[data-keys] .k.b::before { content: none; }
+      #menu .pick .scr.pv { --u: 0.3px; --pad: 8px; width: auto; height: auto; aspect-ratio: 1; align-self: center; max-width: 100%; padding: 8px; border-radius: 18px; }
+      #menu .mini { background: linear-gradient(var(--body1), var(--body2)); display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 5px; padding: 7px; box-shadow: inset 0 0 0 1px #ffffff1c; }
+      #menu .mini i { display: block; min-height: 0; }
+      #menu .mini .ms { grid-row: 1 / 3; background: #060607; border-radius: 6px; }
+      #menu .mini .mk { border-radius: 50%; aspect-ratio: 1; height: 100%; justify-self: center; background: radial-gradient(circle, var(--keyline) 0 14%, var(--cap) 16%); box-shadow: 0 2px 3px #0008; }
+      #menu .mini .mb { border-radius: 4px; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
+      #menu .mini .my { grid-column: 1 / -1; border-radius: 6px; background: repeating-linear-gradient(90deg, var(--tray) 0 4%, var(--key1) 4% 7.5%, var(--keyline) 7.5% 9%, var(--key1) 9% 12.5%); }
+      #menu .box { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid #2a313b; border-radius: 12px; background: #171b22; overflow: auto; }
+      #menu .box button { margin-top: auto; flex: none; }
+      #menu h3 { margin: 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; }
       #menu .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
       #menu button { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; width: 100%; }
       #menu button i { display: block; font: 700 9px ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 1.5px; color: #8a94a3; }
@@ -181,20 +213,29 @@
       #menu p { margin: 0; font-size: 13px; color: #a3acb9; }
       #menu a { color: inherit; }
       @media (orientation: portrait) and (pointer: fine) {
-        #menu section.two { flex-direction: column; }
+        #menu section.row { flex-direction: column; }
         #menu .tabs button { font-size: 9px; }
       }
-      #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
+      /* a dangerous action asks first: a slider to pull to the end, so a stray tap cannot do it */
+      #sure { position: fixed; inset: 0; z-index: 7; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
+      #sure[hidden] { display: none; }
+      #sure .box { width: min(92%, 460px); background: #171b22; color: #e8ecf1; border: 1px solid #2a313b; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      #sure p { margin: 0; }
+      #sure .hint { font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; text-align: center; }
+      #sureSlide { appearance: none; -webkit-appearance: none; width: 100%; height: 52px; margin: 0; border-radius: 26px; background: linear-gradient(90deg, #3a1420, #ff5e7a); cursor: pointer; }
+      #sureSlide::-webkit-slider-thumb { -webkit-appearance: none; width: 72px; height: 52px; border-radius: 26px; background: #e8ecf1; border: 0; box-shadow: 0 2px 6px #000a; }
+      #sureSlide::-moz-range-thumb { width: 72px; height: 52px; border-radius: 26px; background: #e8ecf1; border: 0; }
+      #sureNo { min-height: 44px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; }
+      #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
       #toast.show { opacity: 1; }
     </style>
   </head>
-  <body data-view="complete" data-keys="fm">
+  <body data-view="complete">
     <div id="rail">
-      <button id="logo" title="FM1.Pocket: open the menu">FM1<b>.</b></button>
+      <button id="logo" title="Menu: firmware, look, options, about" aria-label="Menu">FM1<b>.</b></button>
       <button id="power" title="Turn the FM-1 on with the chosen firmware, or off">ON</button>
       <div class="grow"><span id="status" role="status"></span></div>
       <button id="flip" title="Next view: the whole FM-1, only the keys, or only the upper part (knobs, screen, buttons), full screen">KEYS</button>
-      <button id="menuBtn" title="Menu: firmware, view, keys, skin, MIDI, install" aria-label="Menu">≡</button>
     </div>
     <div id="fm" title="The FM-1: press its keys and buttons, drag a knob up or down to turn it">
       <div id="up">
@@ -202,7 +243,7 @@
           <div class="knobs" id="knL"></div>
           <div class="tray" id="oct"></div>
         </div>
-        <div id="scr"><canvas id="lcd" width="240" height="240"></canvas></div>
+        <div id="scr" class="scr"><canvas id="lcd" class="lcd" width="240" height="240"></canvas></div>
         <div id="R">
           <div class="knobs" id="knR"></div>
           <div class="tray" id="btns"></div>
@@ -218,49 +259,77 @@
           <div class="tabs" role="tablist">
             <button data-tab="fw" role="tab" title="Choose the firmware, restart it, open a file, erase saves">FIRMWARE</button>
             <button data-tab="look" role="tab" title="View, keys, skin and screen filter">LOOK</button>
-            <button data-tab="conn" role="tab" title="MIDI and installing the app">CONNECT</button>
+            <button data-tab="conn" role="tab" title="MIDI and installing the app">OPTIONS</button>
             <button data-tab="info" role="tab" title="Credits and the computer keys">ABOUT</button>
           </div>
           <button id="menuClose" title="Close the menu">CLOSE</button>
         </div>
-        <section data-tab="fw" class="two">
-          <div id="fwList" class="list" title="The firmware the FM-1 runs. ● marks the ones kept on this device: they run offline."></div>
-          <div class="col">
-            <p id="about"></p>
+        <section data-tab="fw">
+          <div id="fwList" class="cards"></div>
+          <div class="foot">
             <div class="grid">
               <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
               <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
-              <button id="wipe" title="Forget what this firmware saved and start it fresh. Tap twice."><i>ITS SAVES</i>ERASE</button>
-              <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Tap twice."><i>DOWNLOADS</i>CLEAR</button>
+              <button id="wipe" title="Forget what the running firmware saved and start it fresh. Asks first."><i>ITS SAVES</i>ERASE</button>
+              <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR</button>
             </div>
             <p id="stor"></p>
           </div>
           <select id="fw" hidden title="The firmware the FM-1 runs"></select>
         </section>
-        <section data-tab="look">
+        <section data-tab="look" data-sub="skin">
+          <div id="pvKeys" class="pane row"></div>
+          <div id="pvSkin" class="pane skins"></div>
+          <div id="pvFx" class="pane row"></div>
           <div class="grid">
-            <button id="keys" title="The keys drawn as the FM-1's own, or as a piano"></button>
-            <button id="skin" title="Next skin: the colours the FM-1 is sold in, then ours"></button>
-            <button id="fx" title="Screen filter: LCD (pixel grid and glass), CRT (scan lines and glow) or clean"></button>
+            <button id="keys" data-sub="keys" title="Choose the keys: the FM-1's own, or a piano"></button>
+            <button id="skin" data-sub="skin" title="Choose the skin: the colours the FM-1 is sold in, then ours"></button>
+            <button id="fx" data-sub="fx" title="Choose the screen filter: LCD (pixel grid and glass), CRT (scan lines and glow) or clean"></button>
           </div>
         </section>
-        <section data-tab="conn">
-          <div class="grid">
-            <button id="midi" title="Connect your MIDI keyboards and controllers to the FM-1's MIDI IN"><i>CONTROLLER</i>MIDI</button>
+        <section data-tab="conn" class="row">
+          <div class="box">
+            <h3>MIDI</h3>
+            <p>Every keyboard and controller plugged into this device plays the FM-1 through its MIDI IN: notes, knobs, clock, byte for byte.</p>
+            <p id="midiNames">Not connected yet.</p>
+            <button id="midi" title="Connect your MIDI keyboards and controllers to the FM-1's MIDI IN"><i>CONTROLLER</i>CONNECT MIDI</button>
+          </div>
+          <div class="box">
+            <h3>THE APP</h3>
+            <p id="instHint"></p>
+            <p>Installed, it opens full screen and sideways, and the firmwares marked ● run with no connection. Your saves stay on this device.</p>
             <button id="inst" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
           </div>
-          <p id="instHint"></p>
-          <p>MIDI: every keyboard and controller plugged into this device plays the FM-1 through its MIDI IN.</p>
         </section>
-        <section data-tab="info">
-          <p>
-            A fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by Joakim Eriksson (MIT): the emulated FM-1 inside is his work, unchanged.
-            This page is a simpler front for phones. Each firmware belongs to its author and comes from
-            <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, through fm1-emu's list. Not affiliated with M-VAVE.
-          </p>
-          <p>Computer keys: A W S E D… play, Z X octave, Space PLAY, R REC, 1 to 0 the buttons, arrows and , . the knobs.</p>
+        <section data-tab="info" class="row">
+          <div class="box">
+            <h3>CREDITS</h3>
+            <p>
+              A fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by Joakim Eriksson (MIT): the emulated FM-1 inside is his work, unchanged.
+              This page is a simpler front for phones.
+            </p>
+            <p>
+              Each firmware belongs to its author and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, through fm1-emu's list.
+              The pictures on the firmware cards are the Hub's. Not affiliated with M-VAVE.
+            </p>
+          </div>
+          <div class="box">
+            <h3>COMPUTER KEYS</h3>
+            <p>A W S E D F T G Y H U J K O L P play the notes.</p>
+            <p>Z and X: octave down and up. Space: PLAY. R: REC.</p>
+            <p>1 to 0: the ten buttons, FX to SEQ.</p>
+            <p>Arrows and , . turn SELECT, PRESETS and ALGORITHM.</p>
+          </div>
         </section>
         <input type="file" id="file" accept=".fwsc" hidden />
+      </div>
+    </div>
+    <div id="sure" hidden>
+      <div class="box" role="alertdialog" aria-modal="true" aria-labelledby="sureText">
+        <p id="sureText"></p>
+        <input type="range" id="sureSlide" min="0" max="100" value="0" title="Slide all the way to the right to confirm" aria-label="Slide all the way to the right to confirm" />
+        <p class="hint">SLIDE TO THE END TO CONFIRM →</p>
+        <button id="sureNo" title="Cancel: nothing is deleted">CANCEL</button>
       </div>
     </div>
     <div id="toast"></div>
@@ -312,7 +381,8 @@
       const MHZ = 100; // the clock the emulated CPU runs at
       const MAX_PACKAGE = 32 * 1024 * 1024,
         SECTOR = 4096;
-      const CATALOG_URL = "https://joakimeriksson.github.io/fm1-emu/firmwares.json";
+      const CATALOG_URL = "https://joakimeriksson.github.io/fm1-emu/firmwares.json",
+        HUB_IMG = "https://thefirmwarehub.com/img/w160/"; // the Firmware Hub's picture of each firmware's screen, <id>.webp
 
       // ======================================================================
       // storage: one IndexedDB store of keys and values. Nothing here is trusted when it comes back.
@@ -383,9 +453,8 @@
         });
       }
       // the keys in one row or two (upright): a white key is 1/n of its row; a black key sits over the gap after a white one
-      function buildKeys(rows) {
-        const kb = $("#kb"),
-          per = WHITES.length / rows;
+      function buildKeys(kb, rows, live) {
+        const per = WHITES.length / rows;
         kb.textContent = "";
         const row = Array.from({ length: rows }, () => kb.appendChild(el("div", "krow")));
         const NAMES = ["OP1", "OP2", "OP3", "OP4", "OP5", "OP6", "PIT", "GLO", "MONO", "POLY", ""]; // printed under the FM-1's upper keys
@@ -396,7 +465,7 @@
           k.style.left = left + "%";
           k.style.width = width + "%";
           row[r].append(k);
-          lights[14 + semi] = k;
+          if (live) lights[14 + semi] = k;
         };
         const w = 100 / per;
         WHITES.forEach((semi, i) => key(semi, Math.floor(i / per), (i % per) * w + w * 0.07, w * 0.86, false));
@@ -522,7 +591,7 @@
         ENC_KEYS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1], ",": [2, -1], ".": [2, 1] };
       const keyId = (k) => (PIANO.includes(k) ? 21 + PIANO.indexOf(k) : (KEYB[k] ?? -1));
       addEventListener("keydown", (e) => {
-        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden) return e.key === "Escape" && menuShow(false);
+        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden) return e.key === "Escape" && ($("#sure").hidden ? menuShow(false) : sureClose());
         if (ENC_KEYS[e.key]) return e.preventDefault(), turn(...ENC_KEYS[e.key]);
         const id = keyId(e.key.toLowerCase());
         if (id < 0) return;
@@ -611,6 +680,8 @@
           run.base = m.base;
           status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
           toast(run.f.name + " is on");
+          const r = run; // a picture of its screen for its card, once it has drawn it
+          setTimeout(() => run === r && kvPut("shot:" + r.f.id, $("#lcd").toDataURL("image/png")).catch(() => {}), 8000);
         } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
         else if (m.type === "error") (status(m.message), toast(m.message, 4000));
       }
@@ -651,7 +722,8 @@
         $("#power").classList.toggle("on", !!node);
         $("#power").textContent = node ? "OFF" : "ON";
       }
-      $("#power").onclick = () => (node ? powerOff() : powerOn().catch((e) => (status("no sound: " + e.message), toast("Could not start the sound: " + e.message, 4000))));
+      const turnOn = () => powerOn().catch((e) => (status("no sound: " + e.message), toast("Could not start the sound: " + e.message, 4000)));
+      $("#power").onclick = () => (node ? powerOff() : turnOn());
       $("#reboot").onclick = () => (node ? (boot(), toast("Restarting " + (current() || {}).name)) : toast("The FM-1 is off: tap ON"));
       // the sound stops while the page is hidden, and the machine with it
       document.addEventListener("visibilitychange", () => ac && (document.hidden ? ac.suspend() : ac.resume()));
@@ -668,22 +740,45 @@
         if (local) sel.add(new Option("● " + local.name + " (your file)", "local"));
         for (const f of FIRMWARES) sel.add(new Option((kept.has(f.id) ? "● " : "") + f.name + (f.version ? " " + f.version : ""), f.id));
         sel.value = [...sel.options].some((o) => o.value === was) ? was : FIRMWARES.some((f) => f.id === "grimm") ? "grimm" : sel.options[0]?.value;
-        $("#fwList").replaceChildren(...[...sel.options].map((o) => {
-          const b = el("button", o.value === sel.value ? "on" : "", o.text); // textContent: names from the list are not trusted
-          b.title = "Run " + o.text;
-          b.onclick = () => ((sel.value = o.value), sel.onchange());
-          return b;
-        }));
-        const f = current();
-        $("#about").textContent = !f ? "" : f === local ? "Your file, kept on this device. Nothing is uploaded." : `${f.name} ${f.version} by ${f.author || "?"}${f.license ? " (" + f.license + ")" : ""}. ${f.about}`;
+        // a card for each: the picture of its screen (the Firmware Hub's, or the one kept here when it last ran), DOWNLOAD and USE.
+        // Names and texts come from the list: they only ever go in as text.
+        const card = (f) => {
+          const c = el("div", "fwc" + (f.id === sel.value ? " on" : "")),
+            img = el("img"),
+            t = el("div", "t"),
+            act = el("div", "act"),
+            have = f === local || kept.has(f.id),
+            dl = el("button", "", have ? "KEPT ●" : "DOWNLOAD"),
+            go = el("button", f.id === sel.value ? "on" : "", f.id === sel.value && node ? "IN USE" : "USE");
+          const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? (img.src = d) : img.removeAttribute("src"))));
+          img.alt = "";
+          img.loading = "lazy";
+          img.referrerPolicy = "no-referrer";
+          img.onerror = own;
+          if (f === local || !navigator.onLine) own();
+          else img.src = HUB_IMG + f.id + ".webp";
+          t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "")), el("small", "", f === local ? "Kept on this device. Nothing is uploaded." : f.about));
+          t.title = f.about || f.name;
+          dl.disabled = have;
+          dl.title = have ? "Kept on this device: it runs offline" : "Download " + f.name + " and keep it on this device, to run it offline later";
+          dl.onclick = () => (toast("Downloading " + f.name + "…"), packageOf(f).then(() => toast(f.name + " is kept on this device"), (e) => toast(f.name + ": " + e.message, 4000)));
+          go.title = "Run " + f.name + " on the FM-1";
+          go.onclick = () => use(f.id);
+          act.append(dl, go);
+          c.append(img, t, act);
+          return c;
+        };
+        $("#fwList").replaceChildren(...(local ? [local] : []).concat(FIRMWARES).map(card));
         navigator.storage?.estimate?.().then((s) => ($("#stor").textContent = `${kept.size + (local ? 1 : 0)} firmware(s) kept on this device. Storage: ${mb(s.usage || 0)} used of ${mb(s.quota || 0)}.`), () => {});
       }
-      $("#fw").onchange = () => {
-        store("fm1.fw", (want = $("#fw").value));
+      // USE: choose it, close the menu, and run it (turning the FM-1 on if it is off)
+      function use(id) {
+        store("fm1.fw", (want = id));
         listFace();
+        menuShow(false);
         if (node) boot();
-        else toast(current().name + " chosen: tap ON");
-      };
+        else turnOn();
+      }
       $("#open").onclick = () => $("#file").click();
       $("#file").onchange = async (e) => {
         const file = e.target.files[0];
@@ -699,25 +794,32 @@
         if (node) boot();
         else toast(local.name + " ready: tap ON");
       };
-      // buttons that destroy something ask twice: the second tap within 3 s does it
-      function twice(btn, what, go) {
-        btn.onclick = () => {
-          if (btn._sure) return (btn._sure = false), btn.classList.remove("on"), go();
-          btn._sure = true;
-          btn.classList.add("on");
-          toast("Tap again to " + what);
-          setTimeout(() => ((btn._sure = false), btn.classList.remove("on")), 3000);
-        };
+      // actions that destroy something ask first, with a slider to pull to the end
+      let sureGo = null;
+      function sure(text, go) {
+        $("#sureText").textContent = text;
+        $("#sureSlide").value = 0;
+        sureGo = go;
+        $("#sure").hidden = false;
       }
-      twice($("#wipe"), "erase what this firmware saved", () => (node ? (boot(true), toast("Saves erased: starting fresh")) : toast("Turn the FM-1 on first: the saves belong to the firmware that runs")));
-      twice($("#forget"), "delete the downloaded firmwares", async () => {
-        for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) await kvDel(k);
-        kept.clear();
-        local = null;
-        FIRMWARES.forEach((f) => delete f.bytes);
-        listFace();
-        toast("Downloads deleted. A running firmware keeps running.");
-      });
+      const sureClose = () => (($("#sure").hidden = true), (sureGo = null));
+      $("#sureSlide").onchange = () => {
+        if (+$("#sureSlide").value < 97) return ($("#sureSlide").value = 0), toast("Slide all the way to confirm");
+        const go = sureGo;
+        sureClose();
+        go();
+      };
+      $("#sureNo").onclick = () => (sureClose(), toast("Cancelled: nothing was deleted"));
+      $("#wipe").onclick = () => (node && run ? sure("Erase everything " + run.f.name + " has saved (patches, settings, songs) and start it fresh? This cannot be undone.", () => (boot(true), toast("Saves erased: starting fresh"))) : toast("Turn the FM-1 on first: the saves belong to the firmware that runs"));
+      $("#forget").onclick = () =>
+        sure("Delete every downloaded firmware and your opened file from this device? Their saves stay. They can be downloaded again when online.", async () => {
+          for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) await kvDel(k);
+          kept.clear();
+          local = null;
+          FIRMWARES.forEach((f) => delete f.bytes);
+          listFace();
+          toast("Downloads deleted. A running firmware keeps running.");
+        });
       // fm1-emu's own list, when there is a connection: new firmwares and versions appear without an update of this app
       async function refreshCatalog() {
         const keptList = vetCatalog(await kvGet("catalog"));
@@ -747,38 +849,80 @@
       const tall = matchMedia("(orientation: portrait) and (pointer: fine)"), // the upright layout (a computer's narrow window)
         turned = matchMedia("(orientation: portrait) and (pointer: coarse)"); // a phone held upright: the page is drawn turned
       const label = (b, cap, name) => (b.replaceChildren(el("i", "", cap), name));
+      const kbd = $("#kb").dataset,
+        scr = $("#scr").dataset,
+        root = document.documentElement.dataset;
       function lookFace() {
         const b = document.body.dataset,
-          skin = SKINS.find((s) => s[0] === document.documentElement.dataset.skin) || SKINS[0];
-        label($("#keys"), "KEYS", b.keys === "fm" ? "FM-1" : "PIANO");
+          skin = SKINS.find((s) => s[0] === root.skin) || SKINS[0];
+        label($("#keys"), "KEYS", kbd.keys === "fm" ? "FM-1" : "PIANO");
         label($("#skin"), SKINS.indexOf(skin) < 9 ? "SKIN · FM-1 COLOUR" : "SKIN · OURS", skin[1]);
-        label($("#fx"), "SCREEN FILTER", (FXS.find((f) => f[0] === b.fx) || FXS[0])[1]);
+        label($("#fx"), "SCREEN FILTER", (FXS.find((f) => f[0] === scr.fx) || FXS[0])[1]);
+        for (const [pane, now] of [["#pvKeys", kbd.keys], ["#pvSkin", root.skin], ["#pvFx", scr.fx]]) for (const c of $$(pane + " .pick")) c.classList.toggle("on", c.dataset.v === now);
         $("#flip").textContent = { complete: "KEYS", keys: "TOP", up: "ALL" }[b.view]; // what the next tap shows
-        buildKeys(tall.matches ? 2 : 1);
-        (tall.matches || b.view === "keys" ? $("#fm") : $("#R")).prepend($("#rail"));
+        buildKeys($("#kb"), tall.matches ? 2 : 1, true);
+        (tall.matches || b.view === "keys" ? $("#fm") : $("#up")).prepend($("#rail"));
         for (let i = 14; i < 41; i++) lights[i].classList.toggle("down", !!down[i]);
         ledNow.fill(0, 14);
       }
-      $("#keys").onclick = () => {
-        const b = document.body.dataset;
-        store("fm1.keys", (b.keys = b.keys === "fm" ? "piano" : "fm"));
-        lookFace();
-        toast(b.keys === "fm" ? "The FM-1's own keys" : "Piano keys");
-      };
-      $("#skin").onclick = () => {
-        const d = document.documentElement.dataset,
-          i = (SKINS.findIndex((s) => s[0] === d.skin) + 1) % SKINS.length;
-        store("fm1.skin", (d.skin = SKINS[i][0]));
-        lookFace();
-        toast("Skin: " + SKINS[i][1]);
-      };
-      $("#fx").onclick = () => {
-        const b = document.body.dataset,
-          i = (FXS.findIndex((f) => f[0] === b.fx) + 1) % FXS.length;
-        store("fm1.fx", (b.fx = FXS[i][0]));
-        lookFace();
-        toast("Screen: " + FXS[i][1]);
-      };
+      const setKeys = (v) => (store("fm1.keys", (kbd.keys = v)), lookFace(), toast(v === "fm" ? "The FM-1's own keys" : "Piano keys"));
+      const setSkin = (v) => (store("fm1.skin", (root.skin = v)), lookFace(), toast("Skin: " + SKINS.find((s) => s[0] === v)[1]));
+      const setFx = (v) => (store("fm1.fx", (scr.fx = v)), lookFace(), toast("Screen: " + FXS.find((f) => f[0] === v)[1]));
+      // the choosers of the LOOK tab, built once: each is a big button showing what it gives
+      function buildLook() {
+        const pick = (pane, v, name, pv, go) => {
+          const b = el("button", "pick");
+          b.dataset.v = v;
+          b.title = "Use " + name;
+          b.append(pv, el("span", "", name));
+          b.onclick = () => go(v);
+          $(pane).append(b);
+        };
+        for (const [v, name] of [["fm", "FM-1 KEYS"], ["piano", "PIANO KEYS"]]) {
+          const pv = el("div", "pv");
+          pv.dataset.keys = v;
+          buildKeys(pv, 1, false);
+          pick("#pvKeys", v, name, pv, setKeys);
+        }
+        for (const [v, name] of SKINS) {
+          const pv = el("div", "pv mini");
+          pv.dataset.skin = v; // the skin's colours, on this card only
+          pv.append(...["ms", "mk", "mk", "mk", "mb", "mb", "mb", "my"].map((c) => el("i", c)));
+          pick("#pvSkin", v, name, pv, setSkin);
+        }
+        for (const [v, name] of FXS) {
+          const pv = el("div", "scr pv"),
+            c = el("canvas", "lcd");
+          c.width = c.height = 240;
+          pv.dataset.fx = v;
+          pv.append(c);
+          pick("#pvFx", v, name, pv, setFx);
+        }
+        for (const b of $$('section[data-tab="look"] [data-sub]')) b.onclick = () => lookSub(b.dataset.sub);
+        lookSub("skin");
+      }
+      function lookSub(sub) {
+        $('section[data-tab="look"]').dataset.sub = sub;
+        for (const b of $$('section[data-tab="look"] button[data-sub]')) b.classList.toggle("on", b.dataset.sub === sub);
+        paintFx();
+      }
+      // the filter examples show the FM-1's screen as it is now, or a test card while it is off
+      function paintFx() {
+        for (const c of $$("#pvFx canvas")) {
+          const g = c.getContext("2d");
+          if (node) g.drawImage($("#lcd"), 0, 0);
+          else {
+            ["#fff", "#f2d13a", "#3ad1e0", "#52d168", "#d14fc4", "#e0483a", "#3a57e0"].forEach((col, i) => ((g.fillStyle = col), g.fillRect((i * 240) / 7, 0, 240 / 7 + 1, 150)));
+            g.fillStyle = "#101216";
+            g.fillRect(0, 150, 240, 90);
+            g.fillStyle = "#e8ecf1";
+            g.font = "bold 28px monospace";
+            g.fillText("001 PIANO", 14, 190);
+            g.font = "16px monospace";
+            g.fillText("Type: Low Pass", 14, 220);
+          }
+        }
+      }
       $("#flip").onclick = () => {
         const b = document.body.dataset;
         store("fm1.view", (b.view = { complete: "keys", keys: "up", up: "complete" }[b.view]));
@@ -789,12 +933,13 @@
       turned.addEventListener("change", lookFace);
       function menuTab(t) {
         $("#menu").dataset.tab = t;
+        paintFx();
         for (const b of $$("#menu .tabs button")) b.classList.toggle("on", b.dataset.tab === t);
       }
       for (const b of $$("#menu .tabs button")) b.onclick = () => menuTab(b.dataset.tab);
-      const menuShow = (on) => (($("#menu").hidden = !on), on && (listFace(), $("#fwList .on")?.scrollIntoView({ block: "nearest" })));
+      const menuShow = (on) => (($("#menu").hidden = !on), on && (listFace(), $("#fwList .fwc.on")?.scrollIntoView({ block: "nearest" })));
       menuTab("fw");
-      $("#menuBtn").onclick = $("#logo").onclick = () => menuShow(true);
+      $("#logo").onclick = () => menuShow(true);
       $("#menuClose").onclick = () => menuShow(false);
 
       // ======================================================================
@@ -805,6 +950,7 @@
       function midiFace() {
         const names = midi ? [...midi.inputs.values()].map((i) => i.name || "MIDI input") : [];
         $("#midi").classList.toggle("on", names.length > 0);
+        $("#midiNames").textContent = names.length ? "Connected: " + names.join(", ") : "No MIDI device found: plug one in.";
         if (midi) for (const i of midi.inputs.values()) i.onmidimessage = (e) => midiIn(Array.from(e.data));
         return names;
       }
@@ -857,10 +1003,11 @@
       // boot
       // ======================================================================
       document.body.dataset.view = pick("fm1.view", ["complete", "keys", "up"], "complete");
-      document.body.dataset.keys = pick("fm1.keys", ["fm", "piano"], "fm");
-      document.body.dataset.fx = pick("fm1.fx", ["lcd", "crt", "off"], "lcd");
+      kbd.keys = pick("fm1.keys", ["fm", "piano"], "fm");
+      scr.fx = pick("fm1.fx", ["lcd", "crt", "off"], "lcd");
       if (!SKINS.some((s) => s[0] === document.documentElement.dataset.skin)) document.documentElement.dataset.skin = "black";
       buildPanel();
+      buildLook();
       lookFace();
       setPot(pot);
       knobEl(7).classList.remove("turn");
