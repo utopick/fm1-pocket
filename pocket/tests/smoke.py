@@ -72,7 +72,7 @@ try:
     assert js("return [...document.querySelectorAll('#pvSkin .mini')].map(m => getComputedStyle(m).backgroundImage + getComputedStyle(m.querySelector('.mb')).backgroundImage).filter((x, i, a) => a.indexOf(x) === i).length") == 13, "the skin cards do not show their own colours"
     # the menu: the whole screen, four tabs, nothing wider or taller than the window (only the firmware list scrolls)
     js("document.querySelector('#logo').click()")
-    for t in ("fw", "look", "conn", "info"):
+    for t in ("fw", "look", "conn", "man", "info"):
         js("document.querySelector('#menu .tabs [data-tab=%s]').click()" % t); time.sleep(0.1)
         fit = js("const m = document.querySelector('#menu'), s = m.querySelector('section[data-tab=' + arguments[0] + ']'), r = m.getBoundingClientRect(); return [s.offsetParent !== null, r.width, r.height, s.scrollHeight <= s.clientHeight + 1, [...m.querySelectorAll('section')].filter(x => x.offsetParent).length]", t)
         assert fit == [True, 844, 390, True, 1], "menu tab %s: %s" % (t, fit)
@@ -126,8 +126,10 @@ try:
     js("document.querySelector('#midiDev').click()"); assert js("return document.querySelectorAll('#mdPanel svg [data-control]').length") > 30, "no drawing of the controller"
     js("document.querySelector('#mdPanel [data-do=close]').click()"); assert js("return !document.getElementById('mdPanel')")
     # the manual in two languages, and the licences
-    js("document.querySelector('#manual').click(); document.querySelector('#sheet [data-lg=es]').click()"); assert "Qué es" in q("#shBody") and "<" not in js("return document.querySelector('#shBody b').innerHTML")
-    js("document.querySelector('#sheet [data-lg=en]').click(); document.querySelector('#shClose').click(); document.querySelector('#licence').click()")
+    js("lang = 'en'; document.querySelector('#manFm').click()"); assert "ALGORITHM" in q("#manBody") and "32 algorithms" in q("#manBody")
+    js("document.querySelector('#manLang').click()"); assert "32 algoritmos" in q("#manBody") and "<" not in js("return document.querySelector('#manBody b').innerHTML")
+    js("document.querySelector('#manApp').click()"); assert "Qué es" in q("#manBody")
+    js("document.querySelector('#manLang').click(); document.querySelector('#licence').click()")
     assert "Joakim Eriksson" in q("#shBody") and "Permission is hereby granted" in q("#shBody"); js("document.querySelector('#shClose').click()")
     # what the firmware writes to its flash is kept, and given back to it when it starts again
     js("const f = run.base.slice(); f[8192] ^= 255; keepFlash(f)"); time.sleep(0.5)

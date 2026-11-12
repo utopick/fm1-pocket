@@ -21,7 +21,7 @@ unchanged. What this folder adds is one page around them.
 - **MIDI**: keys play the FM-1 through its MIDI IN. Knobs and pads work the FM-1's own knobs and buttons, with a
   starting assignment for known controllers (Akai MPK mini, Launchkey) and a drawing of the controller to assign
   and learn each control (the Pocket apps' device panel).
-- A manual in English and Spanish, the licences, computer keys, multi-touch. Installable (PWA).
+- A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch. Installable (PWA).
 
 ## Build and test
 
