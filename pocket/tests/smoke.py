@@ -48,15 +48,16 @@ try:
     size(390, 844, "vertical")
     # a phone held upright: the sideways view, drawn turned (one row of keys, the screen still square and inside the window)
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5}); time.sleep(0.4)
-    parts(1, 1, "phone upright"); assert shown("#R #rail button") == 3, "the rail is not above the knobs"; assert js("return document.querySelectorAll('.krow').length") == 1
+    parts(1, 1, "phone upright"); assert shown("#R #rail button") == 4, "the rail is not above the knobs"; assert js("return document.querySelectorAll('.krow').length") == 1
     r = js("const r = document.querySelector('#scr').getBoundingClientRect(); return [r.width, r.height, r.right, r.bottom]")
     assert abs(r[0] - r[1]) < 1 and r[0] > 150 and r[2] <= 390 and r[3] <= 844, r
     size(390, 844, "phone-upright")
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": False}); time.sleep(0.4)
-    # sideways, complete, then switchable: the upper part or the keys
+    # sideways: the one button goes round the whole FM-1, the keys, the upper part
     size(844, 390, "complete"); parts(1, 1, "complete"); assert js("return document.querySelectorAll('.krow').length") == 1
-    js("document.querySelector('#view').click()"); parts(1, 0, "switchable, upper part"); size(844, 390, "switch-top")
-    js("document.querySelector('#flip').click()"); parts(0, 1, "switchable, keys"); assert shown("#fm > #rail button") == 4, "no rail over the keys"
+    flip = lambda: js("document.querySelector('#flip').click()")
+    flip(); flip(); parts(1, 0, "upper part"); size(844, 390, "switch-top")
+    flip(); parts(1, 1, "complete again"); flip(); parts(0, 1, "keys"); assert shown("#fm > #rail button") == 4, "no rail over the keys"
     js("document.querySelector('#keys').click()"); assert js("return document.body.dataset.keys") == "piano"; parts(0, 1, "piano keys"); size(844, 390, "switch-piano")
     fx = []
     for _ in range(3): js("document.querySelector('#fx').click()"); fx.append(js("return document.body.dataset.fx + getComputedStyle(document.querySelector('#lcd')).filter"))
@@ -65,6 +66,16 @@ try:
     for _ in range(13): js("document.querySelector('#skin').click()"); skins.append(js("return document.documentElement.dataset.skin + getComputedStyle(document.body).backgroundColor"))
     assert len(set(skins)) == 13 and skins[-1].startswith("black"), "the skins do not cycle: %s" % skins
 
+    # the menu: the whole screen, four tabs, nothing wider or taller than the window (only the firmware list scrolls)
+    js("document.querySelector('#menuBtn').click()")
+    for t in ("fw", "look", "conn", "info"):
+        js("document.querySelector('#menu .tabs [data-tab=%s]').click()" % t); time.sleep(0.1)
+        fit = js("const m = document.querySelector('#menu'), s = m.querySelector('section[data-tab=' + arguments[0] + ']'), r = m.getBoundingClientRect(); return [s.offsetParent !== null, r.width, r.height, s.scrollHeight <= s.clientHeight + 1, [...m.querySelectorAll('section')].filter(x => x.offsetParent).length]", t)
+        assert fit == [True, 844, 390, True, 1], "menu tab %s: %s" % (t, fit)
+        if os.environ.get("SHOT"): d.save_screenshot(os.path.join(os.environ["SHOT"], "menu-" + t + ".png"))
+    assert js("return document.querySelectorAll('#fwList button').length") > 20
+    js("document.querySelector('#fwList button:nth-child(3)').click()"); assert js("return document.querySelector('#fw').selectedIndex") == 2 and js("return document.querySelectorAll('#fwList .on').length") == 1
+    js("document.querySelector('#menuClose').click()"); assert js("return document.querySelector('#menu').hidden")
     # a firmware from a file: it boots, shows its screen, and sounds from the keys and from MIDI IN
     d.find_element(By.ID, "file").send_keys(fwsc); time.sleep(0.5)
     assert js("return document.querySelector('#fw').value") == "local"
@@ -85,10 +96,10 @@ try:
 
     # after a reload: the look, the file and its save are still there, and it boots with no network
     d.refresh(); time.sleep(1.5)
-    assert js("return [document.body.dataset.view, document.body.dataset.keys, document.querySelector('#fw').value]") == ["switchable", "piano", "local"]
+    assert js("return [document.body.dataset.view, document.body.dataset.keys, document.querySelector('#fw').value]") == ["keys", "piano", "local"]
     d.execute_cdp_cmd("Network.enable", {}); d.execute_cdp_cmd("Network.emulateNetworkConditions", {"offline": True, "latency": 0, "downloadThroughput": -1, "uploadThroughput": -1})
     power_on(); assert "saves loaded" in q("#status"), q("#status")
-    js("document.querySelector('#view').click(); document.querySelector('#keys').click()")
+    js("document.querySelector('#flip').click(); document.querySelector('#keys').click()")
     print("status: %s -> %s | screen colours: %d | peak: %.3f | errors: %s" % (status, q("#status"), lit, loud, js("return __errs")))
     assert js("return __errs") == [], "errors on the page"
     print("OK")

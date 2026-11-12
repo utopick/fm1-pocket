@@ -9,8 +9,8 @@ unchanged. What this folder adds is one page around them.
 
 ## What it does
 
-- **Sideways on a phone, always.** **Complete**: the whole FM-1 full screen. **Switchable**: the upper part or
-  the keys, full screen each, with one button to switch. A phone held upright shows the same view turned.
+- **Sideways on a phone, always.** One button goes round three views: the whole FM-1, only the keys,
+  only the upper part (knobs, screen, buttons), each full screen. A phone held upright shows the same view turned.
   A narrow window on a computer gets an upright layout (screen, knobs, buttons, keys in two rows).
 - **Keys** as the FM-1's own or as a piano. **Skins**: the nine colours the FM-1 is sold in (black follows a photo of the
   real one), then four of ours. **Screen filter**: LCD, CRT or clean.

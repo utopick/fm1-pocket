@@ -19,10 +19,10 @@
     vertical     a narrow window on a computer: screen on top, knobs, buttons, keys in two rows (a phone is always sideways:
                  held upright, the page is drawn turned)
     complete     sideways, the whole FM-1 as it is
-    switchable   sideways, either the upper part or the keys, full screen (the flip button changes it)
+    keys, up     sideways, only the keys or only the upper part, full screen (the KEYS / TOP / ALL button goes round the three)
 
   Storage (namespaced fm1.*)
-    localStorage  fm1.fw (firmware picked), fm1.view (complete | switchable), fm1.keys (fm | piano), fm1.skin, fm1.fx (screen filter)
+    localStorage  fm1.fw (firmware picked), fm1.view (complete | keys | up), fm1.keys (fm | piano), fm1.skin, fm1.fx (screen filter)
     IndexedDB     "fm1-pocket" / kv:  pkg:<id>   { name, version, bytes }  a downloaded or opened package: it runs offline
                                       save:<hash of the package>  [[offset, 4096 bytes], ...]  the flash sectors a firmware changed
                                       catalog   the firmware list as last fetched from fm1-emu's page
@@ -142,9 +142,8 @@
       }
       @media (orientation: landscape), (pointer: coarse) {
 
-        [data-view="switchable"] #up { --u: min(calc(100cqw / 1300), calc(100cqh / 540)); flex: 1; }
-        [data-view="switchable"][data-part="keys"] #up, [data-view="switchable"][data-part="up"] #kb { display: none; }
-        [data-view="complete"] #flip { display: none; }
+        [data-view="up"] #up { --u: min(calc(100cqw / 1300), calc(100cqh / 540)); flex: 1; }
+        [data-view="keys"] #up, [data-view="up"] #kb { display: none; }
       }
       @media (orientation: portrait) and (pointer: fine) {
         #flip { display: none; }
@@ -156,32 +155,45 @@
         #oct { grid-template-columns: calc(112 * var(--u)); }
         .krow { margin: 0 4.5%; }
       }
-      /* ---- the menu */
-      #menu { position: fixed; inset: 0; z-index: 5; background: #000a; display: flex; justify-content: flex-end; touch-action: auto; }
-      #menu[hidden] { display: none; }
-      #menu .card { width: min(100%, 340px); height: 100%; overflow: auto; background: #161a20; color: #e8ecf1; padding: 12px; display: flex; flex-direction: column; gap: 8px; font: 13px/1.35 system-ui, sans-serif; }
-      #menu h2 { margin: 0; font: 900 18px system-ui; }
+      /* ---- the menu: the whole screen, a tab for each subject, each tab laid out across the width so nothing scrolls
+         but the firmware list */
+      #menu { position: fixed; inset: 0; z-index: 5; background: #11141a; color: #e8ecf1; display: flex; touch-action: auto; font: 13px/1.35 system-ui, sans-serif; }
+      #menu[hidden], #menu [hidden] { display: none; }
+      #menu .card { flex: 1; min-width: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+      #menu .bar { display: flex; gap: 8px; align-items: center; flex: none; }
+      #menu h2 { margin: 0 4px; font: 900 18px system-ui; }
       #menu h2 b { color: #b48cff; }
-      #menu h3 { margin: 6px 0 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: #8a94a3; }
-      #menu .row { display: flex; gap: 6px; }
-      #menu .row > * { flex: 1; min-width: 0; }
-      #menu button, #menu select { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; width: 100%; }
+      #menu .tabs { flex: 1; min-width: 0; display: flex; gap: 6px; }
+      #menu .tabs button { flex: 1; min-width: 0; padding: 6px 2px; }
+      #menuClose { flex: none; width: 76px !important; }
+      #menu section { flex: 1; min-height: 0; overflow: auto; display: none; flex-direction: column; gap: 10px; }
+      #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"] { display: flex; }
+      #menu section.two { flex-direction: row; overflow: hidden; }
+      #menu .list { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 6px; padding-right: 4px; }
+      #menu .list button { text-align: left; flex: none; }
+      #menu .col { flex: 1; min-width: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+      #menu .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+      #menu button { min-height: 44px; padding: 6px 8px; border-radius: 10px; border: 1px solid #2a313b; background: #1d222a; color: #e8ecf1; cursor: pointer; width: 100%; }
       #menu button i { display: block; font: 700 9px ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 1.5px; color: #8a94a3; }
       #menu button.on { background: #b48cff; border-color: #b48cff; color: #14091f; }
       #menu button.on i { color: #14091f; }
       #menu button:disabled { opacity: 0.6; }
-      #menu p { margin: 0; font-size: 12px; color: #8a94a3; }
+      #menu p { margin: 0; font-size: 13px; color: #a3acb9; }
       #menu a { color: inherit; }
+      @media (orientation: portrait) and (pointer: fine) {
+        #menu section.two { flex-direction: column; }
+        #menu .tabs button { font-size: 9px; }
+      }
       #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
       #toast.show { opacity: 1; }
     </style>
   </head>
-  <body data-view="complete" data-part="up" data-keys="fm">
+  <body data-view="complete" data-keys="fm">
     <div id="rail">
       <button id="logo" title="FM1.Pocket: open the menu">FM1<b>.</b></button>
       <button id="power" title="Turn the FM-1 on with the chosen firmware, or off">ON</button>
       <div class="grow"><span id="status" role="status"></span></div>
-      <button id="flip" title="Switch between the keys and the upper part of the FM-1 (knobs, screen, buttons)">KEYS</button>
+      <button id="flip" title="Next view: the whole FM-1, only the keys, or only the upper part (knobs, screen, buttons), full screen">KEYS</button>
       <button id="menuBtn" title="Menu: firmware, view, keys, skin, MIDI, install" aria-label="Menu">≡</button>
     </div>
     <div id="fm" title="The FM-1: press its keys and buttons, drag a knob up or down to turn it">
@@ -201,41 +213,53 @@
 
     <div id="menu" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-label="Menu">
-        <div class="row"><h2>FM1<b>.</b>Pocket</h2><button id="menuClose" title="Close the menu" style="flex: 0 0 64px">CLOSE</button></div>
-        <h3>FIRMWARE</h3>
-        <select id="fw" title="The firmware the FM-1 runs. ● marks the ones kept on this device: they run offline."></select>
-        <p id="about"></p>
-        <div class="row">
-          <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
-          <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
+        <div class="bar">
+          <h2>FM1<b>.</b></h2>
+          <div class="tabs" role="tablist">
+            <button data-tab="fw" role="tab" title="Choose the firmware, restart it, open a file, erase saves">FIRMWARE</button>
+            <button data-tab="look" role="tab" title="View, keys, skin and screen filter">LOOK</button>
+            <button data-tab="conn" role="tab" title="MIDI and installing the app">CONNECT</button>
+            <button data-tab="info" role="tab" title="Credits and the computer keys">ABOUT</button>
+          </div>
+          <button id="menuClose" title="Close the menu">CLOSE</button>
         </div>
-        <div class="row">
-          <button id="wipe" title="Forget what this firmware saved and start it fresh. Tap twice."><i>ITS SAVES</i>ERASE</button>
-          <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Tap twice."><i>DOWNLOADS</i>CLEAR</button>
-        </div>
-        <p id="stor"></p>
-        <h3>LOOK</h3>
-        <div class="row">
-          <button id="view" title="Sideways: the whole FM-1 at once, or the keys and the upper part one at a time, full screen"></button>
-          <button id="keys" title="The keys drawn as the FM-1's own, or as a piano"></button>
-        </div>
-        <div class="row">
-          <button id="skin" title="Next skin: the FM-1's own colours, then ours"></button>
-          <button id="fx" title="Screen filter: LCD (pixel grid and glass), CRT (scan lines and glow) or clean"></button>
-        </div>
-        <h3>CONNECT</h3>
-        <div class="row">
-          <button id="midi" title="Connect your MIDI keyboards and controllers to the FM-1's MIDI IN"><i>CONTROLLER</i>MIDI</button>
-          <button id="inst" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
-        </div>
-        <p id="instHint"></p>
-        <h3>ABOUT</h3>
-        <p>
-          A fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by Joakim Eriksson (MIT): the emulated FM-1 inside is his work, unchanged.
-          This page is a simpler front for phones. Each firmware belongs to its author and comes from
-          <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, through fm1-emu's list. Not affiliated with M-VAVE.
-        </p>
-        <p>Computer keys: A W S E D… play, Z X octave, Space PLAY, R REC, 1 to 0 the buttons, arrows and , . the knobs.</p>
+        <section data-tab="fw" class="two">
+          <div id="fwList" class="list" title="The firmware the FM-1 runs. ● marks the ones kept on this device: they run offline."></div>
+          <div class="col">
+            <p id="about"></p>
+            <div class="grid">
+              <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
+              <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
+              <button id="wipe" title="Forget what this firmware saved and start it fresh. Tap twice."><i>ITS SAVES</i>ERASE</button>
+              <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Tap twice."><i>DOWNLOADS</i>CLEAR</button>
+            </div>
+            <p id="stor"></p>
+          </div>
+          <select id="fw" hidden title="The firmware the FM-1 runs"></select>
+        </section>
+        <section data-tab="look">
+          <div class="grid">
+            <button id="keys" title="The keys drawn as the FM-1's own, or as a piano"></button>
+            <button id="skin" title="Next skin: the colours the FM-1 is sold in, then ours"></button>
+            <button id="fx" title="Screen filter: LCD (pixel grid and glass), CRT (scan lines and glow) or clean"></button>
+          </div>
+        </section>
+        <section data-tab="conn">
+          <div class="grid">
+            <button id="midi" title="Connect your MIDI keyboards and controllers to the FM-1's MIDI IN"><i>CONTROLLER</i>MIDI</button>
+            <button id="inst" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
+          </div>
+          <p id="instHint"></p>
+          <p>MIDI: every keyboard and controller plugged into this device plays the FM-1 through its MIDI IN.</p>
+        </section>
+        <section data-tab="info">
+          <p>
+            A fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by Joakim Eriksson (MIT): the emulated FM-1 inside is his work, unchanged.
+            This page is a simpler front for phones. Each firmware belongs to its author and comes from
+            <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, through fm1-emu's list. Not affiliated with M-VAVE.
+          </p>
+          <p>Computer keys: A W S E D… play, Z X octave, Space PLAY, R REC, 1 to 0 the buttons, arrows and , . the knobs.</p>
+        </section>
         <input type="file" id="file" accept=".fwsc" hidden />
       </div>
     </div>
@@ -644,6 +668,12 @@
         if (local) sel.add(new Option("● " + local.name + " (your file)", "local"));
         for (const f of FIRMWARES) sel.add(new Option((kept.has(f.id) ? "● " : "") + f.name + (f.version ? " " + f.version : ""), f.id));
         sel.value = [...sel.options].some((o) => o.value === was) ? was : FIRMWARES.some((f) => f.id === "grimm") ? "grimm" : sel.options[0]?.value;
+        $("#fwList").replaceChildren(...[...sel.options].map((o) => {
+          const b = el("button", o.value === sel.value ? "on" : "", o.text); // textContent: names from the list are not trusted
+          b.title = "Run " + o.text;
+          b.onclick = () => ((sel.value = o.value), sel.onchange());
+          return b;
+        }));
         const f = current();
         $("#about").textContent = !f ? "" : f === local ? "Your file, kept on this device. Nothing is uploaded." : `${f.name} ${f.version} by ${f.author || "?"}${f.license ? " (" + f.license + ")" : ""}. ${f.about}`;
         navigator.storage?.estimate?.().then((s) => ($("#stor").textContent = `${kept.size + (local ? 1 : 0)} firmware(s) kept on this device. Storage: ${mb(s.usage || 0)} used of ${mb(s.quota || 0)}.`), () => {});
@@ -720,22 +750,15 @@
       function lookFace() {
         const b = document.body.dataset,
           skin = SKINS.find((s) => s[0] === document.documentElement.dataset.skin) || SKINS[0];
-        label($("#view"), "SIDEWAYS VIEW", b.view === "complete" ? "COMPLETE" : "SWITCHABLE");
         label($("#keys"), "KEYS", b.keys === "fm" ? "FM-1" : "PIANO");
         label($("#skin"), SKINS.indexOf(skin) < 9 ? "SKIN · FM-1 COLOUR" : "SKIN · OURS", skin[1]);
         label($("#fx"), "SCREEN FILTER", (FXS.find((f) => f[0] === b.fx) || FXS[0])[1]);
-        $("#flip").textContent = b.part === "keys" ? "TOP" : "KEYS";
+        $("#flip").textContent = { complete: "KEYS", keys: "TOP", up: "ALL" }[b.view]; // what the next tap shows
         buildKeys(tall.matches ? 2 : 1);
-        (tall.matches || (b.view === "switchable" && b.part === "keys") ? $("#fm") : $("#R")).prepend($("#rail"));
+        (tall.matches || b.view === "keys" ? $("#fm") : $("#R")).prepend($("#rail"));
         for (let i = 14; i < 41; i++) lights[i].classList.toggle("down", !!down[i]);
         ledNow.fill(0, 14);
       }
-      $("#view").onclick = () => {
-        const b = document.body.dataset;
-        store("fm1.view", (b.view = b.view === "complete" ? "switchable" : "complete"));
-        lookFace();
-        toast(b.view === "complete" ? "Sideways: the whole FM-1" : "Sideways: keys or upper part, the KEYS / TOP button switches" + (tall.matches ? " (turn the phone)" : ""), 2600);
-      };
       $("#keys").onclick = () => {
         const b = document.body.dataset;
         store("fm1.keys", (b.keys = b.keys === "fm" ? "piano" : "fm"));
@@ -758,16 +781,21 @@
       };
       $("#flip").onclick = () => {
         const b = document.body.dataset;
-        b.part = b.part === "keys" ? "up" : "keys";
+        store("fm1.view", (b.view = { complete: "keys", keys: "up", up: "complete" }[b.view]));
         lookFace();
-        toast(b.part === "keys" ? "The keys" : "Knobs, screen and buttons");
+        toast({ complete: "The whole FM-1", keys: "The keys", up: "Knobs, screen and buttons" }[b.view]);
       };
       tall.addEventListener("change", lookFace);
       turned.addEventListener("change", lookFace);
-      const menuShow = (on) => (($("#menu").hidden = !on), on && listFace());
+      function menuTab(t) {
+        $("#menu").dataset.tab = t;
+        for (const b of $$("#menu .tabs button")) b.classList.toggle("on", b.dataset.tab === t);
+      }
+      for (const b of $$("#menu .tabs button")) b.onclick = () => menuTab(b.dataset.tab);
+      const menuShow = (on) => (($("#menu").hidden = !on), on && (listFace(), $("#fwList .on")?.scrollIntoView({ block: "nearest" })));
+      menuTab("fw");
       $("#menuBtn").onclick = $("#logo").onclick = () => menuShow(true);
       $("#menuClose").onclick = () => menuShow(false);
-      $("#menu").addEventListener("click", (e) => e.target.id === "menu" && menuShow(false));
 
       // ======================================================================
       // MIDI: every input of the device goes to the FM-1's MIDI IN jack, byte for byte
@@ -828,7 +856,7 @@
       // ======================================================================
       // boot
       // ======================================================================
-      document.body.dataset.view = pick("fm1.view", ["complete", "switchable"], "complete");
+      document.body.dataset.view = pick("fm1.view", ["complete", "keys", "up"], "complete");
       document.body.dataset.keys = pick("fm1.keys", ["fm", "piano"], "fm");
       document.body.dataset.fx = pick("fm1.fx", ["lcd", "crt", "off"], "lcd");
       if (!SKINS.some((s) => s[0] === document.documentElement.dataset.skin)) document.documentElement.dataset.skin = "black";
