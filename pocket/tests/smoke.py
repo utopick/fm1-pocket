@@ -48,7 +48,7 @@ try:
     size(390, 844, "vertical")
     # a phone held upright: the sideways view, drawn turned (one row of keys, the screen still square and inside the window)
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5}); time.sleep(0.4)
-    parts(1, 1, "phone upright"); assert js("return document.querySelectorAll('.krow').length") == 1
+    parts(1, 1, "phone upright"); assert shown("#R #rail button") == 3, "the rail is not above the knobs"; assert js("return document.querySelectorAll('.krow').length") == 1
     r = js("const r = document.querySelector('#scr').getBoundingClientRect(); return [r.width, r.height, r.right, r.bottom]")
     assert abs(r[0] - r[1]) < 1 and r[0] > 150 and r[2] <= 390 and r[3] <= 844, r
     size(390, 844, "phone-upright")
@@ -56,14 +56,14 @@ try:
     # sideways, complete, then switchable: the upper part or the keys
     size(844, 390, "complete"); parts(1, 1, "complete"); assert js("return document.querySelectorAll('.krow').length") == 1
     js("document.querySelector('#view').click()"); parts(1, 0, "switchable, upper part"); size(844, 390, "switch-top")
-    js("document.querySelector('#flip').click()"); parts(0, 1, "switchable, keys")
+    js("document.querySelector('#flip').click()"); parts(0, 1, "switchable, keys"); assert shown("#fm > #rail button") == 4, "no rail over the keys"
     js("document.querySelector('#keys').click()"); assert js("return document.body.dataset.keys") == "piano"; parts(0, 1, "piano keys"); size(844, 390, "switch-piano")
     fx = []
     for _ in range(3): js("document.querySelector('#fx').click()"); fx.append(js("return document.body.dataset.fx + getComputedStyle(document.querySelector('#lcd')).filter"))
     assert len(set(fx)) == 3 and fx[-1].startswith("lcd"), "the screen filters do not cycle: %s" % fx
     skins = []
-    for _ in range(9): js("document.querySelector('#skin').click()"); skins.append(js("return document.documentElement.dataset.skin + getComputedStyle(document.body).backgroundColor"))
-    assert len(set(skins)) == 9 and skins[-1].startswith("black"), "the skins do not cycle: %s" % skins
+    for _ in range(13): js("document.querySelector('#skin').click()"); skins.append(js("return document.documentElement.dataset.skin + getComputedStyle(document.body).backgroundColor"))
+    assert len(set(skins)) == 13 and skins[-1].startswith("black"), "the skins do not cycle: %s" % skins
 
     # a firmware from a file: it boots, shows its screen, and sounds from the keys and from MIDI IN
     d.find_element(By.ID, "file").send_keys(fwsc); time.sleep(0.5)
