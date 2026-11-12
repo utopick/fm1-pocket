@@ -225,10 +225,8 @@
       #menu .how { width: 100%; flex: 1; min-height: 60px; max-height: 150px; }
       #menu button.big { min-height: 56px; font-size: 14px; background: #b48cff; border-color: #b48cff; color: #14091f; }
       #menu button.big i { color: #14091f; }
-      #menu .thanks p { font-size: 14px; color: #c9d0da; }
-      #menu .thanks .lead { font-size: 19px; line-height: 1.3; color: #fff; }
-      #menu .cap { flex: 1; min-height: 0; display: block; border-radius: 10px; overflow: hidden; background: #0d0f12; }
-      #menu .cap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #menu .thanks p { font-size: clamp(14px, 4.6vmin, 22px); color: #c9d0da; }
+      #menu .thanks .lead { font-size: clamp(19px, 7.4vmin, 36px); line-height: 1.3; color: #fff; }
       /* the MIDI device panel is the Pocket apps' own (kept identical): here it only has to fit a turned page */
       body #mdPanel .mdCard { max-height: 96%; }
       /* a sheet to read: the manual, the licences */
@@ -373,12 +371,6 @@
             <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app only adds a phone-first front to it.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
             <button id="licence" title="The full text of the licences"><i>MIT</i>LICENSE</button>
-          </div>
-          <div class="box">
-            <h3>MORE POCKET APPS, BY UTOPICK</h3>
-            <a class="cap" href="https://utopick.github.io/track-pocket/" target="_blank" rel="noopener" title="TRACK.Pocket: tracker, sampler, mixer"><img alt="TRACK.Pocket" src="@CAP:track@" /></a>
-            <a class="cap" href="https://utopick.github.io/tune-pocket/" target="_blank" rel="noopener" title="TUNE.Pocket: tuner, scales, jam band, looper"><img alt="TUNE.Pocket" src="@CAP:tune@" /></a>
-            <a class="cap" href="https://utopick.github.io/sing-pocket/" target="_blank" rel="noopener" title="SING.Pocket: vocal coach"><img alt="SING.Pocket" src="@CAP:sing@" /></a>
           </div>
         </section>
         <input type="file" id="file" accept=".fwsc" hidden />
