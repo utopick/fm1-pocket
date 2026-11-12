@@ -57,30 +57,32 @@
     <style>
       /* ---- skins. The first five follow the FM-1's own colours (grey is fm1-emu's drawing; the others are near
          matches of the shells sold, not measured). The rest are ours. */
-      :root, [data-skin="grey"] { --room: #18191b; --body1: #5e6166; --body2: #4a4d52; --tray: #2b2c2f; --silk: #c9c6bd; --btn1: #4b4e54; --btn2: #3b3d42; --ink: #9c9a94; --key1: #6a5557; --key2: #4f3f42; --keyline: #8f7c7e; --cap: #1e1f22; --lit: #f2a33a; --go: #62d36e; --wk: #e9e6df; --bk: #1b1b1e; }
-      [data-skin="black"] { --room: #0b0b0c; --body1: #232427; --body2: #17181a; --tray: #0e0e10; --silk: #b9b7b0; --btn1: #33353a; --btn2: #26282c; --ink: #a5a39c; --key1: #3a3c41; --key2: #2a2b2f; --keyline: #6c6e75; --cap: #101113; --lit: #f2a33a; --go: #62d36e; --wk: #d8d6cf; --bk: #0c0c0d; }
-      [data-skin="white"] { --room: #cfd2d6; --body1: #f1f0ec; --body2: #dcdad4; --tray: #c2c0ba; --silk: #4a4a48; --btn1: #fbfaf7; --btn2: #e4e2dc; --ink: #55554f; --key1: #f6f4ef; --key2: #dedbd3; --keyline: #a9a69d; --cap: #2c2d30; --lit: #ff8a1f; --go: #2fae48; --wk: #ffffff; --bk: #2a2a2c; }
-      [data-skin="orange"] { --room: #1b1512; --body1: #f08a2c; --body2: #cf6d17; --tray: #2a211c; --silk: #2a1705; --btn1: #3a3330; --btn2: #2b2523; --ink: #e9c9a5; --key1: #2f2a28; --key2: #201c1b; --keyline: #8a6a4a; --cap: #1c1816; --lit: #ffd27a; --go: #7be08a; --wk: #f5e9da; --bk: #201a17; }
-      [data-skin="purple"] { --room: #15121b; --body1: #7a5fb3; --body2: #5c4590; --tray: #251d38; --silk: #ece4ff; --btn1: #3b2f5a; --btn2: #2c2345; --ink: #cdbff0; --key1: #46376b; --key2: #32264f; --keyline: #9f8bd0; --cap: #1a1428; --lit: #ffc857; --go: #7be08a; --wk: #efe9ff; --bk: #1d1630; }
-      [data-skin="pocket"] { --room: #0d0f12; --body1: #1d222a; --body2: #161a20; --tray: #0d0f12; --silk: #8a94a3; --btn1: #2a313b; --btn2: #1d222a; --ink: #e8ecf1; --key1: #2a313b; --key2: #1d222a; --keyline: #b48cff; --cap: #0d0f12; --lit: #b48cff; --go: #7cf29a; --wk: #e8ecf1; --bk: #161a20; }
-      [data-skin="term"] { --room: #000; --body1: #031a08; --body2: #021005; --tray: #000; --silk: #39ff6a; --btn1: #06290d; --btn2: #041a08; --ink: #39ff6a; --key1: #06290d; --key2: #041a08; --keyline: #39ff6a; --cap: #000; --lit: #d6ff5c; --go: #39ff6a; --wk: #0a3a14; --bk: #000; }
-      [data-skin="dmg"] { --room: #2a2c1c; --body1: #c8ccb0; --body2: #adb294; --tray: #8b956d; --silk: #34366e; --btn1: #9b2257; --btn2: #7d1b46; --ink: #f1e9d2; --key1: #5b6a3a; --key2: #46532b; --keyline: #c4cfa1; --cap: #2c2d30; --lit: #f1e9d2; --go: #c4cfa1; --wk: #e4e8cf; --bk: #34366e; }
-      [data-skin="dungeon"] { --room: #0c0a0d; --body1: #2b2330; --body2: #1c1720; --tray: #100d13; --silk: #b9a37a; --btn1: #3a2c2c; --btn2: #291f1f; --ink: #d8c59a; --key1: #4a2a2a; --key2: #331c1c; --keyline: #b9a37a; --cap: #120e14; --lit: #e0553d; --go: #8fbf6a; --wk: #d8c59a; --bk: #1c1720; }
+      :root, [data-skin="grey"] { --body1: #5e6166; --body2: #4a4d52; --tray: #2b2c2f; --silk: #c9c6bd; --btn1: #4b4e54; --btn2: #3b3d42; --ink: #9c9a94; --key1: #6a5557; --key2: #4f3f42; --keyline: #8f7c7e; --cap: #1e1f22; --lit: #f2a33a; --go: #62d36e; --wk: #e9e6df; --bk: #1b1b1e; }
+      [data-skin="black"] { --body1: #232427; --body2: #17181a; --tray: #0e0e10; --silk: #b9b7b0; --btn1: #33353a; --btn2: #26282c; --ink: #a5a39c; --key1: #3a3c41; --key2: #2a2b2f; --keyline: #6c6e75; --cap: #101113; --lit: #f2a33a; --go: #62d36e; --wk: #d8d6cf; --bk: #0c0c0d; }
+      [data-skin="white"] { --body1: #f1f0ec; --body2: #dcdad4; --tray: #c2c0ba; --silk: #4a4a48; --btn1: #fbfaf7; --btn2: #e4e2dc; --ink: #55554f; --key1: #f6f4ef; --key2: #dedbd3; --keyline: #a9a69d; --cap: #2c2d30; --lit: #ff8a1f; --go: #2fae48; --wk: #ffffff; --bk: #2a2a2c; }
+      [data-skin="orange"] { --body1: #f08a2c; --body2: #cf6d17; --tray: #2a211c; --silk: #2a1705; --btn1: #3a3330; --btn2: #2b2523; --ink: #e9c9a5; --key1: #2f2a28; --key2: #201c1b; --keyline: #8a6a4a; --cap: #1c1816; --lit: #ffd27a; --go: #7be08a; --wk: #f5e9da; --bk: #201a17; }
+      [data-skin="purple"] { --body1: #7a5fb3; --body2: #5c4590; --tray: #251d38; --silk: #ece4ff; --btn1: #3b2f5a; --btn2: #2c2345; --ink: #cdbff0; --key1: #46376b; --key2: #32264f; --keyline: #9f8bd0; --cap: #1a1428; --lit: #ffc857; --go: #7be08a; --wk: #efe9ff; --bk: #1d1630; }
+      [data-skin="pocket"] { --body1: #1d222a; --body2: #161a20; --tray: #0d0f12; --silk: #8a94a3; --btn1: #2a313b; --btn2: #1d222a; --ink: #e8ecf1; --key1: #2a313b; --key2: #1d222a; --keyline: #b48cff; --cap: #0d0f12; --lit: #b48cff; --go: #7cf29a; --wk: #e8ecf1; --bk: #161a20; }
+      [data-skin="term"] { --body1: #031a08; --body2: #021005; --tray: #000; --silk: #39ff6a; --btn1: #06290d; --btn2: #041a08; --ink: #39ff6a; --key1: #06290d; --key2: #041a08; --keyline: #39ff6a; --cap: #000; --lit: #d6ff5c; --go: #39ff6a; --wk: #0a3a14; --bk: #000; }
+      [data-skin="dmg"] { --body1: #c8ccb0; --body2: #adb294; --tray: #8b956d; --silk: #34366e; --btn1: #9b2257; --btn2: #7d1b46; --ink: #f1e9d2; --key1: #5b6a3a; --key2: #46532b; --keyline: #c4cfa1; --cap: #2c2d30; --lit: #f1e9d2; --go: #c4cfa1; --wk: #e4e8cf; --bk: #34366e; }
+      [data-skin="dungeon"] { --body1: #2b2330; --body2: #1c1720; --tray: #100d13; --silk: #b9a37a; --btn1: #3a2c2c; --btn2: #291f1f; --ink: #d8c59a; --key1: #4a2a2a; --key2: #331c1c; --keyline: #b9a37a; --cap: #120e14; --lit: #e0553d; --go: #8fbf6a; --wk: #d8c59a; --bk: #1c1720; }
 
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      html, body { margin: 0; height: 100%; background: var(--room); color: var(--silk); font: 13px/1.25 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overscroll-behavior: none; overflow: hidden; }
+      /* the phone is the device: its body fills the screen edge to edge, the rail's buttons sit on it */
+      html { background: var(--body2); }
+      html, body { margin: 0; height: 100%; background: linear-gradient(var(--body1), var(--body2)) var(--body2); color: var(--silk); font: 13px/1.25 ui-monospace, "SF Mono", Menlo, Consolas, monospace; overscroll-behavior: none; overflow: hidden; }
       body { display: flex; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); user-select: none; -webkit-user-select: none; touch-action: none; }
       button, select { font: 800 11px ui-monospace, "SF Mono", Menlo, Consolas, monospace; letter-spacing: 0.5px; }
       /* ---- the rail: a column beside the device when sideways, a row above it when upright */
-      #rail { display: flex; gap: 6px; padding: 6px; align-items: stretch; flex: none; }
-      #rail button { min-width: 44px; min-height: 44px; padding: 4px; border-radius: 10px; border: 1px solid #0006; background: var(--btn2); color: var(--ink); cursor: pointer; }
+      #rail { display: flex; gap: 6px; padding: 6px 6px 0; align-items: stretch; flex: none; }
+      #rail button { min-width: 44px; min-height: 44px; padding: 4px; border-radius: 10px; border: 0; background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: 0 3px 0 #0009; color: var(--ink); cursor: pointer; }
       #rail #power.on { background: #ff5e7a; color: #fff; }
       #rail #logo { font: 900 15px system-ui; letter-spacing: 0.5px; }
       #rail #logo b { color: var(--lit); }
       #rail .grow { flex: 1; min-width: 0; min-height: 0; display: flex; align-items: center; overflow: hidden; }
       #status { font-size: 10px; color: var(--silk); opacity: 0.85; }
       /* ---- the device */
-      #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 1.5%; margin: 6px; padding: 1.2%; border-radius: 18px; background: linear-gradient(var(--body1), var(--body2)); container-type: size; }
+      #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 1.5%; padding: 6px; container-type: size; }
       #up { flex: 1.9; min-height: 0; display: flex; gap: 1.5%; }
       #kb { flex: 1; min-height: 0; background: var(--tray); border-radius: 14px; padding: 1%; display: flex; flex-direction: column; gap: 4%; }
       #L, #R { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4%; justify-content: space-evenly; }
@@ -116,7 +118,7 @@
       /* ---- the views */
       @media (orientation: landscape) {
         body { flex-direction: row-reverse; }
-        #rail { flex-direction: column; }
+        #rail { flex-direction: column; padding: 6px 6px 6px 0; }
         #rail .grow { display: none; }
         [data-view="switchable"][data-part="keys"] #up, [data-view="switchable"][data-part="up"] #kb { display: none; }
         [data-view="complete"] #flip { display: none; }
@@ -566,6 +568,7 @@
         else if (m.type === "error") (status(m.message), toast(m.message, 4000));
       }
       async function powerOn() {
+        if (matchMedia("(pointer: coarse)").matches) document.documentElement.requestFullscreen?.().catch(() => {}); // a phone in a browser: the whole screen (the installed app already has it)
         ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
         const url = URL.createObjectURL(new Blob([$("#worklet").textContent], { type: "text/javascript" }));
         try {
