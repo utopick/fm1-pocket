@@ -81,27 +81,27 @@
       #rail #logo b { color: var(--lit); }
       #rail .grow { flex: 1; min-width: 0; min-height: 0; display: flex; align-items: center; overflow: hidden; }
       #status { font-size: 10px; color: var(--silk); opacity: 0.85; }
-      /* ---- the device */
-      #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 1.5%; padding: 6px; container-type: size; }
-      #up { flex: 1.9; min-height: 0; display: flex; gap: 1.5%; }
+      /* ---- the device. The screen, knobs and buttons keep the FM-1's own sizes (fm1-emu's panel.rs, a 1280 x 820 drawing):
+         --u is one unit of that drawing in pixels, the largest that lets the upper part fit the view. What is left over is space
+         between the parts, and height for the keys. */
+      #fm { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 6px; padding: 6px; container-type: size; }
+      #up { --u: min(calc(100cqw / 1260), calc(100cqh / 720)); flex: none; display: flex; align-items: center; }
       #kb { flex: 1; min-height: 0; background: var(--tray); border-radius: 14px; padding: 1%; display: flex; flex-direction: column; gap: 4%; }
-      #L, #R { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 4%; justify-content: space-evenly; }
-      #R { flex: 1.25; }
-      #scr { height: 100%; aspect-ratio: 1; flex: none; background: #0c0c0d; border-radius: 12px; padding: 1.2%; display: flex; }
-      #lcd { width: 100%; height: 100%; image-rendering: pixelated; border-radius: 4px; background: #000; }
-      .knobs { display: grid; gap: 4% 3%; justify-items: center; flex: 1.4; min-height: 0; }
-      #L .knobs { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); }
-      #R .knobs { grid-template-columns: repeat(4, 1fr); flex: 0.8; }
-      .kn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; min-width: 0; min-height: 0; height: 100%; width: 100%; cursor: ns-resize; }
-      .kn label { font-size: clamp(7px, 1.5cqmin, 11px); font-weight: 800; letter-spacing: 0.5px; color: var(--silk); pointer-events: none; white-space: nowrap; }
-      .kn .capw { flex: 1; min-height: 0; width: 100%; container-type: size; display: grid; place-items: center; pointer-events: none; }
-      .kn .cap { width: min(92cqw, 92cqh); height: min(92cqw, 92cqh); border-radius: 50%; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--cap), #fff 14%), var(--cap) 70%); box-shadow: 0 3px 5px #0008, 0 0 0 3px color-mix(in srgb, var(--cap), #000 30%); transform: rotate(var(--a, 0deg)); position: relative; }
+      #L, #R { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: space-evenly; align-self: stretch; gap: calc(14 * var(--u)); }
+      #scr { width: calc(500 * var(--u)); height: calc(500 * var(--u)); flex: none; background: #0c0c0d; border-radius: calc(16 * var(--u)); padding: calc(10 * var(--u)); display: flex; }
+      #lcd { width: 100%; height: 100%; image-rendering: pixelated; border-radius: 3px; background: #000; }
+      .knobs { display: grid; justify-items: center; }
+      #L .knobs { --d: calc(88 * var(--u)); grid-template-columns: repeat(2, auto); gap: calc(40 * var(--u)) calc(52 * var(--u)); }
+      #R .knobs { --d: calc(72 * var(--u)); grid-template-columns: repeat(4, auto); gap: calc(20 * var(--u)); }
+      .kn { display: flex; flex-direction: column; align-items: center; gap: calc(6 * var(--u)); width: var(--d); cursor: ns-resize; }
+      .kn label { font-size: max(7px, calc(13 * var(--u))); font-weight: 800; letter-spacing: 0.5px; color: var(--silk); pointer-events: none; white-space: nowrap; }
+      .kn .cap { width: var(--d); height: var(--d); border-radius: 50%; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--cap), #fff 14%), var(--cap) 70%); box-shadow: 0 3px 5px #0008, 0 0 0 3px color-mix(in srgb, var(--cap), #000 30%); transform: rotate(var(--a, 0deg)); position: relative; pointer-events: none; }
       .kn .cap::after { content: ""; position: absolute; left: 50%; top: 8%; width: 8%; height: 30%; margin-left: -4%; border-radius: 3px; background: var(--silk); }
       .kn.turn .cap { box-shadow: 0 3px 5px #0008, 0 0 0 3px var(--lit); }
-      .tray { background: var(--tray); border-radius: 12px; padding: 3%; display: grid; gap: 6px; flex: 1; min-height: 0; }
-      #oct { grid-template-columns: 1fr 1fr; flex: 0.45; }
-      #btns { grid-template-columns: repeat(6, 1fr); grid-template-rows: 1fr 1fr; }
-      .pb { --led: 0; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 8px; cursor: pointer; font-size: clamp(7px, 1.7cqmin, 12px); color: color-mix(in srgb, var(--ink), #2a1a03 calc(var(--led) * 100%)); background: linear-gradient(color-mix(in srgb, var(--btn1), var(--tint, var(--lit)) calc(var(--led) * 85%)), color-mix(in srgb, var(--btn2), var(--tint, var(--lit)) calc(var(--led) * 70%))); box-shadow: 0 3px 0 #0009; }
+      .tray { background: var(--tray); border-radius: calc(14 * var(--u)); padding: calc(12 * var(--u)); display: grid; }
+      #oct { grid-template-columns: repeat(2, calc(112 * var(--u))); grid-auto-rows: calc(44 * var(--u)); gap: calc(12 * var(--u)); }
+      #btns { grid-template-columns: repeat(6, calc(50 * var(--u))); grid-auto-rows: calc(64 * var(--u)); gap: calc(12 * var(--u)) calc(8 * var(--u)); }
+      .pb { --led: 0; min-width: 0; padding: 0; border: 0; border-radius: calc(8 * var(--u)); cursor: pointer; font-size: max(7px, calc(12 * var(--u))); color: color-mix(in srgb, var(--ink), #2a1a03 calc(var(--led) * 100%)); background: linear-gradient(color-mix(in srgb, var(--btn1), var(--tint, var(--lit)) calc(var(--led) * 85%)), color-mix(in srgb, var(--btn2), var(--tint, var(--lit)) calc(var(--led) * 70%))); box-shadow: 0 3px 0 #0009; }
       .pb.down { transform: translateY(2px); box-shadow: 0 1px 0 #0009; }
       .pb.go { --tint: var(--go); outline: 2px solid color-mix(in srgb, var(--go), transparent 55%); outline-offset: 1px; }
       /* ---- the keys: F3 to G5. One row sideways, two rows upright. FM-1 pills, or a piano */
@@ -120,21 +120,19 @@
         body { flex-direction: row-reverse; }
         #rail { flex-direction: column; padding: 6px 6px 6px 0; }
         #rail .grow { display: none; }
+        [data-view="switchable"] #up { --u: min(calc(100cqw / 1260), calc(100cqh / 500)); flex: 1; }
         [data-view="switchable"][data-part="keys"] #up, [data-view="switchable"][data-part="up"] #kb { display: none; }
         [data-view="complete"] #flip { display: none; }
       }
       @media (orientation: portrait) {
         body { flex-direction: column; }
         #flip { display: none; }
-        #fm { gap: 1%; }
-        #up { flex: 2.6; flex-direction: column; gap: 1.2%; }
-        #scr { order: -1; height: auto; flex: 0 1 46%; align-self: center; max-width: 100%; }
-        #L, #R { flex-direction: row; flex: 0 1 16%; gap: 2%; }
-        #R { flex: 0 1 30%; flex-direction: column; }
-        #L .knobs { grid-template-columns: repeat(4, 1fr); grid-template-rows: 1fr; flex: 2; }
-        #oct { grid-template-columns: 1fr; grid-template-rows: 1fr 1fr; flex: 0.5; padding: 4px; }
-        #R .knobs { flex: 0.9; }
-        #kb { flex: 1.1; }
+        #up { --u: min(calc(100cqw / 580), calc(100cqh / 1180)); flex-direction: column; gap: calc(14 * var(--u)); }
+        #scr { order: -1; }
+        #L, #R { flex: none; }
+        #L { flex-direction: row; justify-content: center; align-items: center; gap: calc(16 * var(--u)); }
+        #L .knobs { grid-template-columns: repeat(4, auto); gap: calc(14 * var(--u)); }
+        #oct { grid-template-columns: calc(112 * var(--u)); }
         .krow { margin: 0 4.5%; }
       }
       /* ---- the menu */
@@ -321,9 +319,7 @@
         const k = el("div", "kn");
         k.dataset.kn = i; // 0 to 6 the encoders, 7 the MASTER pot
         k.title = title;
-        const w = el("div", "capw"); // the box the round cap is fitted into
-        w.append(el("div", "cap"));
-        k.append(el("label", "", label), w);
+        k.append(el("label", "", label), el("div", "cap"));
         return k;
       }
       function buildPanel() {
