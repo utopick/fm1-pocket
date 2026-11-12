@@ -37,6 +37,10 @@ installation as an app.
 - A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch.
 - **Installable (PWA)**: its own window, full screen, and it works offline. The menu wears the chosen skin.
 
+## Roadmap
+
+- MIDI sync with a real FM-1: the app and the device connected over MIDI, so one plays or follows the other.
+
 ## Build and test
 
 ```sh
