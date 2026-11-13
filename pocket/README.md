@@ -45,7 +45,7 @@ specification of [m-bootloader](https://github.com/jvitkauskas/m-bootloader) (MI
 
 1. **CONNECT** finds the unit's ports (`FM-1 MIDI 1` while its firmware runs, `FM-1 Update` in m-bootloader's MIDI mode).
 2. **SYNC**: what you play goes to the real unit too; its notes, bend, clock and start/stop come to the emulator. (The emulator has no MIDI out.)
-3. **BACKUP** (step 1): sends m-bootloader's RAM helper through the firmware's own update route, then reads the whole flash (512-byte reads, each checked, then the chip's CRC-32) and saves a `.bin`. Only reads are ever sent to the helper.
+3. **BACKUP** (step 1): sends m-bootloader's RAM helper through the firmware's own update route, then reads the whole flash (512-byte reads, each checked, then the chip's CRC-32) and saves a `.bin`. Only reads are ever sent to the helper. The copy is also wrapped as a one-file package, kept as the first entry of the firmware list (MY FM-1) and started in the emulator at once: if its screen draws, the copy is a good one. DELETE of the downloads leaves it.
 4. **PROTECTOR** (step 2, only after a backup): sends the bootloader package. It writes the boot area.
 5. **INSTALL FIRMWARE** (step 3, only in the protector's MIDI mode): serves the chosen firmware's package; the unit checks it before it erases.
 
