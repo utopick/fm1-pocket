@@ -37,9 +37,24 @@ installation as an app.
 - A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch.
 - **Installable (PWA)**: its own window, full screen, and it works offline. The menu wears the chosen skin.
 
+## A real FM-1 on USB (OPTIONS, REAL FM-1) — written, not yet tried on a unit
+
+Chrome or Edge (computer, or Android with a cable; no iOS), Web MIDI with SysEx. The protocol is in `vendor/real-fm1.js`, written from the
+specification of [m-bootloader](https://github.com/jvitkauskas/m-bootloader) (MIT, by jvitkauskas), whose v2.4 packages
+(`vendor/mboot/`, checked by SHA-256 before use, licence in `LICENSE-m-bootloader`) are what the page sends.
+
+1. **CONNECT** finds the unit's ports (`FM-1 MIDI 1` while its firmware runs, `FM-1 Update` in m-bootloader's MIDI mode).
+2. **SYNC**: what you play goes to the real unit too; its notes, bend, clock and start/stop come to the emulator. (The emulator has no MIDI out.)
+3. **BACKUP** (step 1): sends m-bootloader's RAM helper through the firmware's own update route, then reads the whole flash (512-byte reads, each checked, then the chip's CRC-32) and saves a `.bin`. Only reads are ever sent to the helper.
+4. **PROTECTOR** (step 2, only after a backup): sends the bootloader package. It writes the boot area.
+5. **INSTALL FIRMWARE** (step 3, only in the protector's MIDI mode): serves the chosen firmware's package; the unit checks it before it erases.
+
+Writes ask for a slide to confirm. Restoring a backup is not done here (use M-Flasher). Tests: `node --test pocket/tests/real-fm1.test.js` (a simulated unit and the real packages) and `python pocket/tests/real.py` (the page against a fake unit).
+
 ## Roadmap
 
-- MIDI sync with a real FM-1: the app and the device connected over MIDI, so one plays or follows the other.
+- MIDI sync with the real unit's clock into the emulated firmware's tempo (the emulator has no clock input yet) and the emulator's own notes out.
+- Restore a backup from the page.
 
 ## Build and test
 
