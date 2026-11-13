@@ -337,11 +337,13 @@
         <section data-tab="conn" data-sub="midi">
           <div class="box pane" id="pvMidi">
             <h3>MIDI CONTROLLER</h3>
-            <p>Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and <b>DEVICE</b> shows a drawing of it where you can change any of them.</p>
+            <p>Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and <b>DEVICE</b> shows a drawing of it where you can change any of them, and <b>MAP</b> learns your controller step by step (keys, pads, knobs, sustain, bend, transport). Knobs 1 to 4 are the FM-1's left knobs and 5 to 8 its right ones; the pads are its buttons. The sustain pedal is a MOD key: while it is held, the pads and knobs become a second set (pad 9 up). The MOD button turns that on or off.</p>
             <p id="midiNames">Not connected yet.</p>
             <div class="grid">
               <button id="midi" title="Connect your MIDI keyboards and controllers"><i>CONTROLLER</i>CONNECT MIDI</button>
-              <button id="midiDev" title="A drawing of your controller: see what each key, pad and knob does, and assign them"><i>MAP · LEARN</i>DEVICE</button>
+              <button id="midiDev" title="A drawing of your controller: see what each key, pad and knob does, and assign them"><i>DRAWING · LEARN</i>DEVICE</button>
+              <button id="midiMap" title="Map your controller step by step: keys, pads, knobs, sustain, bend, transport. Saved, exported, imported."><i>STEP BY STEP</i>MAP</button>
+              <button id="midiMod" title="MOD: while the sustain pedal (or the key MAP found) is held, the pads and knobs become a second set. Tap to turn it on or off."><i>SUSTAIN PEDAL</i>MOD</button>
             </div>
           </div>
           <div class="box pane" id="pvInst">
@@ -1106,16 +1108,21 @@
         ...ENCS.map(([n], i) => ({ id: "enc" + i, name: n, group: "FM-1 knobs", kind: "enc", n: i })),
         { id: "master", name: "MASTER", group: "FM-1 knobs", kind: "pot" },
         ...BTNS.map((n, i) => ({ id: "btn" + i, name: n, group: "FM-1 buttons", kind: "btn", n: i })),
+        // the buttons of the top rail, which the real FM-1 has as its own: the keys view (KEYS), the power (ON) and the menu (FM-1)
+        { id: "flip", name: "KEYS VIEW", group: "App buttons", kind: "tap", run: () => $("#flip").click() },
+        { id: "power", name: "POWER (ON)", group: "App buttons", kind: "tap", run: () => $("#power").click() },
+        { id: "logo", name: "FM-1 MENU", group: "App buttons", kind: "tap", run: () => $("#logo").click() },
       ];
       const act = (id) => [id, ACTIONS.find((a) => a.id === id).name];
-      // a controller with 8 knobs in two rows and 8 pads (Akai MPK mini, Launchkey): the top row is KNOB1 to 4, the bottom
-      // row the FM-1's left side in its own order. Pads: the lower row the keys used most, the upper row the first pages.
+      // a controller with 8 knobs in two rows and 8 pads (Akai MPK mini, Launchkey): knobs 1 to 4 (the top row) are the FM-1's left
+      // knobs, 5 to 8 its right knobs (KNOB1 to 4). The pads are the FM-1's 16 buttons in its own layout: 1 to 4 HOME SAVE ARP SEQ,
+      // 5 to 8 FX SEL ENV LFO, then (the MOD key held: pads 9 to 16) PLAY REC KEYS ON EDIT GLO and the FM-1 menu.
       const MI = {
         acc: null,
         names: [],
         map: {},
         actions: () => ACTIONS,
-        defaults: () => ({ knobs: ["enc3", "enc4", "enc5", "enc6", "master", "enc0", "enc1", "enc2"].map(act), pads: ["btn8", "btn9", "btn12", "btn13", "btn2", "btn3", "btn4", "btn5"].map(act) }),
+        defaults: () => ({ knobs: ["master", "enc0", "enc1", "enc2", "enc3", "enc4", "enc5", "enc6"].map(act), pads: ["btn8", "btn9", "btn10", "btn11", "btn2", "btn3", "btn4", "btn5", "btn12", "btn13", "flip", "power", "btn6", "btn7", null, "logo"].map((id) => id && act(id)) }),
         down: new Map(), // control -> held (buttons)
         last: new Map(), // control -> last CC value, and what is left of a turn (encoders)
       };
@@ -1135,10 +1142,11 @@
         const press = cc ? v >= 64 : on; // pads in CC mode send 127 / 0
         if (press === !!MI.down.get(key)) return;
         MI.down.set(key, press);
+        if (a.kind === "tap") return press && a.run();
         press ? holdKey(a.n) : dropKey(a.n);
       }
       function midiMsg(data, from) {
-        midiPanel.observe(data, from);
+        if (midiPanel.observe(data, from)) return; // true: MAP took the message
         const [st, a, b] = data,
           cmd = st & 0xf0,
           on = cmd === 0x90 && b > 0,
@@ -1173,6 +1181,10 @@
           toast("MIDI was not allowed", 3000);
         }
       };
+      $("#midiMap").onclick = () => (MI.names.length ? midiPanel.open({ map: true }) : toast("Connect a MIDI device first"));
+      const modFace = () => (label($("#midiMod"), "SUSTAIN PEDAL", "MOD " + (midiPanel.modPedal() ? "ON" : "OFF")), $("#midiMod").classList.toggle("on", midiPanel.modPedal()));
+      $("#midiMod").onclick = () => (midiPanel.modPedal(!midiPanel.modPedal()), modFace(), toast(midiPanel.modPedal() ? "MOD on: hold the sustain pedal and the pads and knobs become a second set" : "MOD off: the pads and knobs stay the first set"));
+      modFace();
       $("#midiDev").onclick = () => (MI.names.length ? (midiPanel.open(), toast("Press a key, a pad or turn a knob: it lights up on the drawing")) : toast("Connect a MIDI device first"));
 
       // ======================================================================
