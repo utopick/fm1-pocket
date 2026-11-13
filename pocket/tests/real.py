@@ -14,7 +14,7 @@ addEventListener('unhandledrejection', e => __errs.push('promise: ' + (e.reason 
 window.__log = [];
 navigator.requestMIDIAccess = (o) => { window.__sysex = !!(o && o.sysex); return Promise.resolve(window.__acc || (window.__acc = makeUnit())); };
 function makeUnit() {
-  const R = RealFM1, flash = new Uint8Array(0x100000).map((_, i) => (i * 7 + (i >> 9)) & 255);
+  const R = RealFM1, flash = window.__flashInit ? Uint8Array.from(window.__flashInit) : new Uint8Array(0x100000).map((_, i) => (i * 7 + (i >> 9)) & 255);
   const port = (name, type) => ({ id: name + type, name, type, state: 'connected', onmidimessage: null });
   const fwIn = port('FM-1 MIDI 1', 'input'), upIn = port('FM-1 Update', 'input'), ctlIn = port('MPK mini Play mk3', 'input');
   const acc = { inputs: new Map([[fwIn.id, fwIn], [ctlIn.id, ctlIn]]), outputs: new Map(), onstatechange: null, sysexEnabled: true };
@@ -65,7 +65,7 @@ def tearDownModule(): SRV.shutdown()
 class Real(unittest.TestCase):
     def setUp(self):
         o = webdriver.ChromeOptions()
-        for a in ("--headless=new", "--mute-audio", "--window-size=844,390"): o.add_argument(a)
+        for a in ("--headless=new", "--mute-audio", "--window-size=844,390", "--autoplay-policy=no-user-gesture-required"): o.add_argument(a)
         self.d = webdriver.Chrome(options=o)
         self.addCleanup(self.d.quit)
         self.d.execute_cdp_cmd("Network.enable", {})
@@ -120,6 +120,23 @@ class Real(unittest.TestCase):
         self.assertGreater(self.js("return __served"), 9000)  # the whole helper package was read by the unit
         self.assertIn("checked", self.text("#realMsg"))
         self.assertEqual(self.js("return REAL.saved.uid"), "0102030405060708")
+        # the backup is the first firmware of the list, chosen, and kept apart from the downloads
+        self.assertEqual(self.js("var o = document.querySelector('#fw').options; return [o[0].value, document.querySelector('#fw').value]"), ["backup", "backup"])
+        self.assertEqual(self.js("return window.__errs"), [])
+
+    FW = os.environ.get("FWSC")
+
+    @unittest.skipUnless(FW, "set FWSC=path/to/firmware.fwsc: its flash stands in for the unit's, and the backup must boot in the emulator")
+    def test_the_backup_of_a_unit_runs_in_the_emulator(self):
+        import subprocess, json
+        raw = subprocess.run(["node", "-e", """const R = require(process.argv[1] + '/vendor/real-fm1.js'), u = R.unweave(require('fs').readFileSync(process.argv[2])), f = u.files.find(f => f.type === 0);
+          const flash = new Uint8Array(0x100000).fill(255); flash.set(u.image.subarray(f.offset, f.offset + f.size)); process.stdout.write(JSON.stringify(Array.from(flash)))""", ROOT, os.path.abspath(self.FW)], capture_output=True, check=True).stdout
+        self.js("window.__flashInit = arguments[0]", json.loads(raw))
+        self.click('button[data-sub=real]'); self.click('#realConn')
+        self.js("HTMLAnchorElement.prototype.click = function () {}")
+        self.click('#realBackup'); self.slide()
+        self.wait("(document.querySelector('#realMsg').textContent.match(/It runs here|did not draw/) || [])[0]", 90)
+        self.assertIn("It runs here", self.text("#realMsg"))
         self.assertEqual(self.js("return window.__errs"), [])
 
     def test_the_protector_and_the_firmware_wait_for_their_steps(self):

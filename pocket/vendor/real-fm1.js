@@ -149,6 +149,31 @@ const RealFM1 = (() => {
     return { identity: id, image, files };
   }
 
+  // ---- a raw flash (a backup) wrapped as a one-file package, the form the emulator and the firmware list take. flash.bin is the
+  // raw flash from address 0 as stored, so the backup goes in unchanged; the identity is woven in as in M-VAVE's packages.
+  function wrap(flash, identity = "FM-1_000") {
+    const B = 48, K = 47, PREFIX = 20, S = 0x7d, HEAD = 64, ENTRY = 80, FIRST = 0x400;
+    if (flash.length % 4096 || flash.length > 0x100000) throw new Error("A flash copy is whole 4 KiB sectors");
+    const total = FIRST + flash.length, image = new Uint8Array(total).fill(0);
+    const w16 = (b, i, v) => { b[i] = v & 255; b[i + 1] = v >> 8; }, w32 = (b, i, v) => { w16(b, i, v & 0xffff); w16(b, i + 2, v >>> 16); };
+    const entry = new Uint8Array(ENTRY);
+    w16(entry, 4, crc16(flash)); w32(entry, 8, FIRST); w32(entry, 12, flash.length);
+    entry.set(new TextEncoder().encode("flash.bin"), 64);
+    image.set(enc(0xffff, entry), HEAD);
+    const head = new Uint8Array(HEAD);
+    w16(head, 2, crc16(image.subarray(HEAD, HEAD + ENTRY))); w32(head, 4, total); w16(head, 8, 1); w16(head, 10, 4); w16(head, 12, 0x200);
+    head.set(new TextEncoder().encode("AC791N"), 16);
+    w16(head, 0, crc16(head.subarray(2)));
+    image.set(enc(0xffff, head), 0);
+    image.set(flash, FIRST);
+    const markers = Array.from({ length: PREFIX }, (_, i) => (i < identity.length ? (identity.charCodeAt(i) + i + 1) & 255 : S));
+    const out = new Uint8Array(total + PREFIX);
+    for (let i = 0; i < PREFIX; i++) { out.set(image.subarray(i * K, (i + 1) * K), i * B); out[i * B + K] = markers[i]; }
+    out.set(image.subarray(PREFIX * K), PREFIX * B);
+    if (out[PREFIX * B + K] === S) throw new Error("The copy cannot be wrapped (a byte after the prefix reads as a sentinel)");
+    return out;
+  }
+
   // ---- install: the unit asks for the package a piece at a time (0x30, "flag, address, length") and we answer from the image.
   // The unit checks everything (header, chip key, CRCs, each sector) before it erases, so a wrong package is refused there.
   // `start` sends the message that begins it (F0 22 24 35 7F F7 to a running firmware; nothing to a unit already in MIDI mode).
@@ -177,6 +202,6 @@ const RealFM1 = (() => {
     }
   }
 
-  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, unweave, servePackage, crc16, crc32, enc };
+  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, unweave, wrap, servePackage, crc16, crc32, enc };
 })();
 if (typeof module !== "undefined") module.exports = RealFM1;

@@ -110,3 +110,10 @@ test("through a running firmware the install ends when the unit stops asking", a
   assert.strictEqual(served, 512); assert.strictEqual(got[0].soft, 0x7f);
   await assert.rejects(R.servePackage(new R.Link({}, { send() {} }), image, { start: false, idleMs: 50 }), /stopped asking/);
 });
+test("a flash copy wrapped as a package unweaves back to the same flash", () => {
+  const flash = new Uint8Array(0x100000).map((_, i) => (i * 13 + (i >> 11)) & 255);
+  const u = R.unweave(R.wrap(flash, "FM-1_015")), f = u.files[0];
+  assert.strictEqual(u.identity, "FM-1_015"); assert.strictEqual(f.type, 0);
+  assert.ok(Buffer.from(u.image.subarray(f.offset, f.offset + f.size)).equals(Buffer.from(flash)));
+  assert.throws(() => R.wrap(new Uint8Array(100)));
+});
