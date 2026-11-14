@@ -56,6 +56,15 @@ class Midi(unittest.TestCase):
         self.js("document.querySelector('[data-do=close]').click()")
         self.assertEqual(self.errors(), [])
 
+    def test_the_fm1_has_its_own_drawing_of_27_keys(self):
+        self.open()  # no saved map: the model's own profile
+        self.js("document.querySelector('#midiDev').click()"); time.sleep(0.4)
+        self.js("const s = document.querySelector('#mdProfile'); s.value = 'fm1'; s.dispatchEvent(new Event('change', {bubbles: true}))"); time.sleep(0.4)
+        self.assertEqual(self.js("return document.querySelectorAll('#mdPanel .mdKey').length"), 27)
+        self.assertEqual(self.js("return document.querySelector('#mdPanel .mdKey').dataset.note"), "53")
+        self.assertEqual(self.errors(), [])
+        if os.environ.get("SHOT"): self.d.save_screenshot(os.environ["SHOT"])
+
     def test_defaults_are_the_fm1_knobs_and_its_16_buttons(self):
         self.open(STD)
         got = self.js("return MI.defaults()")
