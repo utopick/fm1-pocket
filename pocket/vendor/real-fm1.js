@@ -125,6 +125,19 @@ const RealFM1 = (() => {
     return out;
   }
 
+  // ---- what the protector's MIDI mode checks before it erases anything (m-bootloader's midi_update.c: find_flash, check_flash): a flash image of
+  // whole sectors, the 32 bytes at 0x4000 readable with THIS chip's key, and the whole image against its CRC16. The unit can only show a refusal
+  // on its own screen, so the page asks the same questions first and says which one fails.
+  function checkPackage(pkg, key) {
+    const f = pkg.files.find((x) => x.type === 0);
+    if (!f) throw new Error("this package holds no flash image: it is an installer for the firmware route (such as the protector's own), not a firmware to install here");
+    if (f.size <= 0x4000 || f.size > 0x100000 || f.size % 0x1000 || f.offset + f.size > pkg.image.length) throw new Error("its flash image has a size the unit refuses (" + f.size + " bytes) or the package is cut short");
+    const b = enc(key, pkg.image.subarray(f.offset + 0x4000, f.offset + 0x4000 + 32));
+    if (crc16(b.subarray(2, 32)) !== (b[0] | (b[1] << 8))) throw new Error("this firmware was built for another chip key than this unit's (" + key + "): the unit would refuse it");
+    if (crc16(pkg.image.subarray(f.offset, f.offset + f.size)) !== f.crc) throw new Error("the package is damaged: its checksum does not match");
+    return { size: f.size };
+  }
+
   // ---- is m-bootloader in this flash? Its boot container (physical 0xA0, ENC 0xFFFF over the whole payload) holds a 48-byte identity at
   // payload offset 0x40: "AC79BLID", the board tag ("fm1"), a version text (m-bootloader's specification, 8.1). The stock bootloader has none.
   function protector(flash) {
@@ -205,7 +218,9 @@ const RealFM1 = (() => {
   // ---- install: the unit asks for the package a piece at a time (0x30, "flag, address, length") and we answer from the image.
   // The unit checks everything (header, chip key, CRCs, each sector) before it erases, so a wrong package is refused there.
   // `start` sends the message that begins it (F0 22 24 35 7F F7 to a running firmware; nothing to a unit already in MIDI mode).
-  async function servePackage(link, image, { start = true, onProgress = () => {}, stop = () => false, idleMs = 20000, doneMs = 5000 } = {}) {
+  // untilFinish: the protector's MIDI mode reads the package twice (a check pass, then each sector again as it writes) and ends with the 0xF0000000 read:
+  // there, being silent is never "done"
+  async function servePackage(link, image, { start = true, onProgress = () => {}, stop = () => false, idleMs = 20000, doneMs = 5000, untilFinish = false } = {}) {
     if (start) link.send(soft(SOFT.UPGRADE));
     let served = 0, last = Date.now();
     for (;;) {
@@ -214,7 +229,7 @@ const RealFM1 = (() => {
       if (!p) {
         const idle = Date.now() - last;
         // through a running firmware's update route the unit takes the package, restarts and installs on its own: it just stops asking
-        if (start && served && idle > doneMs) return served;
+        if (start && !untilFinish && served && idle > doneMs) return served;
         if (idle > idleMs) throw new Error("The unit stopped asking for the package");
         continue;
       }
@@ -230,6 +245,6 @@ const RealFM1 = (() => {
     }
   }
 
-  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, protector, flashMap, unweave, wrap, servePackage, crc16, crc32, enc };
+  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, protector, flashMap, checkPackage, unweave, wrap, servePackage, crc16, crc32, enc };
 })();
 if (typeof module !== "undefined") module.exports = RealFM1;
