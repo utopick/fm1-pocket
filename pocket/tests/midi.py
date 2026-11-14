@@ -56,6 +56,35 @@ class Midi(unittest.TestCase):
         self.js("document.querySelector('[data-do=close]').click()")
         self.assertEqual(self.errors(), [])
 
+    def test_the_firmware_search_filters_the_cards(self):
+        self.open()
+        self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=fw]').click()")
+        n = lambda: self.js("return document.querySelectorAll('#fwList .fwc').length")
+        all_ = n(); self.assertGreater(all_, 50)
+        box = self.d.find_element("css selector", "#fwSearch"); box.send_keys("felucca"); time.sleep(0.4)
+        self.assertTrue(0 < n() < all_)
+        box.send_keys("zzzz"); time.sleep(0.4); self.assertEqual(n(), 0); self.assertIn("No firmware matches", self.js("return document.querySelector('#fwList').textContent"))
+        for _ in range(11): box.send_keys("\ue003")  # backspace: what a user does
+        time.sleep(0.4); self.assertEqual(n(), all_)
+        self.assertEqual(self.errors(), [])
+
+    def test_a_firmware_card_shows_the_readme_of_its_repository_as_its_manual(self):
+        self.open()
+        self.js("""window.__urls = []; window.fetch = (u) => { window.__urls.push(String(u)); return /raw\\.githubusercontent\\.com/.test(u) ? Promise.resolve(new Response('# Ghoul manual\\n\\nPress **PLAY** and see [the page](https://example.com/x).\\n\\n- one\\n- two\\n\\n<img src=x onerror=alert(1)>\\n', {status: 200})) : Promise.reject(new Error('blocked')); };
+          document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=fw]').click();""")
+        time.sleep(0.5)
+        self.js("document.querySelector('#fwList .fwc .man:not([hidden])').click()"); time.sleep(1.2)
+        body = self.js("return document.querySelector('#shBody').innerHTML")
+        self.assertIn("<h3>Ghoul manual</h3>", body); self.assertIn("<b>PLAY</b>", body); self.assertIn('href="https://example.com/x"', body); self.assertIn("<li>two</li>", body)
+        self.assertNotIn("onerror", body); self.assertNotIn("<img", body)
+        self.assertTrue(any("raw.githubusercontent.com" in u for u in self.js("return window.__urls")))
+        self.js("document.querySelector('#shClose').click()")
+        # kept on the device: the second time it does not ask the network
+        n = len(self.js("return window.__urls"))
+        self.js("document.querySelector('#fwList .fwc .man:not([hidden])').click()"); time.sleep(0.8)
+        self.assertEqual(len(self.js("return window.__urls")), n)
+        self.assertEqual(self.errors(), [])
+
     def test_the_fm1_has_its_own_drawing_of_27_keys(self):
         self.open()  # no saved map: the model's own profile
         self.js("document.querySelector('#midiDev').click()"); time.sleep(0.4)
