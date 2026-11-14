@@ -220,7 +220,9 @@ const RealFM1 = (() => {
   // `start` sends the message that begins it (F0 22 24 35 7F F7 to a running firmware; nothing to a unit already in MIDI mode).
   // untilFinish: the protector's MIDI mode reads the package twice (a check pass, then each sector again as it writes) and ends with the 0xF0000000 read:
   // there, being silent is never "done"
-  async function servePackage(link, image, { start = true, onProgress = () => {}, stop = () => false, idleMs = 20000, doneMs = 5000, untilFinish = false } = {}) {
+  async function servePackage(link, image, { start = true, onProgress = () => {}, stop = () => false, idleMs = 20000, doneMs = 5000, untilFinish = false, flashEnd = 0 } = {}) {
+    // phase 1 is the unit checking the whole package, phase 2 (from the first read that goes back after the end of the flash image) its writing: onProgress(fraction, phase)
+    let phase = 1, lastAddr = -1;
     if (start) link.send(soft(SOFT.UPGRADE));
     let served = 0, last = Date.now();
     for (;;) {
@@ -241,7 +243,9 @@ const RealFM1 = (() => {
       if (addr + n > image.length) continue; // outside the package: say nothing, the unit asks again then gives up
       link.send(frame(CMD.PKG, [...p.body, ...image.subarray(addr, addr + n)]));
       served += n;
-      onProgress(Math.min(1, (addr + n) / image.length));
+      if (flashEnd && phase === 1 && addr < lastAddr && lastAddr + PACKET >= flashEnd) phase = 2;
+      lastAddr = addr;
+      onProgress(Math.min(1, (addr + n) / image.length), phase);
     }
   }
 
