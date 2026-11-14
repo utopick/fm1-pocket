@@ -40,7 +40,9 @@ function makeUnit() {
     }
   } };
   const upOut = { name: 'FM-1 Update', send(b) {
-    const p = R.parse(b); if (!p || !p.cmd) return;
+    const p = R.parse(b);
+    if (p && p.soft === 0x7e) { window.__restarted = 1; acc.inputs.delete(upIn.id); acc.inputs.set(fwIn.id, fwIn); acc.outputs.delete('FM-1 Update'); acc.outputs.set('FM-1 MIDI 1', fwOut); setTimeout(() => acc.onstatechange && acc.onstatechange({}), 50); return; }
+    if (!p || !p.cmd) return;
     const a = p.body, at = le(a, 1), n = a[5] | a[6] << 8 | a[7] << 16;
     if (p.cmd === 0x12) tell(upIn, R.frame(0x12, [...Array.from('MBOOT').map(c => c.charCodeAt(0)), 1, 2, 1, 0x0f, 0x98, 0, 0, 0x10, 0, 0x14, 0x60, 0x85, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, ...Array.from('2.4-fake\\0').map(c => c.charCodeAt(0))]));
     else if (p.cmd === 0x23) tell(upIn, R.frame(0x23, [...a.slice(0, 8), ...flash.subarray(at, at + n)]));
@@ -107,6 +109,14 @@ class Real(unittest.TestCase):
         r = self.js("return window.__copied")
         for want in ("FM-1 MIDI 1", "identity: FM-1_015", "sysex: allowed", "MIDI inputs:"): self.assertIn(want, r)
         self.assertNotIn("0x23", "\n".join(self.js("return window.__log")))  # nothing but the identity was asked
+
+    def test_restart_takes_the_unit_out_of_the_helper(self):
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.click('#realRestart')  # no helper yet: it only says so
+        self.assertFalse(self.js("return !!window.__restarted"))
+        self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
+        self.click('#realRestart'); self.slide(); self.wait("window.__restarted && document.querySelector('#realMsg').textContent.includes('back on its firmware')", 40)
 
     def test_sync_sends_what_you_play_to_the_unit(self):
         self.click('button[data-sub=real]'); self.click('#realConn')
