@@ -162,3 +162,15 @@ test("a package is checked against the chip key the way the unit does, before an
   const stage = R.unweave(require("fs").readFileSync(__dirname + "/../vendor/mboot/fm1-stage.fwsc"));
   assert.throws(() => R.checkPackage(stage, KEY), /no flash image/);
 });
+test("the install tells the unit's two passes apart: checking the package, then writing", async () => {
+  const image = new Uint8Array(8192), sent = [], phases = [];
+  const link = new R.Link({}, { send: (b) => sent.push(b) });
+  const done = R.servePackage(link, image, { start: false, untilFinish: true, flashEnd: 4096, onProgress: (f, ph) => phases.push(ph) });
+  const ask = async (addr, n) => { const before = sent.length; link.feed(R.frame(0x30, [0, addr & 255, (addr >> 8) & 255, (addr >> 16) & 255, addr >>> 24, n & 255, n >> 8, 0])); while (sent.length === before) await new Promise((r) => setTimeout(r, 5)); };
+  for (const a of [0, 0x1000 - 0x1000]) await ask(a, 512);      // the header, then back to the start of the check pass
+  for (let a = 512; a < 4096; a += 512) await ask(a, 512);       // the check pass reads the image to its end
+  for (const a of [1024, 1536]) await ask(a, 512);               // the write pass goes back and reads sector by sector
+  await ask(0xf0000000, 8);                                      // the finish read
+  await done;
+  assert.deepStrictEqual(phases, [1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2]);
+});

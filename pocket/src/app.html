@@ -1407,7 +1407,7 @@
       }
       async function realServe(link, image, start, what, extra = {}) {
         realSay(what + "…");
-        await RealFM1.servePackage(link, image, { start, ...extra, onProgress: (f) => realSay(what + ": " + Math.round(f * 100) + "%") });
+        await RealFM1.servePackage(link, image, { start, ...extra, onProgress: (f, phase) => realSay(what + (extra.flashEnd ? (phase === 2 ? ": Writing firmware… " : ": Checking package… ") : ": ") + Math.round(f * 100) + "%") });
       }
       async function mbootImage(which) {
         const raw = unb64(MBOOT[which]);
@@ -1611,7 +1611,8 @@
             RealFM1.checkPackage(pkg, REAL.info.key); // the unit's own checks, asked here first: nothing is sent if one fails
             // the protector's MIDI mode waits for the "start install" message, then reads the package twice and ends with a finish read
             try {
-              await realServe(REAL.upLink, image, true, "Installing " + f.name, { untilFinish: true });
+              const fl = pkg.files.find((x) => x.type === 0);
+              await realServe(REAL.upLink, image, true, "Installing " + f.name, { untilFinish: true, flashEnd: fl.offset + fl.size }); // the unit shows two bars: it checks the package, then writes
             } catch (e) {
               throw Error(e.message + ". Look at the unit's screen: it says why it refused or stopped (a package for another chip key, a damaged one, a flash error). Nothing is erased before the unit has checked the whole package.");
             }
