@@ -139,3 +139,26 @@ test("the flash map lists the directory and which sectors hold data", () => {
   assert.strictEqual(m.used, 2); assert.strictEqual(m.protector.installed, false);
   assert.deepStrictEqual(R.flashMap(new Uint8Array(0x100000).fill(0xff)).records, []);
 });
+test("in the protector's MIDI mode the install starts with the soft message and a silent unit is never done", async () => {
+  const image = new Uint8Array(1024).map((_, i) => i & 255);
+  const sent = [];
+  const link = new R.Link({}, { send: (b) => sent.push(Array.from(b)) });
+  const t = Date.now();
+  await assert.rejects(R.servePackage(link, image, { start: true, untilFinish: true, doneMs: 50, idleMs: 400 }), /stopped asking/);
+  assert.deepStrictEqual(sent[0], Array.from(R.soft(R.SOFT.UPGRADE)));
+  assert.ok(Date.now() - t >= 350);
+});
+test("a package is checked against the chip key the way the unit does, before anything is sent", () => {
+  const KEY = 38927, flash = new Uint8Array(0x8000).fill(0xff);
+  const raw = new Uint8Array(32).map((_, i) => i * 3 + 1); // the block at 0x4000 as the unit sees it after decrypting with the key
+  const c = R.crc16(raw.subarray(2, 32)); raw[0] = c & 255; raw[1] = c >> 8;
+  flash.set(R.enc(KEY, raw), 0x4000);
+  const pkg = (fl) => R.unweave(R.wrap(fl, "FM-1_015"));
+  assert.deepStrictEqual(R.checkPackage(pkg(flash), KEY), { size: 0x8000 });
+  assert.throws(() => R.checkPackage(pkg(flash), KEY + 1), /another chip key/);
+  assert.throws(() => R.checkPackage(pkg(new Uint8Array(0x4000).fill(1)), KEY), /refuses/);
+  const bad = Uint8Array.from(R.wrap(flash, "FM-1_015")); const u = R.unweave(bad); bad[1024 + 0x100 + 48 * 20 + 1000] ^= 1;
+  assert.throws(() => R.checkPackage(R.unweave(bad), KEY), /damaged|another chip key/);
+  const stage = R.unweave(require("fs").readFileSync(__dirname + "/../vendor/mboot/fm1-stage.fwsc"));
+  assert.throws(() => R.checkPackage(stage, KEY), /no flash image/);
+});

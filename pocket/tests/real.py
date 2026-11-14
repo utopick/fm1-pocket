@@ -41,6 +41,7 @@ function makeUnit() {
   } };
   const upOut = { name: 'FM-1 Update', send(b) {
     const p = R.parse(b);
+    if (p && p.soft) window.__log.push('up:soft' + p.soft.toString(16));
     if (p && p.soft === 0x7e) { window.__restarted = 1; acc.inputs.delete(upIn.id); acc.inputs.set(fwIn.id, fwIn); acc.outputs.delete('FM-1 Update'); acc.outputs.set('FM-1 MIDI 1', fwOut); setTimeout(() => acc.onstatechange && acc.onstatechange({}), 50); return; }
     if (!p || !p.cmd) return;
     const a = p.body, at = le(a, 1), n = a[5] | a[6] << 8 | a[7] << 16;
@@ -222,6 +223,17 @@ class Real(unittest.TestCase):
         self.wait("!document.querySelector('#job').hidden && document.querySelector('#jobTitle').textContent.includes('FAILED')", 40)
         self.assertIn("INSTALL", self.text("#jobTitle")); self.assertFalse(self.js("return document.querySelector('#jobOk').hidden"))
         self.click('#jobOk'); self.assertTrue(self.js("return document.querySelector('#job').hidden"))
+        # in the protector's MIDI mode the unit waits for the "start install" message (7F) before it asks for the package
+        self.js("""const KEY = 38927, fl = new Uint8Array(0x8000).fill(255), raw = new Uint8Array(32).map((_, i) => i * 3 + 1); // a firmware this unit's key can read
+          const c = RealFM1.crc16(raw.subarray(2, 32)); raw[0] = c & 255; raw[1] = c >> 8; fl.set(RealFM1.enc(KEY, raw), 0x4000);
+          const dt = new DataTransfer(); dt.items.add(new File([RealFM1.wrap(fl, 'FM-1_015')], 'test.fwsc'));
+          const i = document.querySelector('#file'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true }));"""); time.sleep(2)
+        self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=fw]').click()"); time.sleep(0.5)
+        self.js("document.querySelector('#job').hidden = true; [...document.querySelectorAll('#fwList .fwc')].find(c => /your file/.test(c.textContent)).querySelector('.inst').click()"); time.sleep(0.5)
+        self.slide(); self.wait("window.__log.includes('up:soft7f')", 10)
+        self.assertEqual(self.js("return window.__log.filter(l => l === 'up:soft7f').length"), 1)
+        self.d.refresh(); time.sleep(1.5)  # leaves the unit's silence to the unit tests: a new page, the kept backup
+        self.js("localStorage.clear()")
         # a reload forgets the session, not the browser: the kept backup unlocks it again
         self.d.refresh(); time.sleep(1.5)
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None

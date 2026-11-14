@@ -1405,9 +1405,9 @@
         if (!/FM-1/i.test(REAL.ident)) throw Error("this does not say it is an FM-1 (it says: " + REAL.ident + ")");
         return REAL.ident;
       }
-      async function realServe(link, image, start, what) {
+      async function realServe(link, image, start, what, extra = {}) {
         realSay(what + "…");
-        await RealFM1.servePackage(link, image, { start, onProgress: (f) => realSay(what + ": " + Math.round(f * 100) + "%") });
+        await RealFM1.servePackage(link, image, { start, ...extra, onProgress: (f) => realSay(what + ": " + Math.round(f * 100) + "%") });
       }
       async function mbootImage(which) {
         const raw = unb64(MBOOT[which]);
@@ -1605,9 +1605,16 @@
         if (!ok) return realNotice("BACK THE UNIT UP AGAIN", "The backup shows another protector than the one running now (" + i.version + "). BACKUP once more so the page can check this one.");
         sure("Install " + f.name + " on the real FM-1? Its present firmware is replaced (and its saved patches with it, unless you restore your backup)." + (ok.jedec === 0xb36014 ? " This unit has the newer flash chip, which has had little testing." : "") + " The unit checks the package before it erases anything and only writes the firmware area, never the boot area.", () =>
           realRun("Install", async () => {
-            const { identity, image } = RealFM1.unweave(await packageOf(f));
+            const pkg = RealFM1.unweave(await packageOf(f)), { identity, image } = pkg;
             if (!/FM-1/i.test(identity)) throw Error("this package says it is for " + identity);
-            await realServe(REAL.upLink, image, false, "Installing " + f.name);
+            realSay("Checking the package against this unit's chip key…");
+            RealFM1.checkPackage(pkg, REAL.info.key); // the unit's own checks, asked here first: nothing is sent if one fails
+            // the protector's MIDI mode waits for the "start install" message, then reads the package twice and ends with a finish read
+            try {
+              await realServe(REAL.upLink, image, true, "Installing " + f.name, { untilFinish: true });
+            } catch (e) {
+              throw Error(e.message + ". Look at the unit's screen: it says why it refused or stopped (a package for another chip key, a damaged one, a flash error). Nothing is erased before the unit has checked the whole package.");
+            }
             realSay("Done: the unit restarts into " + f.name + ". If its screen stays dark, switch it off and on; hold PLAY at power-on for the recovery menu.");
             toast(f.name + " installed", 5000);
           }));
