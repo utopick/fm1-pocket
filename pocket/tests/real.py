@@ -44,11 +44,12 @@ function makeUnit() {
     if (p && p.soft === 0x7e) { window.__restarted = 1; acc.inputs.delete(upIn.id); acc.inputs.set(fwIn.id, fwIn); acc.outputs.delete('FM-1 Update'); acc.outputs.set('FM-1 MIDI 1', fwOut); setTimeout(() => acc.onstatechange && acc.onstatechange({}), 50); return; }
     if (!p || !p.cmd) return;
     const a = p.body, at = le(a, 1), n = a[5] | a[6] << 8 | a[7] << 16;
-    if (p.cmd === 0x12) tell(upIn, R.frame(0x12, [...Array.from('MBOOT').map(c => c.charCodeAt(0)), 1, 2, 1, 0x0f, 0x98, 0, 0, 0x10, 0, 0x14, 0x60, 0x85, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, ...Array.from('2.4-fake\\0').map(c => c.charCodeAt(0))]));
+    if (p.cmd === 0x12) tell(upIn, R.frame(0x12, [...Array.from('MBOOT').map(c => c.charCodeAt(0)), 1, window.__kind || 2, 1, 0x0f, 0x98, 0, 0, 0x10, 0, 0x14, 0x60, 0x85, 0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 0, ...Array.from('2.4-fake\\0').map(c => c.charCodeAt(0))]));
     else if (p.cmd === 0x23) tell(upIn, R.frame(0x23, [...a.slice(0, 8), ...flash.subarray(at, at + n)]));
     else if (p.cmd === 0x24) tell(upIn, R.frame(0x24, [...a.slice(0, 8), ...new Uint8Array(new Uint32Array([R.crc32(flash.subarray(at, at + n))]).buffer)]));
   } };
   acc.outputs.set('FM-1 MIDI 1', fwOut);
+  if (window.__startUpdate) { acc.inputs.delete(fwIn.id); acc.inputs.set(upIn.id, upIn); acc.outputs.delete('FM-1 MIDI 1'); acc.outputs.set('FM-1 Update', upOut); }
   window.__fwOut = fwOut; window.__fwIn = fwIn; window.__ctlIn = ctlIn; window.__flash = flash;
   return acc;
 }"""
@@ -69,6 +70,7 @@ class Real(unittest.TestCase):
         o = webdriver.ChromeOptions()
         for a in ("--headless=new", "--mute-audio", "--window-size=844,390", "--autoplay-policy=no-user-gesture-required"): o.add_argument(a)
         dl = tempfile.mkdtemp(prefix="fm1-test-dl-")  # the backups the page saves go here, not into the user's Downloads
+        self.dl = dl
         self.addCleanup(shutil.rmtree, dl, True)
         o.add_experimental_option("prefs", {"download.default_directory": dl, "download.prompt_for_download": False})
         self.d = webdriver.Chrome(options=o)
@@ -177,6 +179,47 @@ class Real(unittest.TestCase):
         self.assertIn("protector: NOT installed", self.text("#realNames"))
         self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without the protector")
         self.assertIn("No protector, no custom firmware", self.text("#realMsg"))
+
+    def files(self): return [f for f in os.listdir(self.dl) if f.endswith(".bin")]
+
+    def test_the_backup_is_kept_in_the_browser_and_its_file_is_saved_once(self):
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
+        time.sleep(1); self.assertEqual(len(self.files()), 1)
+        self.click('#realBackup'); self.wait("document.querySelector('#realMsg').textContent.includes('Backup kept in this browser')", 90)
+        time.sleep(1); self.assertEqual(len(self.files()), 1, "the second backup must not pile up another file")
+        time.sleep(4)  # the backup starts the emulator and closes the menu: open it again
+        self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=conn]').click(); document.querySelector('button[data-sub=real]').click()"); time.sleep(0.5)
+        self.d.find_element('css selector', '#realSave').click(); time.sleep(2); self.assertEqual(len(self.files()), 2)  # SAVE BACKUP gives the kept one on demand
+
+    def test_install_unlocks_only_with_the_protector_running_and_shown_in_a_backup(self):
+        plain = [0] * 0x70
+        for i, c in enumerate("AC79BLID"): plain[0x40 + i] = ord(c)
+        for i, c in enumerate("fm1"): plain[0x48 + i] = ord(c)
+        for i, c in enumerate("m-bootloader 2.4-fake"): plain[0x50 + i] = ord(c)
+        src = "window.__kind = 1; window.__startUpdate = 1; Object.defineProperty(window, '__flashInit', { get() { const f = new Uint8Array(0x100000).fill(255); f.set(RealFM1.enc(0xffff, Uint8Array.from(%s)), 0xb0); return f; } });" % plain
+        self.d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": src})
+        self.d.get(BASE + "index.html"); time.sleep(1.5)
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]')
+        self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
+        self.click('#realConn'); time.sleep(1.5)
+        self.click('#realInfo'); self.wait("window.__copied"); self.assertIn("install unlocked: no", self.js("return window.__copied"))
+        self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "locked before a backup shows the protector")
+        self.click('#realBackup'); self.wait("document.querySelector('#realMsg').textContent.includes('is in this flash')", 90)
+        self.js("window.__copied = null"); self.click('#realInfo'); self.wait("window.__copied")
+        self.assertIn("install unlocked: yes", self.js("return window.__copied"))
+        got = self.js("return [document.querySelectorAll('#fwList .inst:not([hidden])').length, document.querySelectorAll('#fwList .fwc').length, document.querySelectorAll('#fwList .inst').length]")
+        self.assertIn(got[0], (got[1], got[1] - 1), "every card (the backup's own excepted) offers INSTALL: %s" % got)
+        self.assertGreater(got[0], 50)
+        # a reload forgets the session, not the browser: the kept backup unlocks it again
+        self.d.refresh(); time.sleep(1.5)
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]')
+        self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
+        self.click('#realConn'); time.sleep(1.5); self.click('#realInfo'); self.wait("window.__copied")
+        self.assertIn("install unlocked: yes", self.js("return window.__copied"))
 
     def test_a_backup_that_shows_the_protector_says_so(self):
         plain = [0] * 0x70
