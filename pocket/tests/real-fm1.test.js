@@ -117,3 +117,13 @@ test("a flash copy wrapped as a package unweaves back to the same flash", () => 
   assert.ok(Buffer.from(u.image.subarray(f.offset, f.offset + f.size)).equals(Buffer.from(flash)));
   assert.throws(() => R.wrap(new Uint8Array(100)));
 });
+test("the protector is found by its identity in the boot container, and a stock flash has none", () => {
+  const stock = new Uint8Array(0x100000).map((_, i) => (i * 5 + (i >> 8)) & 255);
+  assert.deepStrictEqual(R.protector(stock), { installed: false });
+  const plain = new Uint8Array(0x70); // the payload as the bootloader holds it: identity at 0x40
+  plain.set(Buffer.from("AC79BLID"), 0x40); plain.set(Buffer.from("fm1"), 0x48); plain.set(Buffer.from("m-bootloader 2.4"), 0x50);
+  const flash = new Uint8Array(0x100000).fill(0xff);
+  flash.set(R.enc(0xffff, plain), 0xb0); // ENC is its own inverse: this is how it sits in the chip
+  assert.deepStrictEqual(R.protector(flash), { installed: true, board: "fm1", version: "m-bootloader 2.4" });
+  assert.deepStrictEqual(R.protector(new Uint8Array(10)), { installed: false });
+});
