@@ -5,7 +5,7 @@
 The fake unit has a firmware port ("FM-1 MIDI 1": answers its identity, and on the upgrade message reads the package by 0x30
 as a real firmware does, then restarts) and, after that, an update port ("FM-1 Update": m-bootloader's read commands).
 """
-import functools, http.server, os, threading, time, unittest
+import functools, http.server, os, shutil, tempfile, threading, time, unittest
 from selenium import webdriver
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -68,6 +68,9 @@ class Real(unittest.TestCase):
     def setUp(self):
         o = webdriver.ChromeOptions()
         for a in ("--headless=new", "--mute-audio", "--window-size=844,390", "--autoplay-policy=no-user-gesture-required"): o.add_argument(a)
+        dl = tempfile.mkdtemp(prefix="fm1-test-dl-")  # the backups the page saves go here, not into the user's Downloads
+        self.addCleanup(shutil.rmtree, dl, True)
+        o.add_experimental_option("prefs", {"download.default_directory": dl, "download.prompt_for_download": False})
         self.d = webdriver.Chrome(options=o)
         self.addCleanup(self.d.quit)
         self.d.execute_cdp_cmd("Network.enable", {})
