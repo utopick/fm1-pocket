@@ -163,5 +163,29 @@ class Real(unittest.TestCase):
         self.click('#realProt'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no protector before a backup")
         self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without MIDI mode")
 
+    def test_no_protector_no_custom_firmware(self):
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.assertIn("M-Flasher", self.text("#realRules"))
+        self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
+        self.assertIn("NOT in this flash", self.text("#realMsg"))
+        self.assertIn("protector: NOT installed", self.text("#realNames"))
+        self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without the protector")
+        self.assertIn("No protector, no custom firmware", self.text("#realMsg"))
+
+    def test_a_backup_that_shows_the_protector_says_so(self):
+        plain = [0] * 0x70
+        for i, c in enumerate("AC79BLID"): plain[0x40 + i] = ord(c)
+        for i, c in enumerate("fm1"): plain[0x48 + i] = ord(c)
+        for i, c in enumerate("m-bootloader 2.4"): plain[0x50 + i] = ord(c)
+        self.d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": "Object.defineProperty(window, '__flashInit', { get() { const f = new Uint8Array(0x100000).fill(255); f.set(RealFM1.enc(0xffff, Uint8Array.from(%s)), 0xb0); return f; } });" % plain})
+        self.d.get(BASE + "index.html"); time.sleep(1.5)
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
+        self.assertIn("m-bootloader 2.4) is in this flash", self.text("#realMsg"))
+        self.assertIn("protector: installed", self.text("#realNames"))
+        self.click('#realProt'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "already there: nothing to install")
+
 
 if __name__ == "__main__": unittest.main(verbosity=2)

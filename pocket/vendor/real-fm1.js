@@ -125,6 +125,15 @@ const RealFM1 = (() => {
     return out;
   }
 
+  // ---- is m-bootloader in this flash? Its boot container (physical 0xA0, ENC 0xFFFF over the whole payload) holds a 48-byte identity at
+  // payload offset 0x40: "AC79BLID", the board tag ("fm1"), a version text (m-bootloader's specification, 8.1). The stock bootloader has none.
+  function protector(flash) {
+    if (!flash || flash.length < 0xb0 + 0x70) return { installed: false };
+    const d = enc(0xffff, flash.subarray(0xb0, 0xb0 + 0x70)), text = (from, to) => String.fromCharCode(...Array.from(d.subarray(from, to)).filter(Boolean).filter((c) => c >= 32 && c < 127));
+    if (text(0x40, 0x48) !== "AC79BLID") return { installed: false };
+    return { installed: true, board: text(0x48, 0x50), version: text(0x50, 0x70) };
+  }
+
   // ---- a package (.fwsc): identity bytes sit in the 48th byte of the first blocks; the unit reads the image without them
   function unweave(raw) {
     const B = 48, K = 47, MIN = 20, S = 0x7d;
@@ -202,6 +211,6 @@ const RealFM1 = (() => {
     }
   }
 
-  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, unweave, wrap, servePackage, crc16, crc32, enc };
+  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, protector, unweave, wrap, servePackage, crc16, crc32, enc };
 })();
 if (typeof module !== "undefined") module.exports = RealFM1;
