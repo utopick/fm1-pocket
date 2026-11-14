@@ -129,7 +129,7 @@ class Real(unittest.TestCase):
         self.js("window.__sent = []; const o = window.__fwOut.send; window.__fwOut.send = (b) => { __sent.push(Array.from(b)); o(b); }")
         self.js("realThru([0x90, 60, 100])")
         self.assertEqual(self.js("return __sent.length"), 0, "sync is off: nothing goes out")
-        self.click('#realSync'); self.assertIn("SYNC ON", self.text("#realSync"))
+        self.click('#realSync'); self.assertIn("PLAYING TOGETHER", self.text("#realSync"))
         self.js("realThru([0x90, 60, 100]); realThru([0xf0, 1, 0xf7])")
         self.assertEqual(self.js("return __sent"), [[0x90, 60, 100]], "notes go, SysEx never does")
         self.js("window.__fwIn.onmidimessage({ data: new Uint8Array([0xf8]) })")  # the unit's clock arrives with no error
@@ -167,20 +167,23 @@ class Real(unittest.TestCase):
     def test_the_protector_and_the_firmware_wait_for_their_steps(self):
         self.click('button[data-sub=real]'); self.click('#realConn')
         self.click('#realProt'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no protector before a backup")
-        self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without MIDI mode")
+        self.install_card(); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without MIDI mode")
 
     def test_no_protector_no_custom_firmware(self):
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
         self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
-        self.assertIn("M-Flasher", self.text("#realRules"))
+        self.click('#realWarn'); self.assertIn("M-Flasher", self.text("#jobText")); self.click('#jobOk')  # the warnings are a dialog, the pane never scrolls
         self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
         self.assertIn("NOT in this flash", self.text("#realMsg"))
         self.assertEqual(self.js("return document.querySelectorAll('#realMapGrid i').length"), 256)
         self.assertFalse(self.js("return document.querySelector('#realMap').hidden"))
         self.assertIn("protector: NOT installed", self.text("#realNames"))
-        self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without the protector")
+        self.install_card(); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without the protector")
         self.assertFalse(self.js("return document.querySelector('#job').hidden"), "a dialog says why")
         self.assertIn("NO PROTECTOR, NO CUSTOM FIRMWARE", self.text("#jobTitle"))
+
+    def install_card(self):  # the buttons of the cards are the way to install; a hidden one still answers a click
+        self.js("document.querySelector('#fwList .inst:not([data-own=\"1\"])').click()"); time.sleep(0.3)
 
     def files(self): return [f for f in os.listdir(self.dl) if f.endswith(".bin")]
 
@@ -209,7 +212,7 @@ class Real(unittest.TestCase):
         self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
         self.click('#realConn'); time.sleep(1.5)
         self.click('#realInfo'); self.wait("window.__copied"); self.assertIn("install unlocked: no", self.js("return window.__copied"))
-        self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "locked before a backup shows the protector")
+        self.install_card(); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "locked before a backup shows the protector")
         self.click('#realBackup'); self.wait("document.querySelector('#realMsg').textContent.includes('is in this flash')", 90)
         self.js("window.__copied = null"); self.click('#realInfo'); self.wait("window.__copied")
         self.assertIn("install unlocked: yes", self.js("return window.__copied"))

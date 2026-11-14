@@ -154,6 +154,8 @@
 
         [data-view="up"] #up { --u: min(calc(100cqw / 1400), calc(100cqh / 540)); flex: 1; }
         [data-view="keys"] #up, [data-view="up"] #kb { display: none; }
+        /* only the keys: the row keeps its proportions (about 1 : 4.5) and sits at the bottom, as on the unit, instead of stretching to the height of the screen */
+        [data-view="keys"] #kb { flex: none; height: min(100%, 22cqw); margin-top: auto; }
       }
       @media (orientation: portrait) and (pointer: fine) {
         #flip { display: none; }
@@ -212,19 +214,33 @@
          the same screen under each filter. Tap one to use it */
       #menu section.row { flex-direction: row; }
       #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
-      #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx, #menu [data-sub="midi"] #pvMidi, #menu [data-sub="inst"] #pvInst, #menu [data-sub="real"] #pvReal { display: flex; }
-      #realSteps, #realRules { font-size: 12px; line-height: 1.4; padding: 8px 10px; border: 1px solid var(--rim); border-radius: 10px; color: var(--silk); }
-      #realSteps ol { margin: 4px 0 0; padding-left: 18px; }
-      #realSteps li, #realRules li { margin-bottom: 3px; }
-      #realMap { font-size: 12px; line-height: 1.4; color: var(--silk); }
-      #realMapGrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; margin: 6px 0; width: min(100%, 340px); aspect-ratio: 1; }
+      #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx, #menu [data-sub="midi"] #pvMidi, #menu [data-sub="inst"] #pvInst { display: flex; }
+      #menu [data-sub="real"] #pvReal { display: grid; }
+      /* the REAL FM-1 pane never scrolls: two columns (status and buttons | the flash map), one column in a narrow window; the long texts are dialogs */
+      #menu #pvReal { overflow: hidden; }
+      #pvReal { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 10px; align-content: start; overflow: hidden; font-size: 11px; line-height: 1.3; color: var(--silk); }
+      @media (max-aspect-ratio: 1/1) { #pvReal { grid-template-columns: minmax(0, 1fr); } }
+      #realLeft { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+      #pvReal p { margin: 0; font-size: 11px; line-height: 1.3; color: var(--m-dim); display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+      #realNames { -webkit-line-clamp: 1; }
+      #realMsg { -webkit-line-clamp: 1; }
+      #realNext { color: var(--silk); font-weight: 700; -webkit-line-clamp: 2; }
+      #realBtns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+      #realBtns button { min-height: 30px; padding: 2px; font-size: 10.5px; line-height: 1.15; }
+      #realBtns .play { grid-column: 1 / -1; min-height: 36px; }
+      #realBtns .writes { box-shadow: inset 0 0 0 1px #ff7a8c88; }
+      #realBtns button:disabled { opacity: 0.38; cursor: default; }
+      #realRight { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+      #pvReal #realDisclaimer { font-size: 10px; line-height: 1.25; color: #ffb3bd; border: 1px solid #ff7a8c66; border-radius: 8px; padding: 4px 6px; -webkit-line-clamp: unset; }
+      #realMap { min-width: 0; font-size: 10px; line-height: 1.2; color: var(--silk); }
+      #realMapFlex { display: flex; gap: 8px; align-items: flex-start; margin-top: 4px; }
+      #realMapGrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 1px; flex: none; width: min(42%, 132px); aspect-ratio: 1; }
       #realMapGrid i { aspect-ratio: 1; border-radius: 2px; background: var(--c); }
       #realMapGrid i.b { opacity: 0.3; } /* blank sector inside a region */
       #realMapGrid i.f { background: repeating-linear-gradient(45deg, #3a3532 0 2px, #2a2624 2px 4px); }
-      #realMapKey { margin: 0; padding-left: 0; list-style: none; }
-      #realMapKey li { display: flex; gap: 6px; align-items: baseline; }
+      #realMapKey { margin: 0; padding: 0; list-style: none; min-width: 0; flex: 1; }
+      #realMapKey li { display: flex; gap: 4px; align-items: baseline; font-size: 9.5px; line-height: 1.25; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
       #realMapKey li u { flex: none; width: 10px; height: 10px; border-radius: 2px; background: var(--c); align-self: center; }
-      #realRules ol { margin: 4px 0 0; padding-left: 18px; }
       #menu [data-sub="skin"] #pvSkin { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(130px, 16% - 8px), 1fr)); grid-auto-rows: max-content; align-content: start; overflow: auto; padding-right: 4px; }
       /* a skin card keeps its shape whatever the window: its little FM-1 is drawn to a fixed ratio */
       #menu #pvSkin .pick { height: auto; }
@@ -279,11 +295,26 @@
         #menu section.row { flex-direction: column; }
         #menu .tabs button { font-size: 9px; }
       }
+      /* a phone held sideways has about 390 px of height: the menu gives it back to the panes (no pane scrolls except the list of firmwares and the manual) */
+      @media (max-height: 460px) {
+        #menu .card { padding: 6px; gap: 6px; }
+        #menu button { min-height: 34px; padding-top: 3px; padding-bottom: 3px; }
+        #menu section > .grid button i { display: none; }
+        #menu section > .grid { gap: 5px; }
+        #menu .fwc button { min-height: 32px; }
+        #realBtns button { min-height: 30px; }
+        #menu .box.pane { padding: 6px 8px; }
+        #menu .thanks h3 { font-size: 9px; }
+        #menu .thanks .lead { font-size: 15px; }
+        #menu .thanks p { font-size: 12px; line-height: 1.3; }
+        #menu [data-sub="skin"] #pvSkin { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; }
+      }
       /* a dangerous action asks first: a slider to pull to the end, so a stray tap cannot do it */
       #sure { position: fixed; inset: 0; z-index: 7; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
       #sure[hidden] { display: none; }
       #sure .box { width: min(92%, 460px); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
       #sure p { margin: 0; }
+      #sure #sureWarn { font-size: 12px; color: #ffb3bd; border: 1px solid #ff7a8c88; border-radius: 10px; padding: 8px 10px; }
       /* a job on the real unit (backup, protector, install...): a dialog that stays until it is read, so there is always an answer and nowhere else to go meanwhile */
       #job { position: fixed; inset: 0; z-index: 8; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
       #job[hidden] { display: none; }
@@ -291,7 +322,10 @@
       #job h3 { margin: 0; font: 800 14px ui-monospace, Menlo, monospace; letter-spacing: 2px; }
       #job.bad h3 { color: #ff7a8c; }
       #job.ok h3 { color: #8ff5df; }
-      #job p { margin: 0; white-space: pre-wrap; }
+      #job #jobText { margin: 0; white-space: pre-wrap; }
+      #job ol { margin: 0; padding-left: 18px; white-space: normal; }
+      #job li { margin-bottom: 4px; }
+      #job a { color: var(--silk); }
       #jobBar { width: 100%; height: 14px; accent-color: var(--lit); }
       #jobOk { min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #sure .hint { font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: var(--m-dim); text-align: center; }
@@ -394,10 +428,33 @@
             <button id="inst" class="big" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
           </div>
           <div class="box pane" id="pvReal">
-            <h3>REAL FM-1</h3>
-            <p>Connect a real FM-1 with a USB cable (Chrome or Edge, a computer or an Android phone; not iPhone). It can play along with this one, and this page can back up its flash and install firmwares on it. Do the steps in order and read what each one says.</p>
-            <div id="realSteps">
-              <b>How it goes</b>
+            <div id="realLeft">
+              <p id="realNames">Not connected yet.</p>
+              <p id="realNext"></p>
+              <div id="realBtns">
+                <button id="realSync" class="play" title="Play with the real FM-1: what you play on this screen goes to the real unit too, and what the real unit plays (notes and clock) comes here. Not a MIDI keyboard, not a firmware installer."></button>
+                <button id="realConn" title="Connect a real FM-1 over USB MIDI (asks to use SysEx)">CONNECT</button>
+                <button id="realBackup" title="Save a copy of the whole flash of the real FM-1. Nothing is written to the unit except a small helper in RAM">BACKUP</button>
+                <button id="realProt" class="writes" title="Install the protected bootloader (m-bootloader), so a bad firmware can always be replaced over USB. WRITES to the unit">PROTECTOR</button>
+                <button id="realRestart" title="If the unit stays in the helper after a backup: ask the helper to restart it. (Switching it off and unplugging the USB cable does the same.)">RESTART UNIT</button>
+                <button id="realInfo" title="Read what the unit says about itself (nothing is written) and copy a text report: ports, identity, chip, flash, backup, and what happened. Paste it in a message.">INSPECT · COPY</button>
+                <button id="realSave" title="Save the last backup kept in this browser for the connected unit as a file">SAVE BACKUP</button>
+                <button id="realHow" title="The steps, in order">HOW IT GOES</button>
+                <button id="realWarn" title="What can go wrong, and what to do first">WARNINGS</button>
+              </div>
+              <p id="realMsg"></p>
+            </div>
+            <div id="realRight">
+              <div id="realMap" hidden>
+                <b>FLASH MAP · 1 square = 4 KiB</b>
+                <div id="realMapFlex">
+                  <div id="realMapGrid" role="img" aria-label="Map of the flash: used and blank sectors"></div>
+                  <ul id="realMapKey"></ul>
+                </div>
+              </div>
+              <p id="realDisclaimer"></p>
+            </div>
+            <template id="tplHow"><b>How it goes</b>
               <ol>
                 <li><b>CONNECT</b> with the unit on, running its firmware, and its USB cable in.</li>
                 <li><b>BACKUP.</b> A small helper restarts the unit; wait until the message says the backup is done. The first backup of a unit is saved as a file (keep it off this computer: it holds the original boot area) and every one is kept in this browser. Then <b>RESTART UNIT</b>, or switch it off and unplug the cable for a few seconds.</li>
@@ -405,35 +462,15 @@
                 <li><b>BACKUP again.</b> It has to show the protector. It is kept, so this is done once per unit.</li>
                 <li><b>Protector's MIDI mode:</b> switch the unit off, hold <b>PLAY</b> while switching it on, choose MIDI mode on its screen, then CONNECT here. (Holding PLAY at power-on always opens the m-bootloader menu: it is the way back if a firmware does not start.)</li>
                 <li>In <b>FIRMWARE</b>, an <b>INSTALL</b> button appears on each card once all of this is in place. M-VAVE's own FM-1.fwsc (OPEN FILE) puts the original firmware back the same way.</li>
-              </ol>
-            </div>
-            <div id="realRules">
-              <b>Before anything is written to the unit</b>
+              </ol></template>
+            <template id="tplWarn"><b>Before anything is written to the unit</b>
               <ol>
                 <li>BACKUP first, and copy the file off this computer.</li>
                 <li>The protector (<a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>) goes in before any custom firmware. Without it a bad firmware can leave the unit dead, and only a USB_KEY dongle, or a second working unit running <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>, brings it back.</li>
                 <li>A unit with the newer flash chip (UC25HQ80, JEDEC B36014) has had little testing: install the protector with <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> first, not here.</li>
                 <li>After the protector, BACKUP again here: a custom firmware is only offered when that backup shows the protector.</li>
                 <li>Do not unplug or switch off during a write.</li>
-              </ol>
-            </div>
-            <p id="realNames">Not connected yet.</p>
-            <p id="realMsg"></p>
-            <div id="realMap" hidden>
-              <b>FLASH MAP · 1 MiB = 256 × 4 KiB</b> (colours as in M-Flasher; dim = nothing in it)
-              <div id="realMapGrid" role="img" aria-label="Map of the flash: used and blank sectors"></div>
-              <ul id="realMapKey"></ul>
-            </div>
-            <div class="grid">
-              <button id="realConn" title="Connect a real FM-1 over USB MIDI (asks to use SysEx)"><i>USB MIDI</i>CONNECT</button>
-              <button id="realSync" title="Sync: what you play here goes to the real FM-1 too, and what the real FM-1 plays (notes and clock) comes here"><i>PLAY TOGETHER</i>SYNC OFF</button>
-              <button id="realBackup" title="Step 1: save a copy of the whole flash of the real FM-1 to a file. Nothing is written to the unit except a small helper in RAM"><i>STEP 1 · SAFE</i>BACKUP</button>
-              <button id="realProt" title="Step 2: install the protected bootloader (m-bootloader), so a bad firmware can always be replaced over USB"><i>STEP 2 · WRITES</i>PROTECTOR</button>
-              <button id="realInfo" title="Read what the unit says about itself (nothing is written) and copy a text report: ports, identity, chip, flash, backup, and what happened. Paste it in a message."><i>NO WRITES</i>INSPECT · COPY</button>
-              <button id="realRestart" title="If the unit stays in the helper after a backup: ask the helper to restart it. (Switching it off and unplugging the USB cable does the same.)"><i>HELPER MODE</i>RESTART UNIT</button>
-              <button id="realSave" title="Save the last backup kept in this browser for the connected unit as a file"><i>KEPT IN THIS BROWSER</i>SAVE BACKUP</button>
-              <button id="realFw" title="Step 3: install the firmware chosen in FIRMWARE on the real FM-1, through the protector's MIDI mode"><i>STEP 3 · WRITES</i>INSTALL FIRMWARE</button>
-            </div>
+              </ol></template>
           </div>
           <div class="grid">
             <button data-sub="midi" title="MIDI: connect a controller and map its knobs, pads and keys"><i>OPTIONS</i>MIDI CONTROLLER</button>
@@ -455,7 +492,13 @@
             <p class="lead">FM1.Pocket is a fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by <b>Joakim Eriksson</b>.</p>
             <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app adds a phone-first front to it, a mapper for MIDI controllers and installation as an app.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
-            <button id="licence" title="The full text of the licences"><i>MIT</i>LICENSE</button>
+            <button id="licence" title="The full text of the licences and every credit"><i>MIT</i>LICENSES · CREDITS</button>
+          </div>
+          <div class="box thanks">
+            <h3>ALSO THANKS</h3>
+            <p><b>jvitkauskas</b> (MIT): <a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>, the protector and its USB MIDI updater (v2.4 is bundled; its specification is how this page talks to the unit), <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> (the flash map's regions and colours; the way to install the protector on the newer chip) and <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>.</p>
+            <p><b>M-VAVE</b> made the FM-1; the manual here follows its user manual, in our own words. <b>The firmware authors</b> and <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the Firmware Hub</a> made everything you can run.</p>
+            <p class="hint">Unofficial: not affiliated with M-VAVE, JieLi or any of them.</p>
           </div>
         </section>
         <input type="file" id="file" accept=".fwsc" hidden />
@@ -493,16 +536,39 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 </pre>
+    <pre id="licMboot" hidden>MIT License
+
+Copyright (c) 2026 Julius Vitkauskas
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</pre>
     <div id="job" hidden>
       <div class="box" role="alertdialog" aria-modal="true" aria-labelledby="jobTitle" aria-describedby="jobText">
         <h3 id="jobTitle"></h3>
-        <p id="jobText"></p>
+        <div id="jobText"></div>
         <progress id="jobBar" max="100" value="0" hidden></progress>
         <button id="jobOk" hidden>OK</button>
       </div>
     </div>
     <div id="sure" hidden>
       <div class="box" role="alertdialog" aria-modal="true" aria-labelledby="sureText">
+        <p id="sureWarn" hidden></p>
         <p id="sureText"></p>
         <input type="range" id="sureSlide" min="0" max="100" value="0" title="Slide all the way to the right to confirm" aria-label="Slide all the way to the right to confirm" />
         <p class="hint">SLIDE TO THE END TO CONFIRM →</p>
@@ -2305,7 +2371,7 @@ registerProcessor("fm1", Fm1);
         sureGo = go;
         $("#sure").hidden = false;
       }
-      const sureClose = () => (($("#sure").hidden = true), (sureGo = null));
+      const sureClose = () => (($("#sure").hidden = true), ($("#sureWarn").hidden = true), (sureGo = null));
       $("#sureSlide").onchange = () => {
         if (+$("#sureSlide").value < 97) return ($("#sureSlide").value = 0), toast("Slide all the way to confirm");
         const go = sureGo;
@@ -2553,11 +2619,15 @@ registerProcessor("fm1", Fm1);
       const isUpdatePort = (name) => /update/i.test(name || "");
       const REAL = { acc: null, fw: null, up: null, fwLink: null, upLink: null, info: null, sync: false, busy: false, saved: null, stored: null, ident: "" };
       const REAL_LOG = [];
+      // said on the pane and over every slider that touches the unit
+      const REAL_DISCLAIMER = "CAUTION. Unofficial tool, not affiliated with M-VAVE, JieLi or the makers of m-bootloader. Writing to a unit can leave it dead: you use it at your own risk, with no warranty. Back up first and never unplug or switch off while it works.";
+      $("#realDisclaimer").textContent = REAL_DISCLAIMER;
+      const realSure = (text, go) => (sure(text, go), ($("#sureWarn").textContent = REAL_DISCLAIMER), ($("#sureWarn").hidden = false));
       const jobOpen = (title) => ($("#job").className = "", ($("#jobTitle").textContent = title), ($("#jobText").textContent = ""), ($("#jobBar").hidden = true), ($("#jobOk").hidden = true), ($("#job").hidden = false));
       const jobEnd = (ok) => { $("#job").className = ok ? "ok" : "bad"; $("#jobBar").hidden = true; $("#jobOk").hidden = false; $("#jobOk").focus(); };
       $("#jobOk").onclick = () => ($("#job").hidden = true);
       // a message the user has to see (a check that is not met, a failure): never only a toast
-      const realNotice = (title, text, ok = false) => (jobOpen(title), ($("#jobText").textContent = text), jobEnd(ok));
+      const realNotice = (title, text, ok = false) => (jobOpen(title), text instanceof Node ? $("#jobText").replaceChildren(text.cloneNode(true)) : ($("#jobText").textContent = text), jobEnd(ok));
       const realSay = (t) => {
         $("#realMsg").textContent = t;
         if (!$("#job").hidden) {
@@ -2576,11 +2646,35 @@ registerProcessor("fm1", Fm1);
         const names = [REAL.fw && "firmware port: " + REAL.fw.name, REAL.up && "update port: " + REAL.up.name].filter(Boolean);
         const rec = REAL.saved || (REAL.stored?.uid === REAL.info?.uid ? REAL.stored : null), pr = rec?.protector, prText = !rec ? " · protector: back up to find out" : pr?.installed ? " · protector: installed " + pr.version + (rec === REAL.stored ? " (from the backup kept here, " + rec.date.slice(0, 10) + ")" : "") : " · protector: NOT installed";
         $("#realNames").textContent = !REAL.acc ? "Not connected yet." : names.length ? names.join(" · ") + (REAL.info ? " · " + (REAL.info.mboot ? REAL.info.kind + " " + REAL.info.version + ", flash " + (REAL.info.capacity >> 10) + " KiB, chip " + REAL.info.jedec.toString(16).toUpperCase() : "answers, but is not m-bootloader") : "") + prText : "No FM-1 found on USB MIDI. Plug it in, switched on. Ports this browser sees: " + ([...REAL.acc.inputs.values(), ...REAL.acc.outputs.values()].map((p) => p.name + (p.state === "disconnected" ? " (gone)" : "")).join(", ") || "none") + ". INSPECT · COPY lists them all.";
+        $("#realNames").title = $("#realNames").textContent;
         $("#realConn").classList.toggle("on", !!REAL.acc && names.length > 0);
         for (const b of $$("#fwList .inst")) b.hidden = b.dataset.own === "1" || !installReady();
         const s = $("#realSync");
         s.classList.toggle("on", REAL.sync);
-        label(s, "PLAY TOGETHER", REAL.sync ? "SYNC ON" : "SYNC OFF");
+        label(s, "THIS FM-1 ⇄ THE REAL ONE · NOT A KEYBOARD, NOT AN INSTALL", REAL.sync ? "PLAYING TOGETHER · ON" : "PLAY WITH THE REAL FM-1 · OFF");
+        // what cannot be pressed now is greyed out; the line under the status says what comes next
+        const i = REAL.info, idle = !REAL.busy; // rec: as above
+        const newer = (rec?.jedec ?? i?.jedec) === 0xb36014, can = {
+          realConn: idle,
+          realSync: idle && !!REAL.fw,
+          realBackup: idle && (!!REAL.fw || (!!REAL.up && !!i?.mboot)),
+          realProt: idle && !!REAL.fw && !!REAL.saved && !REAL.saved.protector?.installed && !newer,
+          realRestart: idle && !!REAL.up,
+          realInfo: idle && !!REAL.acc,
+          realSave: idle && !!(REAL.saved || REAL.stored),
+        };
+        for (const [id, on] of Object.entries(can)) $("#" + id).disabled = !on;
+        $("#realNext").textContent = !REAL.acc ? "Next: press CONNECT, with the unit on and its USB cable in."
+          : !REAL.fw && !REAL.up ? "No FM-1 found. Check the cable and that the unit is on, then CONNECT again."
+          : REAL.busy ? "Working: keep this page open."
+          : realVerified() ? "Ready: choose a firmware in FIRMWARE and press INSTALL on its card."
+          : REAL.up && i?.mboot && i.kind === "bootloader" && !rec ? "Next: BACKUP (it reads straight from the unit)."
+          : REAL.up && i?.mboot && rec?.protector?.installed ? "Protector found. Nothing else to do here: RESTART UNIT, or switch the unit off and on."
+          : REAL.up ? "The unit is in the helper. Next: BACKUP if you have not, then RESTART UNIT."
+          : !REAL.saved ? "Next: BACKUP (safe: it only reads). Then the protector, then firmwares."
+          : REAL.saved.protector?.installed ? "The protector is in. Switch the unit off, hold PLAY while switching it on, choose MIDI mode, then CONNECT."
+          : newer ? "Newer flash chip: install the protector with M-Flasher (see WARNINGS), then BACKUP again here."
+          : "Next: PROTECTOR (it writes the boot area: read WARNINGS first), then BACKUP again.";
       }
       async function realScan() {
         const pick = (map, up) => [...map.values()].find((p) => p.state !== "disconnected" && isRealFM1(p.name) && isUpdatePort(p.name) === up);
@@ -2730,7 +2824,7 @@ registerProcessor("fm1", Fm1);
         if (REAL.up && REAL.info?.mboot) return realRun("Backup", backupNow);
         if (REAL.up) return realNotice("NOT A HELPER", "This unit answers, but it is not m-bootloader or its helper: nothing was sent.");
         if (!REAL.fw) return realNotice("CONNECT FIRST", "Connect a real FM-1 first (CONNECT), with its firmware running.");
-        sure("To read the whole flash, a small helper is sent to the unit and runs from RAM. It restarts the unit into the helper (no keys needed) and writes only the firmware's updater storage area, never the boot area or keys. When the backup is done, switch the unit off and on.", () =>
+        realSure("To read the whole flash, a small helper is sent to the unit and runs from RAM. It restarts the unit into the helper (no keys needed) and writes only the firmware's updater storage area, never the boot area or keys. When the backup is done, switch the unit off and on.", () =>
           realRun("Backup", async () => {
             await realIdent();
             await realServe(REAL.fwLink, await mbootImage("stage"), true, "Sending the helper");
@@ -2748,11 +2842,13 @@ registerProcessor("fm1", Fm1);
       const ranges = (list) => { const out = []; for (const n of list) { const l = out[out.length - 1]; l && l[1] === n - 1 ? (l[1] = n) : out.push([n, n]); } return out.map(([a, b]) => (a === b ? a.toString(16) : a.toString(16) + "-" + b.toString(16)).toUpperCase()).join(", "); };
       const regionLines = (m) => ["BOOT", "FIRMWARE", "SETTINGS", "PAIRINGS", "SOUNDS", "MAC", "FREE"].map((n) => {
         const secs = Array.from(m.sectors, (u, i) => i).filter((i) => regionAt(i)[0] === n);
-        return secs.length ? [n, regionAt(secs[0])[3], n + " · sectors " + ranges(secs) + (n === "FREE" ? "" : " · " + secs.filter((i) => m.sectors[i]).length + " of " + secs.length + " hold data")] : null;
+        if (!secs.length) return null;
+        const used = secs.filter((i) => m.sectors[i]).length, r = ranges(secs);
+        return [n, regionAt(secs[0])[3], n + " " + r + (n === "FREE" ? "" : " · " + used + "/" + secs.length), n + " · sectors " + r + (n === "FREE" ? "" : " · " + used + " of " + secs.length + " hold data")];
       }).filter(Boolean);
       const mapLines = (m) => [
         ...m.records.map((r) => hx(r.addr) + "  " + r.name + (r.len === 0xffffffff ? "" : " (" + r.len + " bytes)") + (r.name === "uboot.boot" ? " · " + (m.protector.installed ? "m-bootloader " + m.protector.version : "stock bootloader, no protector") : "")),
-        ...regionLines(m).map((l) => l[2]),
+        ...regionLines(m).map((l) => l[3]),
         m.used + " of " + m.sectors.length + " sectors hold data, " + (m.sectors.length - m.used) + " are blank",
       ];
       function realMapDraw(m) {
@@ -2812,7 +2908,7 @@ registerProcessor("fm1", Fm1);
       // the helper runs from RAM and the unit stays powered by USB, so a backup leaves it there: m-bootloader's own restart message (F0 22 24 35 7E F7)
       $("#realRestart").onclick = () => {
         if (!REAL.up) return realNotice("NOTHING TO RESTART", "The unit is not in the helper. If it seems stuck, switch it off and unplug its USB cable for a few seconds.");
-        sure("Restart the unit out of the helper mode? Nothing is written.", () =>
+        realSure("Restart the unit out of the helper mode? Nothing is written.", () =>
           realRun("Restart", async () => {
             REAL.upLink.send(RealFM1.soft(RealFM1.SOFT.RESTART));
             realSay("Restart asked. Waiting for the unit to come back…");
@@ -2827,7 +2923,7 @@ registerProcessor("fm1", Fm1);
         if (REAL.saved.jedec === 0xb36014) {
           return realNotice("NEWER FLASH CHIP: USE M-FLASHER", "This unit has the newer flash chip (UC25HQ80, JEDEC B36014), which has had little testing with the protector: one unit did not start after it.\n\nInstall the protector with M-Flasher (github.com/jvitkauskas/m-flasher), then BACKUP here again. This page will not write the protector on this chip.");
         }
-        sure("Install the protector (m-bootloader v2.4, MIT) on this FM-1? It replaces the boot area. Do not unplug the cable or switch the unit off until it restarts: a power cut can leave the unit dead, and only a USB_KEY dongle brings it back. Have your backup file copied off this computer first. M-Flasher is the maker's tested way; this page does the same as M-VAVE's updater would, with its own code.", () =>
+        realSure("Install the protector (m-bootloader v2.4, MIT) on this FM-1? It replaces the boot area. Do not unplug the cable or switch the unit off until it restarts: a power cut can leave the unit dead, and only a USB_KEY dongle brings it back. Have your backup file copied off this computer first. M-Flasher is the maker's tested way; this page does the same as M-VAVE's updater would, with its own code.", () =>
           realRun("Protector", async () => {
             await realIdent();
             await realServe(REAL.fwLink, await mbootImage("uboot"), true, "Installing the protector");
@@ -2868,7 +2964,7 @@ registerProcessor("fm1", Fm1);
         if (!i?.mboot || i.kind !== "bootloader") return realNotice("PUT THE UNIT IN MIDI MODE", "The protector is in the unit, but it is not in its MIDI mode now.\n\n1. Switch the unit off.\n2. Hold PLAY while switching it on.\n3. Choose MIDI mode on its screen.\n4. Press CONNECT here, then INSTALL again.");
         const ok = realVerified();
         if (!ok) return realNotice("BACK THE UNIT UP AGAIN", "The backup shows another protector than the one running now (" + i.version + "). BACKUP once more so the page can check this one.");
-        sure("Install " + f.name + " on the real FM-1? Its present firmware is replaced (and its saved patches with it, unless you restore your backup)." + (ok.jedec === 0xb36014 ? " This unit has the newer flash chip, which has had little testing." : "") + " The unit checks the package before it erases anything and only writes the firmware area, never the boot area.", () =>
+        realSure("Install " + f.name + " on the real FM-1? Its present firmware is replaced (and its saved patches with it, unless you restore your backup)." + (ok.jedec === 0xb36014 ? " This unit has the newer flash chip, which has had little testing." : "") + " The unit checks the package before it erases anything and only writes the firmware area, never the boot area.", () =>
           realRun("Install", async () => {
             const pkg = RealFM1.unweave(await packageOf(f)), { identity, image } = pkg;
             if (!/FM-1/i.test(identity)) throw Error("this package says it is for " + identity);
@@ -2885,7 +2981,8 @@ registerProcessor("fm1", Fm1);
             toast(f.name + " installed", 5000);
           }));
       };
-      $("#realFw").onclick = () => realInstall(current());
+      $("#realHow").onclick = () => realNotice("HOW IT GOES", $("#tplHow").content, true);
+      $("#realWarn").onclick = () => realNotice("BEFORE ANYTHING IS WRITTEN", $("#tplWarn").content, false);
 
       // ======================================================================
       // INSTALL: the browser's own install dialog where there is one, the steps elsewhere (as in the Pocket apps)
@@ -3091,6 +3188,15 @@ registerProcessor("fm1", Fm1);
           el("pre", "", $("#licEmu").textContent),
           el("h3", "", "FM1.Pocket, this page"),
           el("pre", "", $("#licEmu").textContent.replace("Joakim Eriksson", "utopick")),
+          el("h3", "", "m-bootloader, the protector (bundled packages and the way the unit is talked to)"),
+          el("p", "", "By jvitkauskas, MIT. The two packages in this page (the RAM helper for BACKUP and the protector installer) are its v2.4 release files, unchanged (their SHA-256 is checked before they are sent). Its specification is the source of the USB MIDI messages, the package format and the flash layout used here."),
+          el("pre", "", $("#licMboot").textContent),
+          el("h3", "", "M-Flasher"),
+          el("p", "", "By Julius Vitkauskas (jvitkauskas), MIT, https://github.com/jvitkauskas/m-flasher. Nothing of its code is in this page. The flash map follows its 16 x 16 map of 4 KiB sectors, its region names and colours (boot, firmware, settings, pairings, sounds, MAC, free) and its stock FM-1 layout. It is also the tool to use for the protector on the newer flash chip, and to put a backup back."),
+          el("h3", "", "M-Unbricker"),
+          el("p", "", "By jvitkauskas, MIT, https://jvitkauskas.github.io/m-apps/unbricker/. Only linked: a second working unit and a USB cable bring a dead one back."),
+          el("h3", "", "M-VAVE"),
+          el("p", "", "The FM-1 and its user manual (the PDF published with the FM-1 downloads). The FM-1 manual in this page is written in our own words, from that manual and from the emulator. FM1.Pocket is not made by or affiliated with M-VAVE or JieLi. 'FM-1' and 'M-VAVE' belong to their owners."),
           el("h3", "", "The firmwares"),
           el("p", "", "Each firmware belongs to its author and has its own licence, shown on its card. None is part of this app: each is downloaded from its author when you ask for it."),
         ]);
