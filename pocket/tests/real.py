@@ -197,6 +197,7 @@ class Real(unittest.TestCase):
         time.sleep(4)  # the backup starts the emulator and closes the menu: open it again
         self.assertFalse(self.js("return document.querySelector('#job').hidden"), "the finished job waits for OK"); self.click('#jobOk')
         self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=conn]').click(); document.querySelector('button[data-sub=real]').click()"); time.sleep(0.5)
+        self.d.find_element('css selector', '#realMoreBtn').click(); time.sleep(0.4)  # SAVE BACKUP lives in MORE
         self.d.find_element('css selector', '#realSave').click(); time.sleep(2); self.assertEqual(len(self.files()), 2)  # SAVE BACKUP gives the kept one on demand
 
     def test_install_unlocks_only_with_the_protector_running_and_shown_in_a_backup(self):
