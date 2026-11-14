@@ -195,7 +195,8 @@
       #menu .fwc .t b { color: var(--silk); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
       #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
       #menu .fwc .t small { font-size: 10px; line-height: 1.25; overflow: hidden; }
-      #menu .fwc .act { grid-column: 1 / -1; display: flex; gap: 6px; }
+      #menu .fwc .act { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+      #menu .fwc .inst { flex-basis: 100%; }
       #menu .fwc button { min-height: 38px; padding: 4px; }
       #menu .foot { flex: none; display: flex; flex-direction: column; gap: 6px; }
       /* the five actions stay on one row, even on a phone */
@@ -211,7 +212,9 @@
       #menu section.row { flex-direction: row; }
       #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
       #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx, #menu [data-sub="midi"] #pvMidi, #menu [data-sub="inst"] #pvInst, #menu [data-sub="real"] #pvReal { display: flex; }
-      #realRules { font-size: 12px; line-height: 1.4; padding: 8px 10px; border: 1px solid var(--rim); border-radius: 10px; color: var(--silk); }
+      #realSteps, #realRules { font-size: 12px; line-height: 1.4; padding: 8px 10px; border: 1px solid var(--rim); border-radius: 10px; color: var(--silk); }
+      #realSteps ol { margin: 4px 0 0; padding-left: 18px; }
+      #realSteps li, #realRules li { margin-bottom: 3px; }
       #realMap { font-size: 12px; line-height: 1.4; color: var(--silk); }
       #realMapGrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; margin: 6px 0; width: min(100%, 340px); aspect-ratio: 1; }
       #realMapGrid i { aspect-ratio: 1; border-radius: 2px; background: var(--c); }
@@ -382,6 +385,17 @@
           <div class="box pane" id="pvReal">
             <h3>REAL FM-1</h3>
             <p>Connect a real FM-1 with a USB cable (Chrome or Edge, a computer or an Android phone; not iPhone). It can play along with this one, and this page can back up its flash and install firmwares on it. Do the steps in order and read what each one says.</p>
+            <div id="realSteps">
+              <b>How it goes</b>
+              <ol>
+                <li><b>CONNECT</b> with the unit on, running its firmware, and its USB cable in.</li>
+                <li><b>BACKUP.</b> A small helper restarts the unit; wait until the message says the backup is done. The first backup of a unit is saved as a file (keep it off this computer: it holds the original boot area) and every one is kept in this browser. Then <b>RESTART UNIT</b>, or switch it off and unplug the cable for a few seconds.</li>
+                <li><b>PROTECTOR</b> (not on the newer chip: use M-Flasher). Do not touch the unit until it restarts by itself.</li>
+                <li><b>BACKUP again.</b> It has to show the protector. It is kept, so this is done once per unit.</li>
+                <li><b>Protector's MIDI mode:</b> switch the unit off, hold <b>PLAY</b> while switching it on, choose MIDI mode on its screen, then CONNECT here. (Holding PLAY at power-on always opens the m-bootloader menu: it is the way back if a firmware does not start.)</li>
+                <li>In <b>FIRMWARE</b>, an <b>INSTALL</b> button appears on each card once all of this is in place. M-VAVE's own FM-1.fwsc (OPEN FILE) puts the original firmware back the same way.</li>
+              </ol>
+            </div>
             <div id="realRules">
               <b>Before anything is written to the unit</b>
               <ol>
@@ -406,6 +420,7 @@
               <button id="realProt" title="Step 2: install the protected bootloader (m-bootloader), so a bad firmware can always be replaced over USB"><i>STEP 2 · WRITES</i>PROTECTOR</button>
               <button id="realInfo" title="Read what the unit says about itself (nothing is written) and copy a text report: ports, identity, chip, flash, backup, and what happened. Paste it in a message."><i>NO WRITES</i>INSPECT · COPY</button>
               <button id="realRestart" title="If the unit stays in the helper after a backup: ask the helper to restart it. (Switching it off and unplugging the USB cable does the same.)"><i>HELPER MODE</i>RESTART UNIT</button>
+              <button id="realSave" title="Save the last backup kept in this browser for the connected unit as a file"><i>KEPT IN THIS BROWSER</i>SAVE BACKUP</button>
               <button id="realFw" title="Step 3: install the firmware chosen in FIRMWARE on the real FM-1, through the protector's MIDI mode"><i>STEP 3 · WRITES</i>INSTALL FIRMWARE</button>
             </div>
           </div>
@@ -748,6 +763,7 @@
         peak = 0; // the loudest sample lately (for the tests)
       const current = () => FIRMWARES.find((f) => f.id === $("#fw").value) || (local && $("#fw").value === "local" ? local : null) || (backup && $("#fw").value === "backup" ? backup : null);
       let local = null; // a package opened from a file: { id: "local", name, bytes }
+      let realReady = () => false; // set by the REAL FM-1 block: every check is in place, so the cards may offer INSTALL
       let backup = null; // the flash of the user's own FM-1, saved by REAL FM-1 and wrapped as a package: { id: "backup", name, bytes }, kept under "bak:fm1" (the DELETE of downloads leaves it)
       async function packageOf(f) {
         if (f.bytes) return f.bytes;
@@ -932,7 +948,8 @@
             act = el("div", "act"),
             have = f === local || f === backup || kept.has(f.id),
             dl = el("button", "", have ? "KEPT ●" : "DOWNLOAD"),
-            go = el("button", f.id === sel.value ? "on" : "", f.id === sel.value && node ? "IN USE" : "USE");
+            go = el("button", f.id === sel.value ? "on" : "", f.id === sel.value && node ? "IN USE" : "USE"),
+            inst = el("button", "inst", "INSTALL ON MY FM-1");
           const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (img.src = typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? d : NO_IMG)));
           img.alt = "";
           img.loading = "lazy";
@@ -947,7 +964,10 @@
           dl.onclick = () => (toast("Downloading " + f.name + "…"), packageOf(f).then(() => toast(f.name + " is kept on this device"), (e) => toast(f.name + ": " + e.message, 4000)));
           go.title = "Run " + f.name + " on the FM-1";
           go.onclick = () => use(f.id);
-          act.append(dl, go);
+          inst.hidden = f === backup || !realReady(); // only when every check of REAL FM-1 is in place
+          inst.title = "Install " + f.name + " on the real FM-1 (through the protector's MIDI mode). Asks first.";
+          inst.onclick = () => realInstall(f);
+          act.append(dl, go, inst);
           c.append(img, t, act);
           return c;
         };
@@ -1250,7 +1270,7 @@
       const MBOOT = { stage: "/*@MBOOT_STAGE@*/", uboot: "/*@MBOOT_UBOOT@*/", sha: { stage: "/*@MBOOT_STAGE_SHA@*/", uboot: "/*@MBOOT_UBOOT_SHA@*/" } };
       const isRealFM1 = (name) => /\bFM-1\b/i.test(name || "");
       const isUpdatePort = (name) => /update/i.test(name || "");
-      const REAL = { acc: null, fw: null, up: null, fwLink: null, upLink: null, info: null, sync: false, busy: false, saved: null, ident: "" };
+      const REAL = { acc: null, fw: null, up: null, fwLink: null, upLink: null, info: null, sync: false, busy: false, saved: null, stored: null, ident: "" };
       const REAL_LOG = [];
       const realSay = (t) => {
         $("#realMsg").textContent = t;
@@ -1262,9 +1282,10 @@
       const realThru = (data) => REAL.sync && REAL.fw && data[0] < 0xf0 && REAL.fw.out.send(Uint8Array.from(data));
       function realFace() {
         const names = [REAL.fw && "firmware port: " + REAL.fw.name, REAL.up && "update port: " + REAL.up.name].filter(Boolean);
-        const pr = REAL.saved?.protector, prText = !REAL.saved ? " · protector: back up to find out" : pr?.installed ? " · protector: installed " + pr.version : " · protector: NOT installed";
+        const rec = REAL.saved || (REAL.stored?.uid === REAL.info?.uid ? REAL.stored : null), pr = rec?.protector, prText = !rec ? " · protector: back up to find out" : pr?.installed ? " · protector: installed " + pr.version + (rec === REAL.stored ? " (from the backup kept here, " + rec.date.slice(0, 10) + ")" : "") : " · protector: NOT installed";
         $("#realNames").textContent = !REAL.acc ? "Not connected yet." : names.length ? names.join(" · ") + (REAL.info ? " · " + (REAL.info.mboot ? REAL.info.kind + " " + REAL.info.version + ", flash " + (REAL.info.capacity >> 10) + " KiB, chip " + REAL.info.jedec.toString(16).toUpperCase() : "answers, but is not m-bootloader") : "") + prText : "No FM-1 found on USB MIDI. Plug it in, switched on. Ports this browser sees: " + ([...REAL.acc.inputs.values(), ...REAL.acc.outputs.values()].map((p) => p.name + (p.state === "disconnected" ? " (gone)" : "")).join(", ") || "none") + ". INSPECT · COPY lists them all.";
         $("#realConn").classList.toggle("on", !!REAL.acc && names.length > 0);
+        for (const b of $$("#fwList .inst")) b.hidden = !installReady();
         const s = $("#realSync");
         s.classList.toggle("on", REAL.sync);
         label(s, "PLAY TOGETHER", REAL.sync ? "SYNC ON" : "SYNC OFF");
@@ -1295,6 +1316,10 @@
           const up = REAL.up;
           await new Promise((r) => setTimeout(r, 800));
           if (REAL.up === up) REAL.info = await RealFM1.probe(REAL.upLink); // the update port is only ever asked what it is
+          if (REAL.info?.mboot) {
+            const r = (await kvGet(unitKey(REAL.info.uid)))?.last; // the backup this browser kept for this unit
+            REAL.stored = r ? { uid: REAL.info.uid, jedec: r.jedec, crc32: r.crc32, protector: r.protector, date: r.date } : null;
+          }
           REAL.probing = false;
         }
         realFace();
@@ -1355,6 +1380,7 @@
         if ((await sha256(raw)) !== MBOOT.sha[which]) throw Error("the bundled package is damaged");
         return RealFM1.unweave(raw).image;
       }
+      const unitKey = (uid) => "unit:" + uid;
       const saveFile = (bytes, name) => {
         const a = el("a");
         a.href = URL.createObjectURL(new Blob([bytes], { type: "application/octet-stream" }));
@@ -1365,16 +1391,23 @@
       async function backupNow() {
         const info = REAL.info;
         const bytes = await RealFM1.backup(REAL.upLink, info, (f) => realSay("Backup: " + Math.round(f * 100) + "%"));
-        const name = "fm1-backup-" + info.uid + "-" + new Date().toISOString().slice(0, 10) + ".bin";
-        saveFile(bytes, name);
-        const protector = RealFM1.protector(bytes);
+        const day = new Date().toISOString().slice(0, 10), name = "fm1-backup-" + info.uid + "-" + day + ".bin";
+        const protector = RealFM1.protector(bytes), crc32 = RealFM1.crc32(bytes);
+        // kept in this browser (the first backup of a unit stays, as its original; the last one replaces the one before), so the checks need not be
+        // done again and backups do not pile up: the file is saved the first time only (or when this browser cannot keep it), SAVE BACKUP gives the last
+        const rec = { date: new Date().toISOString(), crc32, jedec: info.jedec, protector, bytes };
+        const before = (await kvGet(unitKey(info.uid))) || {};
+        const kept = await kvPut(unitKey(info.uid), { first: before.first || rec, last: rec }).then(() => true, () => false);
+        const asFile = !kept || !before.first;
+        if (asFile) saveFile(bytes, name);
         REAL.map = RealFM1.flashMap(bytes);
         realMapDraw(REAL.map);
-        REAL.saved = { uid: info.uid, jedec: info.jedec, size: bytes.length, crc32: RealFM1.crc32(bytes), protector };
+        REAL.saved = { uid: info.uid, jedec: info.jedec, size: bytes.length, crc32, protector };
+        REAL.stored = kept ? { uid: info.uid, jedec: info.jedec, crc32, protector, date: rec.date } : null;
         realFace();
         const verdict = protector.installed ? " The protector (m-bootloader " + protector.version + ") is in this flash: custom firmwares can be installed (hold PLAY at power-on, choose MIDI mode, CONNECT)." : " The protector is NOT in this flash: no custom firmware can be installed yet.";
-        realSay("Backup saved as " + name + " (" + (bytes.length >> 10) + " KiB, checked against the chip's own checksum). Keep it somewhere safe." + verdict);
-        toast("Backup saved: " + name, 5000);
+        realSay((asFile ? "Backup saved as " + name + " (" + (bytes.length >> 10) + " KiB, checked against the chip's own checksum). Keep it somewhere safe." : "Backup kept in this browser (" + (bytes.length >> 10) + " KiB, checked against the chip's own checksum). The file of this unit's first backup was saved before: SAVE BACKUP gives this one.") + verdict);
+        toast(asFile ? "Backup saved: " + name : "Backup kept in this browser", 5000);
         // kept as the first firmware of the list, and run here: if it draws its screen, the copy is a good one
         const pkg = RealFM1.wrap(bytes, (/FM-1_\d+/.exec(REAL.ident) || ["FM-1_000"])[0]);
         const mine = { name: "MY FM-1 · " + new Date().toISOString().slice(0, 10), version: "", bytes: pkg };
@@ -1451,6 +1484,8 @@
           "update port: " + (REAL.up?.name || "none"),
           i ? "update port says: " + (i.mboot ? i.kind + " v" + i.version + " · protocol " + i.protocol + " · reads " + i.reads + " · key " + i.key + " · flash " + i.capacity + " bytes (" + (i.capacity >> 10) + " KiB) · chip JEDEC " + h(i.jedec) + " · uid " + i.uid : "answers, but is not m-bootloader's helper") : "update port says: nothing yet",
           "chip risk: " + ((i?.jedec ?? v?.jedec) === 0xb36014 ? "UC25HQ80 (newer chip: little tested with the protector)" : "none known"),
+          "kept in this browser: " + (REAL.stored ? "uid " + REAL.stored.uid + " · " + REAL.stored.date + " · crc32 " + h(REAL.stored.crc32) + " · protector " + (REAL.stored.protector?.installed ? REAL.stored.protector.version : "not installed") : "none for this unit"),
+          "install unlocked: " + (realVerified() ? "yes" : "no"),
           "backup this session: " + (v ? "uid " + v.uid + " · " + (v.size >> 10) + " KiB · crc32 " + h(v.crc32) + " · chip jedec " + h(v.jedec) : "none"),
           "stored copy in the list: " + (backup ? backup.name + " (" + backup.bytes.length + " bytes)" : "none"),
           "running here: " + (f ? f.name : "nothing") + " · screen: " + ($("#realMsg").textContent || ""),
@@ -1506,21 +1541,38 @@
             toast("Protector sent: back up again to check it", 6000);
           }));
       };
-      $("#realFw").onclick = () => {
-        const f = current();
+      // all the checks: the unit is in the protector's own MIDI mode now, and a backup of this unit (this session's, or the one kept in this browser)
+      // shows that same protector in its flash
+      const realVerified = () => {
+        const i = REAL.info;
+        if (!i?.mboot || i.kind !== "bootloader" || !i.version) return null;
+        const rec = [REAL.saved, REAL.stored].find((r) => r && r.uid === i.uid && r.protector?.installed && r.protector.version.includes(i.version));
+        return rec || null;
+      };
+      const installReady = (realReady = () => !REAL.busy && !!realVerified());
+      $("#realSave").onclick = async () => {
+        const uid = REAL.info?.uid || REAL.saved?.uid;
+        const r = uid && (await kvGet(unitKey(uid)));
+        if (!r?.last) return toast("No backup kept in this browser yet for a connected unit: BACKUP first", 4000);
+        saveFile(r.last.bytes, "fm1-backup-" + uid + "-" + r.last.date.slice(0, 10) + ".bin");
+        toast("Backup file saved", 3000);
+      };
+      const realInstall = (f) => {
         if (!f) return toast("Choose a firmware in FIRMWARE first");
-        if (!REAL.saved) {
+        const i = REAL.info, have = [REAL.saved, REAL.stored].filter((r) => r && (!i?.uid || r.uid === i.uid));
+        if (!have.length) {
           realSay("Back this unit up first (BACKUP): custom firmware is only offered when a backup shows the protector in it. It reads straight from the unit when it is in the protector's MIDI mode.");
           return toast("Back the unit up first: the backup has to show the protector", 5000);
         }
-        if (!REAL.saved.protector?.installed) {
+        if (!have.some((r) => r.protector?.installed)) {
           realSay("No protector, no custom firmware. Back this unit up (BACKUP) and the backup has to show the protector. Without it, install the protector first (PROTECTOR, or M-Flasher on the newer flash chip).");
           return toast("No protector in a backup of this unit: custom firmware is locked", 5000);
         }
         if (f.id === "backup") return toast("Putting a backup back is not built here: use M-Flasher for that", 5000);
-        if (!REAL.info?.mboot || REAL.info.kind !== "bootloader") return toast("Put the unit in MIDI mode: hold PLAY while switching on and choose MIDI mode, then CONNECT");
-        if (REAL.saved.uid !== REAL.info.uid) return toast("The backup with the protector is of another unit: back this one up", 5000);
-        sure("Install " + f.name + " on the real FM-1? Its present firmware is replaced (and its saved patches with it, unless you restore your backup)." + (REAL.saved.jedec === 0xb36014 ? " This unit has the newer flash chip, which has had little testing." : "") + " The unit checks the package before it erases anything and only writes the firmware area, never the boot area.", () =>
+        if (!i?.mboot || i.kind !== "bootloader") return toast("Put the unit in the protector's MIDI mode: switch it off, hold PLAY while switching it on, choose MIDI mode, then CONNECT", 6000);
+        const ok = realVerified();
+        if (!ok) return toast("The backup shows another protector than the one running (" + i.version + "): back the unit up again", 6000);
+        sure("Install " + f.name + " on the real FM-1? Its present firmware is replaced (and its saved patches with it, unless you restore your backup)." + (ok.jedec === 0xb36014 ? " This unit has the newer flash chip, which has had little testing." : "") + " The unit checks the package before it erases anything and only writes the firmware area, never the boot area.", () =>
           realRun("Install", async () => {
             const { identity, image } = RealFM1.unweave(await packageOf(f));
             if (!/FM-1/i.test(identity)) throw Error("this package says it is for " + identity);
@@ -1529,6 +1581,7 @@
             toast(f.name + " installed", 5000);
           }));
       };
+      $("#realFw").onclick = () => realInstall(current());
 
       // ======================================================================
       // INSTALL: the browser's own install dialog where there is one, the steps elsewhere (as in the Pocket apps)
