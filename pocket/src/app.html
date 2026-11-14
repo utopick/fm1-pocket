@@ -189,6 +189,7 @@
       #menu #manBody h3:first-child { margin-top: 0; }
       #menu #manBody p, #menu #manBody ul, #menu #manBody li { margin: 6px 0; font-size: 15px; line-height: 1.5; color: inherit; }
       #menu #manBody ul { padding-left: 18px; }
+      #fwSearch { flex: none; min-height: 36px; border-radius: 10px; border: 1px solid var(--rim); background: var(--m-panel); color: var(--silk); padding: 4px 12px; font: 14px system-ui, sans-serif; width: 100%; }
       #menu .cards { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(max(300px, 25% - 8px), 1fr)); gap: 8px; align-content: start; padding-right: 4px; }
       #menu .fwc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 6px 10px; padding: 8px; border-radius: 12px; border: 1px solid var(--rim); background: var(--m-panel); min-width: 0; min-height: 190px; }
       #menu .fwc.on { border-color: var(--silk); box-shadow: inset 0 0 0 1px var(--lit); }
@@ -199,6 +200,7 @@
       #menu .fwc .t small { font-size: 11px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
       #menu .fwc .act { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; gap: 6px; }
       #menu .fwc .act button { width: auto; flex: 1 1 0; min-width: 0; }
+      #menu .fwc .act button { flex: 1 1 40%; }
       #menu .fwc .inst { flex-basis: 100% !important; }
       #menu .fwc button { min-height: 38px; padding: 4px; }
       #menu .foot { flex: none; display: flex; flex-direction: column; gap: 6px; }
@@ -342,6 +344,7 @@
       <button id="logo" title="Menu: firmware, look, options, about" aria-label="Menu">FM1<b>.</b></button>
       <button id="power" title="Power: turn the FM-1 on with the chosen firmware, or off" aria-label="Power" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9M6.6 6.6a7.6 7.6 0 1 0 10.8 0" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" /></svg></button>
       <button id="flip" title="Next view: the whole FM-1, only the keys, or only the upper part (knobs, screen, buttons), full screen">KEYS</button>
+      <button id="helpFw" title="Manual of the firmware that is running (its own, from its repository), or this app's manual" aria-label="Manual">?</button>
       <div class="grow"><span id="status" role="status"></span></div>
     </div>
     <div id="fm" title="The FM-1: press its keys and buttons, drag a knob up or down to turn it">
@@ -373,6 +376,7 @@
           <button id="menuClose" title="Close the menu">CLOSE</button>
         </div>
         <section data-tab="fw">
+          <input id="fwSearch" type="search" placeholder="Search firmwares: name, author, what it does" aria-label="Search firmwares" autocomplete="off" />
           <div id="fwList" class="cards"></div>
           <div class="foot">
             <div id="stor" role="img" title="The storage this app uses on this device, and what is free"><i></i><span></span></div>
@@ -625,7 +629,7 @@
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), about: str(f.about, 600), package: f.package });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "" });
         }
         return out;
       }
@@ -705,7 +709,9 @@
           lcd.putImageData(img, 0, 0);
         }
         for (let i = 0; i < 41; i++) {
-          const t = Math.min(1, m.leds[i] / 0.08),
+          // an LED driven at a low duty still looks bright to the eye (and a boot animation of the keys is driven that way): a square root, with noise below it cut
+          const raw = m.leds[i] / 0.08,
+            t = raw < 0.06 ? 0 : Math.min(1, Math.sqrt(raw) * (i >= 14 ? 1.8 : 1)), // the keys (ids 14 to 40) are drawn paler than the buttons: more gain, so their boot sweep shows
             v = Math.abs(t - ledAvg[i]) < 0.02 ? (ledAvg[i] = t) : (ledAvg[i] += (t - ledAvg[i]) * 0.3);
           if (Math.abs(v - ledNow[i]) > 0.03 && lights[i]) lights[i].style.setProperty("--led", (ledNow[i] = v).toFixed(2));
         }
@@ -829,6 +835,72 @@
       let local = null; // a package opened from a file: { id: "local", name, bytes }
       let realReady = () => false; // set by the REAL FM-1 block: every check is in place, so the cards may offer INSTALL
       let backup = null; // the flash of the user's own FM-1, saved by REAL FM-1 and wrapped as a package: { id: "backup", name, bytes }, kept under "bak:fm1" (the DELETE of downloads leaves it)
+      // The manual of a firmware is the README of its repository (raw.githubusercontent.com answers any page): fetched when asked or when the
+      // firmware is downloaded, kept on this device (man:<id>) so it reads offline. Text only: it is shown as elements, never as HTML.
+      function readmeUrls(repo) {
+        const m = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/(?:tree|blob)\/([\w.\/-]+))?\/?$/.exec(repo || "");
+        if (!m) return [];
+        const [, o, r, rest] = m;
+        if (rest && /\.(md|markdown|txt)$/i.test(rest)) return ["https://raw.githubusercontent.com/" + o + "/" + r + "/" + rest];
+        return ["README.md", "readme.md", "Readme.md", "README.markdown", "README.txt", "README"].map((n) => "https://raw.githubusercontent.com/" + o + "/" + r + "/HEAD/" + n);
+      }
+      async function manualOf(f) {
+        const kept = await kvGet("man:" + f.id);
+        if (kept && typeof kept.text === "string") return kept;
+        if (!navigator.onLine) throw Error("you are offline and its manual is not kept on this device yet");
+        for (const url of readmeUrls(f.repo)) {
+          try {
+            const r = await fetch(url);
+            if (!r.ok) continue;
+            const rec = { text: (await r.text()).slice(0, 300000), url, date: new Date().toISOString().slice(0, 10) };
+            await kvPut("man:" + f.id, rec).catch(() => {});
+            return rec;
+          } catch {}
+        }
+        throw Error("no README was found at its repository");
+      }
+      // a small markdown reader: headings, lists, code, quotes, **bold**, `code`, [links](https://...) and nothing else (tags and pictures are dropped)
+      function mdNodes(text) {
+        const out = [], inline = (t, into) => {
+          t = t.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/<[^>]*>/g, "");
+          for (const part of t.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\(https:\/\/[^)\s]+\))/g)) {
+            let m;
+            if (!part) continue;
+            if ((m = /^\*\*([^*]+)\*\*$/.exec(part))) into.append(el("b", "", m[1]));
+            else if ((m = /^`([^`]+)`$/.exec(part))) into.append(el("code", "", m[1]));
+            else if ((m = /^\[([^\]]+)\]\((https:\/\/[^)\s]+)\)$/.exec(part))) { const a = el("a", "", m[1]); a.href = m[2]; a.target = "_blank"; a.rel = "noopener"; into.append(a); }
+            else into.append(part.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"));
+          }
+          return into;
+        };
+        let list = null, code = null;
+        for (const raw of text.replace(/\r/g, "").split("\n")) {
+          if (/^\s*```/.test(raw)) { code ? (out.push(code), (code = null)) : ((code = el("pre", "")), (list = null)); continue; }
+          if (code) { code.textContent += raw + "\n"; continue; }
+          let m;
+          if ((m = /^\s*[-*+]\s+(.*)$/.exec(raw)) || (m = /^\s*\d+[.)]\s+(.*)$/.exec(raw))) { list || out.push((list = el("ul"))); list.append(inline(m[1], el("li"))); continue; }
+          list = null;
+          if ((m = /^#{1,6}\s+(.*)$/.exec(raw))) out.push(inline(m[1].replace(/#+\s*$/, ""), el("h3")));
+          else if ((m = /^>\s?(.*)$/.exec(raw))) out.push(inline(m[1], el("p")));
+          else if (/^\s*\|/.test(raw)) { if (/^[\s|:-]+$/.test(raw)) continue; out.push(el("pre", "", raw.trim())); }
+          else if (raw.trim() && !/^\s*<\/?[a-z]/i.test(raw)) out.push(inline(raw.trim(), el("p")));
+        }
+        if (code) out.push(code);
+        return out;
+      }
+      async function showManual(f) {
+        if (!f || !f.repo) return sheet("MANUAL", [el("p", "", "This firmware has no manual to show.")]);
+        toast("Getting the manual of " + f.name + "…");
+        try {
+          const m = await manualOf(f), link = el("a", "", "Open its page: " + f.repo);
+          link.href = f.repo; link.target = "_blank"; link.rel = "noopener";
+          sheet(f.name + " · MANUAL", [...mdNodes(m.text), el("hr"), el("p", "", "From its repository (" + m.date + "), written by its author."), link]);
+        } catch (e) {
+          const link = el("a", "", f.repo);
+          link.href = f.repo; link.target = "_blank"; link.rel = "noopener";
+          sheet(f.name + " · MANUAL", [el("p", "", "No manual to show: " + e.message + "."), link]);
+        }
+      }
       async function packageOf(f) {
         if (f.bytes) return f.bytes;
         const got = vetPkg(await kvGet("pkg:" + f.id));
@@ -1013,7 +1085,8 @@
             have = f === local || f === backup || kept.has(f.id),
             dl = el("button", "", have ? "KEPT ●" : "DOWNLOAD"),
             go = el("button", f.id === sel.value ? "on" : "", f.id === sel.value && node ? "IN USE" : "USE"),
-            inst = el("button", "inst", "INSTALL ON MY FM-1");
+            inst = el("button", "inst", "INSTALL ON MY FM-1"),
+            man = el("button", "man", "MANUAL");
           const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (img.src = typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? d : NO_IMG)));
           img.alt = "";
           img.loading = "lazy";
@@ -1025,18 +1098,24 @@
           t.title = f.about || f.name;
           dl.disabled = have;
           dl.title = have ? "Kept on this device: it runs offline" : "Download " + f.name + " and keep it on this device, to run it offline later";
-          dl.onclick = () => (toast("Downloading " + f.name + "…"), packageOf(f).then(() => toast(f.name + " is kept on this device"), (e) => toast(f.name + ": " + e.message, 4000)));
+          dl.onclick = () => (toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), toast(f.name + " is kept on this device")), (e) => toast(f.name + ": " + e.message, 4000)));
           go.title = "Run " + f.name + " on the FM-1";
           go.onclick = () => use(f.id);
           inst.dataset.own = f === backup ? "1" : "0"; // the card of the unit's own backup never installs
           inst.hidden = f === backup || !realReady(); // only when every check of REAL FM-1 is in place
           inst.title = "Install " + f.name + " on the real FM-1 (through the protector's MIDI mode). Asks first.";
           inst.onclick = () => realInstall(f);
-          act.append(dl, go, inst);
+          man.hidden = !f.repo || f === local || f === backup;
+          man.title = "The manual of " + f.name + ": the README of its repository (kept on this device once read)";
+          man.onclick = () => showManual(f);
+          act.append(dl, go, man, inst);
           c.append(img, t, act);
           return c;
         };
-        $("#fwList").replaceChildren(...[backup, local].filter(Boolean).concat(FIRMWARES).map(card));
+        // the search box filters what is listed (name, author, text); the pick of the firmware itself is not touched
+        const q = $("#fwSearch").value.trim().toLowerCase(), shown = (f) => !q || (f.name + " " + (f.author || "") + " " + (f.about || "")).toLowerCase().includes(q);
+        const cards = [backup, local].filter(Boolean).concat(FIRMWARES).filter(shown).map(card);
+        $("#fwList").replaceChildren(...(cards.length ? cards : [el("p", "", "No firmware matches “" + $("#fwSearch").value.trim() + "”.")]));
         const n = kept.size + (local ? 1 : 0) + (backup ? 1 : 0);
         $("#stor span").textContent = n + " KEPT";
         navigator.storage?.estimate?.().then((s) => {
@@ -1096,11 +1175,13 @@
         sureClose();
         go();
       };
+      $("#fwSearch").oninput = () => listFace();
+      $("#helpFw").onclick = () => (current() && current().repo ? showManual(current()) : ((manPart = "fm"), menuShow(true), menuTab("man"), manual()));
       $("#sureNo").onclick = () => (sureClose(), toast("Cancelled"));
       $("#wipe").onclick = () => (node && run ? sure("Erase everything " + run.f.name + " has saved (patches, settings, songs) and start it fresh? This cannot be undone.", () => (boot(true), toast("Saves erased: starting fresh"))) : toast("Turn the FM-1 on first: the saves belong to the firmware that runs"));
       $("#forget").onclick = () =>
         sure("Delete every downloaded firmware and your opened file from this device? Their saves stay, and so does the backup of your FM-1. They can be downloaded again when online.", async () => {
-          for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) await kvDel(k);
+          for (const k of await kvKeys()) if (/^(pkg|man):/.test(String(k))) await kvDel(k);
           kept.clear();
           local = null;
           FIRMWARES.forEach((f) => delete f.bytes);
