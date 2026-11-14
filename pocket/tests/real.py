@@ -99,6 +99,15 @@ class Real(unittest.TestCase):
         self.assertIn("MPK mini", self.text("#midiNames")); self.assertNotIn("FM-1", self.text("#midiNames"))
         self.assertEqual(self.js("return window.__errs"), [])
 
+    def test_inspect_copies_a_read_only_report(self):
+        self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
+        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
+        self.click('#realInfo'); self.wait("window.__copied")
+        r = self.js("return window.__copied")
+        for want in ("FM-1 MIDI 1", "identity: FM-1_015", "sysex: allowed", "MIDI inputs:"): self.assertIn(want, r)
+        self.assertNotIn("0x23", "\n".join(self.js("return window.__log")))  # nothing but the identity was asked
+
     def test_sync_sends_what_you_play_to_the_unit(self):
         self.click('button[data-sub=real]'); self.click('#realConn')
         self.js("window.__sent = []; const o = window.__fwOut.send; window.__fwOut.send = (b) => { __sent.push(Array.from(b)); o(b); }")
