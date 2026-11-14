@@ -169,6 +169,8 @@ class Real(unittest.TestCase):
         self.assertIn("M-Flasher", self.text("#realRules"))
         self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
         self.assertIn("NOT in this flash", self.text("#realMsg"))
+        self.assertEqual(self.js("return document.querySelectorAll('#realMapGrid i').length"), 256)
+        self.assertFalse(self.js("return document.querySelector('#realMap').hidden"))
         self.assertIn("protector: NOT installed", self.text("#realNames"))
         self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without the protector")
         self.assertIn("No protector, no custom firmware", self.text("#realMsg"))

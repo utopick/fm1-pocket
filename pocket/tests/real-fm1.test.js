@@ -127,3 +127,15 @@ test("the protector is found by its identity in the boot container, and a stock 
   assert.deepStrictEqual(R.protector(flash), { installed: true, board: "fm1", version: "m-bootloader 2.4" });
   assert.deepStrictEqual(R.protector(new Uint8Array(10)), { installed: false });
 });
+test("the flash map lists the directory and which sectors hold data", () => {
+  const flash = new Uint8Array(0x100000).fill(0xff);
+  const rec = new Uint8Array(32).fill(0xff); // a record as the chip holds it: CRC16 of bytes 2..31 first, then ENC 0xFFFF
+  rec.set([0, 0, 0xa0, 0, 0, 0], 2); rec.fill(0, 6, 16); rec.set([0x30, 0x38, 0, 0, 0], 8); rec.fill(0, 13, 16); rec.fill(0, 16, 32); rec.set(Buffer.from("uboot.boot"), 16);
+  const c = R.crc16(rec.subarray(2, 32)); rec[0] = c & 255; rec[1] = c >> 8;
+  flash.set(R.enc(0xffff, rec), 0x20); flash[0x5000] = 1;
+  const m = R.flashMap(flash);
+  assert.deepStrictEqual(m.records.map((r) => [r.name, r.addr, r.len]), [["uboot.boot", 0xa0, 0x3830]]);
+  assert.strictEqual(m.sectors.length, 256); assert.strictEqual(m.sectors[0], 1); assert.strictEqual(m.sectors[5], 1); assert.strictEqual(m.sectors[1], 0);
+  assert.strictEqual(m.used, 2); assert.strictEqual(m.protector.installed, false);
+  assert.deepStrictEqual(R.flashMap(new Uint8Array(0x100000).fill(0xff)).records, []);
+});
