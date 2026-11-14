@@ -178,7 +178,8 @@ class Real(unittest.TestCase):
         self.assertFalse(self.js("return document.querySelector('#realMap').hidden"))
         self.assertIn("protector: NOT installed", self.text("#realNames"))
         self.click('#realFw'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without the protector")
-        self.assertIn("No protector, no custom firmware", self.text("#realMsg"))
+        self.assertFalse(self.js("return document.querySelector('#job').hidden"), "a dialog says why")
+        self.assertIn("NO PROTECTOR, NO CUSTOM FIRMWARE", self.text("#jobTitle"))
 
     def files(self): return [f for f in os.listdir(self.dl) if f.endswith(".bin")]
 
@@ -190,6 +191,7 @@ class Real(unittest.TestCase):
         self.click('#realBackup'); self.wait("document.querySelector('#realMsg').textContent.includes('Backup kept in this browser')", 90)
         time.sleep(1); self.assertEqual(len(self.files()), 1, "the second backup must not pile up another file")
         time.sleep(4)  # the backup starts the emulator and closes the menu: open it again
+        self.assertFalse(self.js("return document.querySelector('#job').hidden"), "the finished job waits for OK"); self.click('#jobOk')
         self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=conn]').click(); document.querySelector('button[data-sub=real]').click()"); time.sleep(0.5)
         self.d.find_element('css selector', '#realSave').click(); time.sleep(2); self.assertEqual(len(self.files()), 2)  # SAVE BACKUP gives the kept one on demand
 
@@ -213,6 +215,13 @@ class Real(unittest.TestCase):
         got = self.js("return [document.querySelectorAll('#fwList .inst:not([hidden])').length, document.querySelectorAll('#fwList .fwc').length, document.querySelectorAll('#fwList .inst').length]")
         self.assertIn(got[0], (got[1], got[1] - 1), "every card (the backup's own excepted) offers INSTALL: %s" % got)
         self.assertGreater(got[0], 50)
+        # pressing INSTALL always answers: the confirmation, then a dialog with the result (here the package cannot be downloaded: no network)
+        self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=fw]').click()"); time.sleep(0.5)
+        self.js("document.querySelector('#fwList .inst:not([hidden])').click()"); time.sleep(0.5)
+        self.assertFalse(self.js("return document.querySelector('#sure').hidden"), "asks first"); self.slide()
+        self.wait("!document.querySelector('#job').hidden && document.querySelector('#jobTitle').textContent.includes('FAILED')", 40)
+        self.assertIn("INSTALL", self.text("#jobTitle")); self.assertFalse(self.js("return document.querySelector('#jobOk').hidden"))
+        self.click('#jobOk'); self.assertTrue(self.js("return document.querySelector('#job').hidden"))
         # a reload forgets the session, not the browser: the kept backup unlocks it again
         self.d.refresh(); time.sleep(1.5)
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
