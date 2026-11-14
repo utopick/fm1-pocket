@@ -134,6 +134,25 @@ const RealFM1 = (() => {
     return { installed: true, board: text(0x48, 0x50), version: text(0x50, 0x70) };
   }
 
+  // ---- what is in the flash: the top-level directory (32-byte records from 0x20, each ENC 0xFFFF with its own CRC16: name, address, length)
+  // and which 4 KiB sectors hold anything (a sector that is all 0xFF is blank). Reading only: nothing here is trusted for a write.
+  function flashMap(flash) {
+    const records = [];
+    for (let o = 0x20; o + 32 <= Math.min(flash.length, 0x400) && records.length < 32; o += 32) {
+      const r = enc(0xffff, flash.subarray(o, o + 32));
+      if ((r[0] | (r[1] << 8)) !== crc16(r.subarray(2, 32))) break;
+      let name = "";
+      for (let i = 16; i < 32 && r[i]; i++) name += r[i] >= 32 && r[i] < 127 ? String.fromCharCode(r[i]) : "?";
+      records.push({ name, addr: le32(r, 4), len: le32(r, 8), attr: r[12] });
+    }
+    const sectors = new Uint8Array(flash.length >> 12);
+    for (let i = 0; i < sectors.length; i++) {
+      const end = (i + 1) << 12;
+      for (let j = i << 12; j < end; j++) if (flash[j] !== 0xff) { sectors[i] = 1; break; }
+    }
+    return { records, sectors, used: sectors.reduce((a, b) => a + b, 0), protector: protector(flash) };
+  }
+
   // ---- a package (.fwsc): identity bytes sit in the 48th byte of the first blocks; the unit reads the image without them
   function unweave(raw) {
     const B = 48, K = 47, MIN = 20, S = 0x7d;
@@ -211,6 +230,6 @@ const RealFM1 = (() => {
     }
   }
 
-  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, protector, unweave, wrap, servePackage, crc16, crc32, enc };
+  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, protector, flashMap, unweave, wrap, servePackage, crc16, crc32, enc };
 })();
 if (typeof module !== "undefined") module.exports = RealFM1;
