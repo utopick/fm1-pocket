@@ -16,6 +16,7 @@ page = read("src/app.html")
 parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
          "/*@MIDIDEVICE@*/": read("vendor/midi-device.js"),  # the Pocket apps' MIDI device panel, the same file as theirs
          "/*@LICENSE_EMU@*/": read("vendor/LICENSE-fm1-emu").replace("&", "&amp;").replace("<", "&lt;"),
+         "/*@LICENSE_MBOOT@*/": read("vendor/mboot/LICENSE-m-bootloader").replace("&", "&amp;").replace("<", "&lt;"),
          "/*@REALFM1@*/": read("vendor/real-fm1.js"),  # USB MIDI protocol for a real FM-1 (tested by tests/real-fm1.test.js)
          "/*@MBOOT_STAGE@*/": b64("vendor/mboot/fm1-stage.fwsc"), "/*@MBOOT_UBOOT@*/": b64("vendor/mboot/fm1-uboot.fwsc"),  # m-bootloader v2.4 (MIT)
          "/*@MBOOT_STAGE_SHA@*/": sha("vendor/mboot/fm1-stage.fwsc"), "/*@MBOOT_UBOOT_SHA@*/": sha("vendor/mboot/fm1-uboot.fwsc"),
