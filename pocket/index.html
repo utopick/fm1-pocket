@@ -164,11 +164,19 @@
 
         [data-view="up"] #up { --u: min(calc(100cqw / 1400), calc(100cqh / 540)); flex: 1; }
         [data-view="up"] #kb { display: none; }
-        /* the keys view: the keys keep their proportions (about 1 : 4.5) and sit at the bottom, as on the unit; the rail is a row above, and the upper part
-           (knobs, screen, buttons) is shrunk into what is left between them (the height of the rail and the gaps is taken off) */
+        /* the keys view: the keys keep their size (about 1 : 4.5) at the bottom, as on the unit; the upper part (knobs, screen, buttons) is scaled to the height
+           above them, from the top. The rail (FM1., power, view, ?) is pinned where it is in the whole view, at the same size: --u there is the whole view's
+           unit, and the left and top are the whole view's space-evenly written out (the left group is rail + two knob columns, 330 units wide) */
+        [data-view="keys"] #fm { position: relative; }
         [data-view="keys"] #kb { flex: none; height: min(100%, 22cqw); margin-top: auto; }
-        [data-view="keys"] #up { --u: min(calc(100cqw / 1400), calc((100cqh - 22cqw - 64px) / 540)); flex: 1; min-height: 0; }
-        /* shrunk, the labels shrink with it (no 7 px floor) so they stay inside their knob and button, a miniature of the panel */
+        [data-view="keys"] #rail { --u: min(calc(100cqw / 1400), calc(100cqh / 760)); position: absolute; z-index: 1; flex-direction: column; gap: calc(10 * var(--u)); width: calc(102 * var(--u)); height: calc(264.2 * var(--u));
+          left: calc(((100cqw - 540 * var(--u)) / 2 + 6px - 330 * var(--u)) / 3); top: calc(6px + 194 * var(--u) / 3); }
+        [data-view="keys"] #rail .grow { display: none; }
+        [data-view="keys"] #rail button { flex: 1; min-height: 0; min-width: 0; width: 100%; border-radius: calc(14 * var(--u)); font-size: max(9px, calc(16 * var(--u))); }
+        [data-view="keys"] #rail #logo { font-size: max(12px, calc(22 * var(--u))); }
+        [data-view="keys"] #up { --ru: min(calc(100cqw / 1400), calc(100cqh / 760)); --u: min(calc(100cqw / 1400), calc((100cqh - 22cqw - 6px) / 540)); flex: 1; min-height: 0; align-items: flex-start;
+          padding-left: calc(((100cqw - 540 * var(--ru)) / 2 + 6px - 330 * var(--ru)) / 3 + 102 * var(--ru) - 4px); }
+        /* shrunk, the labels shrink with it (no 7 px floor) so they stay inside their knob and button */
         [data-view="keys"] .kn label { font-size: calc(14 * var(--u)); letter-spacing: 0; }
         [data-view="keys"] .pb { font-size: calc(13 * var(--u)); }
       }
