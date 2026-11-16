@@ -139,8 +139,9 @@
       .pb.go { --tint: var(--go); }
       /* the unit prints HOME in white, and PLAY over STOP (one button) */
       .pb.home { color: color-mix(in srgb, var(--home, #fff), #2a1a03 calc(var(--led) * 100%)); }
-      .pb .pl, .pb .st { display: block; line-height: 1.15; font-size: 0.8em; }
-      .pb .pl { border-bottom: 1px solid currentColor; padding-bottom: 1px; margin-bottom: 1px; }
+      .pb .pl, .pb .st { display: block; line-height: 1.15; font-size: 1.05em; }
+      .pb .pl { position: relative; padding-bottom: 0.4em; margin-bottom: 0.4em; }
+      .pb .pl::after { content: ""; position: absolute; left: 16%; right: 16%; bottom: 0; border-bottom: 1px solid currentColor; }
       /* ---- the keys: F3 to G5. One row sideways, two rows upright. FM-1 pills (the upper ones with the stock firmware's names under them), or a piano */
       .krow { position: relative; flex: 1; min-height: 0; }
       .k { --led: 0; position: absolute; cursor: pointer; }
@@ -187,12 +188,17 @@
       #menu .bar h2 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       #menu .bar h2 span { font-weight: 700; font-size: 13px; letter-spacing: 1px; color: var(--m-dim); }
       #menu h2 { margin: 0 4px; font: 900 18px system-ui; }
-      #menu h2 b { color: var(--silk); }
+      #menu h2 b { color: var(--lit); }
+      #menu[data-tab="home"] #menuWhere { font: inherit; letter-spacing: 0; color: inherit; }
       /* the home of the menu: a grid of big icon buttons, one for each tab. A tab fills the screen above the bottom bar, whose BACK returns here */
-      #menu .tabs { display: none; flex: 1; min-height: 0; overflow: auto; grid-template-columns: repeat(auto-fit, minmax(clamp(96px, 28vmin, 170px), 1fr)); gap: 10px; align-content: center; }
+      #menu .card { position: relative; }
+      #menu .tabs { display: none; flex: 1; min-height: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 58px; }
       #menu[data-tab="home"] .tabs { display: grid; }
-      #menu .tabs button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: clamp(84px, 26vmin, 150px); padding: 8px 2px; }
-      #menu .tabs svg { width: 38%; max-width: 56px; max-height: 40%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      #menu .tabs button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-width: 0; min-height: 0; padding: 8px; font-size: clamp(15px, 5vmin, 30px); }
+      #menu .tabs svg { height: 44%; max-height: 110px; aspect-ratio: 1; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      /* ABOUT: a small square at the top right, like the power button of the device */
+      #menu .tabs button[data-tab="info"] { position: absolute; top: 10px; right: 10px; width: 46px; height: 40px; padding: 4px; font-size: 0; gap: 0; }
+      #menu .tabs button[data-tab="info"] svg { height: 24px; }
       #menu[data-tab="home"] #menuBack, #menu:not([data-tab="home"]) #menuClose { display: none; }
       #menuBack, #menuClose { flex: none; width: 140px !important; }
       #menu section { flex: 1; min-height: 0; overflow: auto; display: none; flex-direction: column; gap: 10px; }
@@ -230,6 +236,10 @@
       /* LOOK: the chooser of the subject picked at the bottom fills the tab: the two kinds of keys, a card for each skin,
          the same screen under each filter. Tap one to use it */
       #menu section.row { flex-direction: row; }
+      #menu section[data-tab="look"], #menu section[data-tab="conn"] { flex-direction: row; }
+      #menu section[data-tab="look"] > .grid, #menu section[data-tab="conn"] > .grid { flex: 0 0 25%; min-width: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      #menu section[data-tab="look"] > .grid button, #menu section[data-tab="conn"] > .grid button { min-height: 0; padding: 4px; font-size: 13px; }
+      #menu #pvKeys { flex-direction: column; }
       #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
       #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx, #menu [data-sub="midi"] #pvMidi, #menu [data-sub="inst"] #pvInst { display: flex; }
       #menu [data-sub="real"] #pvReal { display: grid; }
@@ -339,8 +349,8 @@
       /* a phone held sideways has about 390 px of height: the menu gives it back to the panes (no pane scrolls except the list of firmwares and the manual) */
       @media (max-height: 460px) {
         #menu .card { padding: 6px; gap: 6px; }
-        #menu .tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-        #menu .tabs button { min-height: 0; height: 100%; max-height: 150px; }
+        #menu .tabs { margin-top: 52px; }
+        #menu .tabs button[data-tab="info"] { top: 6px; right: 6px; }
         #menu button { min-height: 34px; padding-top: 3px; padding-bottom: 3px; }
         #menu section > .grid button i { display: none; }
         #menu section > .grid { gap: 5px; }
@@ -545,7 +555,7 @@
           </div>
         </section>
         <div class="bar">
-          <h2>FM1<b>.</b> <span id="menuWhere"></span></h2>
+          <h2>FM1<b>.</b><span id="menuWhere"></span></h2>
           <button id="menuBack" title="Back to the menu's icons">BACK</button>
           <button id="menuClose" title="Close the menu">CLOSE</button>
         </div>
@@ -1365,7 +1375,7 @@
       function menuTab(t) {
         $("#menu").dataset.tab = t;
         if (t !== "home") paintFx();
-        $("#menuWhere").textContent = t === "home" ? "" : "· " + $(`#menu .tabs [data-tab=${t}]`).textContent;
+        $("#menuWhere").textContent = t === "home" ? "Pocket" : " · " + $(`#menu .tabs [data-tab=${t}]`).textContent;
       }
       for (const b of $$("#menu .tabs button")) b.onclick = () => menuTab(b.dataset.tab);
       const menuShow = (on) => (($("#menu").hidden = !on), on && (listFace(), realFace(), $("#fwList .fwc.on")?.scrollIntoView({ block: "nearest" })));
