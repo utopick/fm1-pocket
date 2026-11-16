@@ -213,7 +213,10 @@
       #menu .tabs button[data-tab="info"] { position: absolute; top: 10px; right: 10px; width: 46px; height: 40px; padding: 4px; font-size: 0; gap: 0; }
       #menu .tabs button[data-tab="info"] svg { height: 24px; }
       #menu[data-tab="home"] #menuBack, #menu:not([data-tab="home"]) #menuClose { display: none; }
-      #menuBack, #menuClose { flex: none; width: 140px !important; }
+      /* the bottom bar grows with the window too: title, storage text, BACK */
+      #menuBack, #menuClose { flex: none; width: clamp(140px, 22vmin, 260px) !important; min-height: clamp(40px, 7vmin, 72px); font-size: clamp(11px, 2.4vmin, 24px); }
+      #menu .bar h2 { font-size: clamp(18px, 3.6vmin, 38px); }
+      #menu .bar h2 span { font-size: 0.7em; }
       #menu section { flex: 1; min-height: 0; overflow: auto; display: none; flex-direction: column; gap: 10px; }
       #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"], #menu[data-tab="man"] section[data-tab="man"] { display: flex; }
       /* the firmwares: cards, four to a row at most, in a list that scrolls. The actions stay under it */
@@ -255,35 +258,44 @@
       #menu #manBody b.ctl.k { border-radius: 999px; padding: 0 0.6em; }
       #menu #manBody .flash { animation: mfflash 1.4s ease-out; }
       @keyframes mfflash { 0%, 40% { background: color-mix(in srgb, var(--lit) 35%, transparent); } }
-      #fwSearch { flex: none; min-height: 36px; border-radius: 10px; border: 1px solid var(--rim); background: var(--m-panel); color: var(--silk); padding: 4px 12px; font: 14px system-ui, sans-serif; width: 100%; }
-      #menu .cards { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(max(300px, 25% - 8px), 1fr)); gap: 8px; align-content: start; padding-right: 4px; }
-      #menu .fwc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 6px 10px; padding: 8px; border-radius: 12px; border: 1px solid var(--rim); background: var(--m-panel); min-width: 0; min-height: 190px; }
+      /* FIRMWARE: the list of banners (one to a row, scrolling, snapping like a carousel) on the left, the four actions in a column on the right (see LOOK) */
+      #menu section[data-tab="fw"] { flex-direction: row; }
+      #menu #fwList { flex: 1; min-width: 0; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px; scroll-snap-type: y proximity; }
+      #menu #fwList > p { margin: auto; text-align: center; }
+      #menu .fwc { flex: none; scroll-snap-align: start; display: grid; grid-template-columns: clamp(96px, 24%, 150px) minmax(0, 1fr) clamp(118px, 22%, 170px); gap: 12px; padding: 10px; min-height: clamp(132px, 26vmin, 300px); font-size: clamp(12px, 2.3vmin, 26px); border-radius: 12px; border: 1px solid var(--rim); background: var(--m-panel); min-width: 0; }
       #menu .fwc.on { border-color: var(--silk); box-shadow: inset 0 0 0 1px var(--lit); }
-      #menu .fwc img { grid-column: 1; grid-row: 1 / span 2; width: 100%; height: 100%; min-height: 0; border-radius: 8px; background: #06070a; object-fit: contain; image-rendering: pixelated; }
-      #menu .fwc .t { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--m-dim); overflow: hidden; }
-      #menu .fwc .t b { color: var(--silk); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+      #menu .fwc img { grid-column: 1; width: 100%; height: auto; aspect-ratio: 1; align-self: center; border-radius: 8px; background: #06070a; object-fit: contain; image-rendering: pixelated; }
+      #menu .fwc .t { grid-column: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 3px; font-size: 1em; color: var(--m-dim); overflow: hidden; align-self: stretch; }
+      #menu .fwc .t b { color: var(--silk); font-size: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
       #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
-      #menu .fwc .t small { font-size: 11px; line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; }
-      #menu .fwc .act { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; gap: 6px; }
-      #menu .fwc .act button { width: auto; flex: 1 1 0; min-width: 0; }
-      #menu .fwc .act button { flex: 1 1 40%; }
-      #menu .fwc .inst { flex-basis: 100% !important; }
-      #menu .fwc button { min-height: 38px; padding: 4px; }
-      #menu .foot { flex: none; display: flex; flex-direction: column; gap: 6px; }
-      /* the five actions stay on one row, even on a phone */
-      #menu .foot .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
-      #menu .foot .grid button { padding: 6px 1px; font-size: 11px; overflow: hidden; white-space: nowrap; }
-      #menu .foot .grid button i { letter-spacing: 0; font-size: 8px; }
+      #menu .fwc .t small { font-size: 1em; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; }
+      #menu .fwc .act { grid-column: 3; display: flex; flex-direction: column; gap: 6px; }
+      #menu .fwc .act button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 4px; font-size: 0.95em; }
+      /* the search box is a dialog, at the top so a phone's keyboard does not cover it */
+      #find { position: fixed; inset: 0; z-index: 7; background: #000c; display: flex; justify-content: center; align-items: flex-start; padding: 10px; touch-action: auto; font: 13px/1.35 system-ui, sans-serif; --m-panel: color-mix(in srgb, var(--body2), #000 16%); --m-dim: color-mix(in srgb, var(--silk) 72%, var(--body2)); }
+      #find[hidden] { display: none; }
+      #find .box { width: min(100%, 34em); display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 14px; border: 1px solid var(--rim); background: var(--m-panel); color: var(--silk); }
+      #find h3 { margin: 0; font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: var(--m-dim); }
+      #fwSearch { min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: var(--body2); color: var(--silk); padding: 4px 12px; font: 16px system-ui, sans-serif; width: 100%; box-sizing: border-box; }
+      #find .row { display: flex; gap: 8px; }
+      #find button { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
+      #find #findGo { background: var(--lit); border-color: var(--silk); color: #14091f; }
       /* storage: a bar that fills with what the app keeps here. Its height is fixed, so the text in it never moves the buttons */
-      #stor { position: relative; height: 20px; flex: none; border-radius: 10px; background: var(--btn2); border: 1px solid var(--rim); overflow: hidden; }
+      #stor { position: relative; height: clamp(26px, 4.4vmin, 46px); flex: 1 1 0; min-width: 0; margin: 0 4px; border-radius: 13px; background: var(--btn2); border: 1px solid var(--rim); overflow: hidden; }
+      #menu:not([data-tab="fw"]) #stor { display: none; }
+      #menu[data-tab="fw"] .bar h2 { flex: none; }
       #stor i { position: absolute; inset: 0 auto 0 0; min-width: 8px; background: var(--lit); }
-      #stor span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 10px ui-monospace, Menlo, monospace; letter-spacing: 1px; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
+      #stor span { position: absolute; inset: 0; display: grid; place-items: center; font: 700 clamp(10px, 1.9vmin, 20px) ui-monospace, Menlo, monospace; letter-spacing: 1px; color: #fff; white-space: nowrap; text-shadow: 0 1px 2px #000, 0 0 3px #000; }
       /* LOOK: the chooser of the subject picked at the bottom fills the tab: the two kinds of keys, a card for each skin,
          the same screen under each filter. Tap one to use it */
       #menu section.row { flex-direction: row; }
       #menu section[data-tab="look"], #menu section[data-tab="conn"] { flex-direction: row; }
-      #menu section[data-tab="look"] > .grid, #menu section[data-tab="conn"] > .grid { flex: 0 0 25%; min-width: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; }
-      #menu section[data-tab="look"] > .grid button, #menu section[data-tab="conn"] > .grid button { min-height: 0; padding: 4px; font-size: 13px; }
+      #menu section[data-tab="look"] > .grid, #menu section[data-tab="conn"] > .grid, #menu section[data-tab="fw"] > .grid { flex: 0 0 25%; min-width: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; }
+      #menu section[data-tab="fw"] > .grid { grid-template-rows: repeat(4, minmax(0, 1fr)); }
+      /* the text of the big buttons grows with the window (13 px on a phone held sideways, up to 34 px on a big screen) */
+      #menu section[data-tab="look"] > .grid button, #menu section[data-tab="conn"] > .grid button, #menu section[data-tab="fw"] > .grid button { font-size: clamp(13px, 3.4vmin, 34px); }
+      #menu section > .grid button i { font-size: 0.62em; }
+      #menu section[data-tab="look"] > .grid button, #menu section[data-tab="conn"] > .grid button, #menu section[data-tab="fw"] > .grid button { min-height: 0; padding: 4px; }
       #menu #pvKeys { flex-direction: column; }
       #menu .pane { flex: 1; min-height: 0; display: none; gap: 8px; }
       #menu [data-sub="keys"] #pvKeys, #menu [data-sub="fx"] #pvFx, #menu [data-sub="midi"] #pvMidi, #menu [data-sub="inst"] #pvInst { display: flex; }
@@ -292,14 +304,14 @@
       /* the REAL FM-1 pane: four numbered steps (an infographic that is also the buttons), one sentence, the play button and the flash map (always there, grey until
          there is data). Everything is in em and the em follows the window (11 px on a phone held sideways, up to 21 px on a big screen), so it looks the same everywhere. */
       #menu #pvReal { overflow: hidden; font-size: clamp(11px, 2.6vmin, 30px); align-content: center; }
-      #pvReal { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.3em; color: var(--silk); max-width: 120em; width: 100%; margin: 0 auto; }
+      #pvReal { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 1.1em 1.3em; color: var(--silk); max-width: 120em; width: 100%; margin: 0 auto; }
       @media (max-aspect-ratio: 1/1) { #pvReal { grid-template-columns: minmax(0, 1fr); } }
       #realLeft { display: flex; flex-direction: column; gap: 0.7em; min-width: 0; }
       #menu #pvReal p { margin: 0; color: var(--m-dim); display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
       #menu #realNames { font-size: 1.1em; line-height: 1.3; -webkit-line-clamp: 1; }
       #menu #pvReal #realNext { font-size: 1.3em; line-height: 1.3; font-weight: 700; color: var(--silk); -webkit-line-clamp: 2; min-height: 2.6em; }
-      #realSteps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9em; }
-      #realSteps .step { position: relative; min-height: 5.8em; padding: 0.3em 0.2em 0.3em; font-size: 1.15em; font-weight: 800; line-height: 1.2; overflow: visible; }
+      #realSteps { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.2em; }
+      #realSteps .step { position: relative; min-height: 6.6em; padding: 0.3em 0.2em 0.3em; font-size: 1.4em; font-weight: 800; line-height: 1.2; overflow: visible; }
       #realSteps .step i { font-size: 0.68em; letter-spacing: 0.5px; margin-bottom: 0.4em; }
       /* the number, and an arrow to the next step */
       #realSteps .step::before { content: attr(data-n); position: absolute; left: 0.4em; top: 0.35em; width: 1.5em; height: 1.5em; border-radius: 50%; display: grid; place-items: center; background: var(--rim); color: var(--silk); font-size: 0.8em; font-weight: 800; }
@@ -367,6 +379,10 @@
       #menu button.big { min-height: 56px; font-size: 14px; background: var(--lit); border-color: var(--silk); color: #14091f; }
       #menu button.big i { color: #14091f; }
       #menu .thanks p, #menu #pvMidi p { font-size: clamp(14px, 4.6vmin, 22px); color: var(--silk); }
+      #menu .thanks h3 { margin-top: 14px; }
+      #licBody { margin-top: 18px; }
+      #menu .thanks h3:first-child { margin-top: 0; }
+      #menu .thanks pre { margin: 0; white-space: pre-wrap; font: 11px/1.35 ui-monospace, Menlo, monospace; color: var(--m-dim); -webkit-user-select: text; user-select: text; }
       #menu .thanks .lead { font-size: clamp(19px, 7.4vmin, 36px); line-height: 1.3; color: var(--silk); }
       /* the MIDI device panel is the Pocket apps' own (kept identical): here it only has to fit a turned page */
       body #mdPanel .mdCard { max-height: 96%; }
@@ -402,13 +418,12 @@
         #menu button { min-height: 34px; padding-top: 3px; padding-bottom: 3px; }
         #menu section > .grid button i { display: none; }
         #menu section > .grid { gap: 5px; }
-        #menu .fwc button { min-height: 30px; }
-        #menu .fwc { min-height: 118px; padding: 6px; }
-        #menu .fwc .t small { -webkit-line-clamp: 2; }
-        #menu .fwc .act button { flex: 1 1 28%; font-size: 10.5px; }
-        #fwSearch { min-height: 30px; padding: 2px 10px; font-size: 13px; }
+        #menu .fwc { min-height: 132px; padding: 8px; font-size: 12px; }
+        #menu .fwc .t small { -webkit-line-clamp: 5; }
+        #menu .fwc .act button { min-height: 26px; }
         #menu .box.pane { padding: 6px 8px; }
         #menu .thanks h3 { font-size: 9px; }
+        #menu .thanks pre { font-size: 9px; }
         #menu .thanks .lead { font-size: 15px; }
         #menu .thanks p { font-size: 12px; line-height: 1.3; }
         #menu [data-sub="skin"] #pvSkin { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 6px; }
@@ -436,6 +451,9 @@
       #sureSlide { appearance: none; -webkit-appearance: none; width: 100%; height: 52px; margin: 0; border-radius: 26px; background: linear-gradient(90deg, #3a1420, #ff5e7a); cursor: pointer; }
       #sureSlide::-webkit-slider-thumb { -webkit-appearance: none; width: 72px; height: 52px; border-radius: 26px; background: var(--silk); border: 0; box-shadow: 0 2px 6px #000a; }
       #sureSlide::-moz-range-thumb { width: 72px; height: 52px; border-radius: 26px; background: var(--silk); border: 0; }
+      #sureOpt { display: flex; gap: 8px; }
+      #sureOpt button { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
+      #sureOpt button.on { background: var(--lit); border-color: var(--silk); color: #14091f; }
       #sureNo { min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
       #toast.show { opacity: 1; }
@@ -474,17 +492,12 @@
           <button data-tab="info" role="tab" title="Thanks, credits and licences"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>ABOUT</button>
         </div>
         <section data-tab="fw">
-          <input id="fwSearch" type="search" placeholder="Search firmwares: name, author, what it does" aria-label="Search firmwares" autocomplete="off" />
-          <div id="fwList" class="cards"></div>
-          <div class="foot">
-            <div id="stor" role="img" title="The storage this app uses on this device, and what is free"><i></i><span></span></div>
-            <div class="grid">
-              <button id="reboot" title="Start the firmware again. What it saved is kept."><i>FIRMWARE</i>RESTART</button>
-              <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
-              <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>DX7 · .SYX</i>LOAD BANK</button>
-              <button id="wipe" title="Forget what the running firmware saved and start it fresh. Asks first."><i>ITS SAVES</i>ERASE</button>
-              <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR</button>
-            </div>
+          <div id="fwList"></div>
+          <div class="grid">
+            <button id="fwFind" title="Search the firmwares by name, author or what they do"></button>
+            <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
+            <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>DX7 · .SYX</i>LOAD BANK</button>
+            <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR</button>
           </div>
           <select id="fw" hidden title="The firmware the FM-1 runs"></select>
         </section>
@@ -530,14 +543,14 @@
             <button id="inst" class="big" title="Install the app: its own window on your home screen or computer, and it works offline"></button>
           </div>
           <div class="box pane" id="pvReal">
+            <div id="realSteps">
+              <button id="realConn" data-n="1" class="step" title="Step 1: connect a real FM-1 over USB MIDI (asks to use SysEx)"></button>
+              <button id="realBackup" data-n="2" class="step" title="Step 2: save a copy of the whole flash of the real FM-1. Nothing is written to the unit except a small helper in RAM"></button>
+              <button id="realProt" data-n="3" class="step writes" title="Step 3: install the protected bootloader (m-bootloader), so a bad firmware can always be replaced over USB. WRITES to the unit"></button>
+              <button id="realGo" data-n="4" class="step" title="Step 4: choose a firmware: its card has the INSTALL button once every check is in place"></button>
+            </div>
             <div id="realLeft">
               <p id="realNames">Not connected yet.</p>
-              <div id="realSteps">
-                <button id="realConn" data-n="1" class="step" title="Step 1: connect a real FM-1 over USB MIDI (asks to use SysEx)"></button>
-                <button id="realBackup" data-n="2" class="step" title="Step 2: save a copy of the whole flash of the real FM-1. Nothing is written to the unit except a small helper in RAM"></button>
-                <button id="realProt" data-n="3" class="step writes" title="Step 3: install the protected bootloader (m-bootloader), so a bad firmware can always be replaced over USB. WRITES to the unit"></button>
-                <button id="realGo" data-n="4" class="step" title="Step 4: choose a firmware: its card has the INSTALL button once every check is in place"></button>
-              </div>
               <p id="realNext"></p>
               <div id="realRow">
                 <button id="realSync" class="play" title="Play with the real FM-1: what you play on this screen goes to the real unit too, and what the real unit plays (notes and clock) comes here. Not a MIDI keyboard, not a firmware installer."></button>
@@ -587,28 +600,37 @@
             <button id="manLang" title="English or Spanish · Inglés o español"></button>
           </div>
         </section>
-        <section data-tab="info" class="row">
+        <section data-tab="info">
           <div class="box thanks">
             <h3>THANK YOU, JOAKIM</h3>
             <p class="lead">FM1.Pocket is a fork of <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a> by <b>Joakim Eriksson</b>.</p>
             <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app adds a phone-first front to it, a mapper for MIDI controllers and installation as an app.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
-            <button id="licence" title="The full text of the licences and every credit"><i>MIT</i>LICENSES · CREDITS</button>
-          </div>
-          <div class="box thanks">
             <h3>ALSO THANKS</h3>
             <p><b>jvitkauskas</b> (MIT): <a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>, the protector and its USB MIDI updater (v2.4 is bundled; its specification is how this page talks to the unit), <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> (the flash map's regions and colours; the way to install the protector on the newer chip) and <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>.</p>
             <p><b>M-VAVE</b> made the FM-1; the manual here follows its user manual, in our own words. <b>The firmware authors</b> and <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the Firmware Hub</a> made everything you can run.</p>
             <p class="hint">Unofficial: not affiliated with M-VAVE, JieLi or any of them.</p>
+            <div id="licBody"></div>
           </div>
         </section>
         <div class="bar">
           <h2>FM1<b>.</b><span id="menuWhere"></span></h2>
+          <div id="stor" role="img" title="The storage this app uses on this device, and what is free"><i></i><span></span></div>
           <button id="menuBack" title="Back to the menu's icons">BACK</button>
           <button id="menuClose" title="Close the menu">CLOSE</button>
         </div>
         <input type="file" id="file" accept=".fwsc" hidden />
         <input type="file" id="bankFile" accept=".syx" hidden />
+      </div>
+    </div>
+    <div id="find" hidden>
+      <div class="box" role="dialog" aria-modal="true" aria-label="Search firmwares">
+        <h3>SEARCH FIRMWARES</h3>
+        <input id="fwSearch" type="search" placeholder="Name, author, what it does" aria-label="Search firmwares" autocomplete="off" />
+        <div class="row">
+          <button id="findClear" title="Clear the search: show every firmware">CLEAR</button>
+          <button id="findGo" title="Close the search and show what matches">SHOW</button>
+        </div>
       </div>
     </div>
     <div id="sheet" hidden>
@@ -689,6 +711,7 @@ SOFTWARE.
       <div class="box" role="alertdialog" aria-modal="true" aria-labelledby="sureText">
         <p id="sureWarn" hidden></p>
         <p id="sureText"></p>
+        <div id="sureOpt" hidden></div>
         <input type="range" id="sureSlide" min="0" max="100" value="0" title="Slide all the way to the right to confirm" aria-label="Slide all the way to the right to confirm" />
         <p class="hint">SLIDE TO THE END TO CONFIRM →</p>
         <button id="sureNo" title="Cancel: nothing happens">CANCEL</button>
@@ -4027,7 +4050,7 @@ registerProcessor("fm1", Fm1);
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "" });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "" });
         }
         return out;
       }
@@ -4212,7 +4235,7 @@ registerProcessor("fm1", Fm1);
         ENC_KEYS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1], ",": [2, -1], ".": [2, 1] };
       const keyId = (k) => (PIANO.includes(k) ? 21 + PIANO.indexOf(k) : (KEYB[k] ?? -1));
       addEventListener("keydown", (e) => {
-        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden || document.getElementById("mdPanel")) return e.key === "Escape" && (!$("#sure").hidden ? sureClose() : !$("#sheet").hidden ? ($("#sheet").hidden = true) : $("#menu").dataset.tab !== "home" ? menuTab("home") : menuShow(false));
+        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden || document.getElementById("mdPanel")) return e.key === "Escape" && (!$("#find").hidden ? findShow(false) : !$("#sure").hidden ? sureClose() : !$("#sheet").hidden ? ($("#sheet").hidden = true) : $("#menu").dataset.tab !== "home" ? menuTab("home") : menuShow(false));
         if (ENC_KEYS[e.key]) return e.preventDefault(), turn(...ENC_KEYS[e.key]);
         const id = keyId(e.key.toLowerCase());
         if (id < 0) return;
@@ -4312,6 +4335,8 @@ registerProcessor("fm1", Fm1);
           if (!r.ok) throw Error("status " + r.status);
           const bytes = new Uint8Array(await r.arrayBuffer());
           if (!vetPkg({ bytes })) throw Error("not a firmware package");
+          const lm = Date.parse(r.headers.get("last-modified") || "");
+          if (lm) kvPut("date:" + f.id, (fwDate[f.id] = new Date(lm).toISOString().slice(0, 10))).catch(() => {});
           kvPut("pkg:" + f.id, { name: f.name, version: f.version, bytes }).then(() => (kept.add(f.id), listFace()), () => toast("No room to keep " + f.name + " on this device", 3000));
           return (f.bytes = bytes);
         } catch (e) {
@@ -4445,7 +4470,6 @@ registerProcessor("fm1", Fm1);
       }
       const turnOn = () => powerOn().catch((e) => (status("no sound: " + e.message), toast("Could not start the sound: " + e.message, 4000)));
       $("#power").onclick = () => (node ? powerOff() : turnOn());
-      $("#reboot").onclick = () => (node ? (boot(), toast("Restarting " + (current() || {}).name)) : toast("The FM-1 is off: tap ON"));
       // the sound stops while the page is hidden, and the machine with it
       // hidden: ask for what the firmware has just saved (the worklet tells by itself only once a second), then stop the sound
       const flush = () => send({ type: "snapshot", seq, request: 0 });
@@ -4466,6 +4490,9 @@ registerProcessor("fm1", Fm1);
             '</g><text x="32" y="57" font-family="monospace" font-size="9" font-weight="700" fill="#8a94a3" text-anchor="middle">NO IMAGE</text></svg>',
         );
       const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
+      const fwDate = {}; // when each kept package was published (the Last-Modified its host sent when it was downloaded), by id: the list itself has no dates
+      const fwWhen = (f) => f.date || fwDate[f.id] || "";
+      let fwQuery = ""; // what the search box holds: it filters the list of banners
       let want = stored("fm1.fw") || "grimm"; // the firmware chosen (the list may not hold it yet: it fills in steps)
       function listFace() {
         const sel = $("#fw"),
@@ -4483,10 +4510,10 @@ registerProcessor("fm1", Fm1);
             t = el("div", "t"),
             act = el("div", "act"),
             have = f === local || f === backup || kept.has(f.id),
-            dl = el("button", "", have ? "KEPT ●" : "DOWNLOAD"),
-            go = el("button", f.id === sel.value ? "on" : "", f.id === sel.value && node ? "IN USE" : "USE"),
+            go = el("button", have ? "on" : "", !have ? "DOWNLOAD" : f.id === sel.value && node ? "IN USE" : "USE"), // lit: the ones you have are easy to tell
             inst = el("button", "inst", "INSTALL ON MY FM-1"),
-            man = el("button", "man", "MANUAL");
+            man = el("button", "man", "MANUAL"),
+            wipe = el("button", "wipe", "ERASE");
           const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (img.src = typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? d : NO_IMG)));
           img.alt = "";
           img.loading = "lazy";
@@ -4494,13 +4521,11 @@ registerProcessor("fm1", Fm1);
           img.onerror = own;
           if (f === local || f === backup || !navigator.onLine) own();
           else img.src = HUB_IMG + f.id + ".webp";
-          t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "")), el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. Kept on this device. Nothing is uploaded." : f === local ? "Kept on this device. Nothing is uploaded." : f.about));
+          t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. Kept on this device. Nothing is uploaded." : f === local ? "Kept on this device. Nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")));
           t.title = f.about || f.name;
-          dl.disabled = have;
-          dl.title = have ? "Kept on this device: it runs offline" : "Download " + f.name + " and keep it on this device, to run it offline later";
-          dl.onclick = () => (toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), toast(f.name + " is kept on this device")), (e) => toast(f.name + ": " + e.message, 4000)));
-          go.title = "Run " + f.name + " on the FM-1";
-          go.onclick = () => use(f.id);
+          // one button: DOWNLOAD until the package is kept on this device, then USE
+          go.title = have ? "Run " + f.name + " on the FM-1" : "Download " + f.name + " and keep it on this device: it then runs offline";
+          go.onclick = () => (have ? use(f.id) : ((go.disabled = true), (go.textContent = "DOWNLOADING…"), toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), listFace(), toast(f.name + " is kept on this device")), (e) => (listFace(), toast(f.name + ": " + e.message, 4000)))));
           inst.dataset.own = f === backup ? "1" : "0"; // the card of the unit's own backup never installs
           inst.hidden = f === backup || !realReady(); // only when every check of REAL FM-1 is in place
           inst.title = "Install " + f.name + " on the real FM-1 (through the protector's MIDI mode). Asks first.";
@@ -4508,14 +4533,36 @@ registerProcessor("fm1", Fm1);
           man.hidden = !f.repo || f === local || f === backup;
           man.title = "The manual of " + f.name + ": the README of its repository (kept on this device once read)";
           man.onclick = () => showManual(f);
-          act.append(dl, go, man, inst);
+          // the saves belong to the exact package, so its package must be on this device to be found; the one that is running starts again, fresh
+          wipe.disabled = !have;
+          wipe.title = have ? "Erase what " + f.name + " saved (patches, settings, songs), or that and the downloaded firmware too. Asks first." : "Download it first: what a firmware saves is kept for its exact package";
+          wipe.onclick = () =>
+            sure(
+              "Erase what " + f.name + " has saved (patches, settings, songs)? This cannot be undone.",
+              async (all) => {
+                const hash = hex(await crypto.subtle.digest("SHA-256", await packageOf(f))),
+                  running = node && run && run.f.id === f.id;
+                if (!all && running) return boot(true), toast("Saves erased: starting fresh");
+                await kvDel("save:" + hash);
+                if (all && f !== backup) {
+                  if (f === local) (await kvDel("pkg:local"), (local = null));
+                  else for (const k of ["pkg:", "man:", "date:"]) (await kvDel(k + f.id), kept.delete(f.id), delete f.bytes, delete fwDate[f.id]);
+                  listFace();
+                }
+                toast(all && f !== backup ? "Saves and firmware erased" + (running ? ". It keeps running until you switch it off" : "") : "Saves of " + f.name + " erased");
+              },
+              f === backup ? null : ["SAVES ONLY", "SAVES + FIRMWARE"], // the backup of the unit is never erased from here
+            );
+          act.append(go, man, inst, wipe);
           c.append(img, t, act);
           return c;
         };
         // the search box filters what is listed (name, author, text); the pick of the firmware itself is not touched
-        const q = $("#fwSearch").value.trim().toLowerCase(), shown = (f) => !q || (f.name + " " + (f.author || "") + " " + (f.about || "")).toLowerCase().includes(q);
-        const cards = [backup, local].filter(Boolean).concat(FIRMWARES).filter(shown).map(card);
-        $("#fwList").replaceChildren(...(cards.length ? cards : [el("p", "", "No firmware matches “" + $("#fwSearch").value.trim() + "”.")]));
+        label($("#fwFind"), fwQuery ? "“" + fwQuery.slice(0, 14) + "”" : "NAME · AUTHOR", "SEARCH");
+        const q = fwQuery.toLowerCase(), shown = (f) => !q || (f.name + " " + (f.author || "") + " " + (f.about || "")).toLowerCase().includes(q);
+        // yours first (the backup of your unit, your file, then what is downloaded), then the rest, each in the order of the list
+        const cards = [backup, local].filter(Boolean).concat(FIRMWARES.filter((f) => kept.has(f.id)), FIRMWARES.filter((f) => !kept.has(f.id))).filter(shown).map(card);
+        $("#fwList").replaceChildren(...(cards.length ? cards : [el("p", "", "No firmware matches “" + fwQuery + "”.")]));
         const n = kept.size + (local ? 1 : 0) + (backup ? 1 : 0);
         $("#stor span").textContent = n + " KEPT";
         navigator.storage?.estimate?.().then((s) => {
@@ -4562,27 +4609,37 @@ registerProcessor("fm1", Fm1);
       };
       // actions that destroy something ask first, with a slider to pull to the end
       let sureGo = null;
-      function sure(text, go) {
+      let sureChoice = 0; // with opts, the dialog asks which one (the first by default) and gives its number to go
+      function sure(text, go, opts) {
         $("#sureText").textContent = text;
+        sureChoice = 0;
+        $("#sureOpt").hidden = !opts;
+        $("#sureOpt").replaceChildren(...(opts || []).map((t, i) => Object.assign(el("button", i ? "" : "on", t), { title: t, onclick(e) { sureChoice = i; for (const b of $$("#sureOpt button")) b.classList.toggle("on", b === e.currentTarget); } })));
         $("#sureSlide").value = 0;
         sureGo = go;
         $("#sure").hidden = false;
       }
-      const sureClose = () => (($("#sure").hidden = true), ($("#sureWarn").hidden = true), (sureGo = null));
+      const sureClose = () => (($("#sureOpt").hidden = true), ($("#sure").hidden = true), ($("#sureWarn").hidden = true), (sureGo = null));
       $("#sureSlide").onchange = () => {
         if (+$("#sureSlide").value < 97) return ($("#sureSlide").value = 0), toast("Slide all the way to confirm");
-        const go = sureGo;
+        const go = sureGo, pick = sureChoice;
         sureClose();
-        go();
+        go(pick);
       };
-      $("#fwSearch").oninput = () => listFace();
+      const findShow = (on) => (($("#find").hidden = !on), on && (($("#fwSearch").value = fwQuery), $("#fwSearch").focus()));
+      $("#fwFind").onclick = () => findShow(true);
+      $("#fwSearch").oninput = () => ((fwQuery = $("#fwSearch").value.trim()), listFace());
+      $("#fwSearch").onkeydown = (e) => void (e.key === "Enter" && findShow(false)); // (void: an on-handler that returns false cancels the key)
+      $("#findGo").onclick = () => findShow(false);
+      $("#findClear").onclick = () => ((fwQuery = ""), ($("#fwSearch").value = ""), listFace(), $("#fwSearch").focus());
+      $("#find").onclick = (e) => e.target === $("#find") && findShow(false);
       $("#helpFw").onclick = () => (current() && current().repo ? showManual(current()) : ((manPart = "fm"), menuShow(true), menuTab("man"), manual()));
       $("#sureNo").onclick = () => (sureClose(), toast("Cancelled"));
-      $("#wipe").onclick = () => (node && run ? sure("Erase everything " + run.f.name + " has saved (patches, settings, songs) and start it fresh? This cannot be undone.", () => (boot(true), toast("Saves erased: starting fresh"))) : toast("Turn the FM-1 on first: the saves belong to the firmware that runs"));
       $("#forget").onclick = () =>
         sure("Delete every downloaded firmware and your opened file from this device? Their saves stay, and so does the backup of your FM-1. They can be downloaded again when online.", async () => {
-          for (const k of await kvKeys()) if (/^(pkg|man):/.test(String(k))) await kvDel(k);
+          for (const k of await kvKeys()) if (/^(pkg|man|date):/.test(String(k))) await kvDel(k);
           kept.clear();
+          for (const k in fwDate) delete fwDate[k];
           local = null;
           FIRMWARES.forEach((f) => delete f.bytes);
           listFace();
@@ -4593,6 +4650,10 @@ registerProcessor("fm1", Fm1);
         const keptList = vetCatalog(await kvGet("catalog"));
         if (keptList.length) FIRMWARES = keptList;
         for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) kept.add(String(k).slice(4));
+        for (const id of kept) {
+          const d = await kvGet("date:" + id);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(d)) fwDate[id] = d;
+        }
         const mine = vetPkg(await kvGet("pkg:local"));
         if (mine) local = { id: "local", name: mine.name, version: "", bytes: mine.bytes };
         kept.delete("local");
@@ -5508,8 +5569,8 @@ registerProcessor("fm1", Fm1);
       $("#manFm").onclick = () => ((manPart = "fm"), manual());
       $("#manLang").onclick = () => (store("fm1.lang", (lang = lang === "es" ? "en" : "es")), manual(), toast(lang === "es" ? "Manual en español" : "Manual in English"));
       manual();
-      $("#licence").onclick = () =>
-        sheet("Licences", [
+      $("#licBody").replaceChildren(
+        el("h3", "", "LICENCES"),
           el("h3", "", "fm1-emu, the emulator inside"),
           el("pre", "", $("#licEmu").textContent),
           el("h3", "", "FM1.Pocket, this page"),
@@ -5525,7 +5586,7 @@ registerProcessor("fm1", Fm1);
           el("p", "", "The FM-1 and its user manual (the PDF published with the FM-1 downloads). The FM-1 manual in this page is written in our own words, from that manual and from the emulator. FM1.Pocket is not made by or affiliated with M-VAVE or JieLi. 'FM-1' and 'M-VAVE' belong to their owners."),
           el("h3", "", "The firmwares"),
           el("p", "", "Each firmware belongs to its author and has its own licence, shown on its card. None is part of this app: each is downloaded from its author when you ask for it."),
-        ]);
+        );
       $("#shClose").onclick = () => ($("#sheet").hidden = true);
 
       // ======================================================================

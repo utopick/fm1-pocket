@@ -25,9 +25,13 @@ installation as an app.
 - **Keys** as the FM-1's own or as a piano. **Skins**: the nine colours the FM-1 is sold in (black follows a photo of the
   real one), then four of ours. **Screen filter**: LCD, CRT or clean.
 - **Firmwares** from fm1-emu's list (the page reads `firmwares.json` from Joakim's site when online, so new
-  ones appear by themselves). Each package is downloaded once from its author and kept on the device, marked ●,
-  and then runs with no connection. OPEN FILE takes your own `.fwsc`. LOAD BANK puts a DX7 bank of 32 voices
-  (`.syx`) into the running firmware.
+  ones appear by themselves; the list built into the page is only the fallback, rebuilt by `build.py`). The
+  FIRMWARE tab is a vertical list of banners, the ones you have first. A banner has one button, DOWNLOAD until the
+  package is kept on the device (then it runs with no connection) and a lit USE after; MANUAL; and ERASE, which
+  asks whether to erase only what the firmware saved or the downloaded firmware too. A banner shows the date the
+  author's host published the package, read when it is downloaded (the list itself has no dates). On the right,
+  big: SEARCH, OPEN FILE (your own `.fwsc`), LOAD BANK (a DX7 bank of 32 voices, `.syx`, into the running firmware)
+  and CLEAR (the downloads); the storage bar is in the bottom bar.
 - **Saves.** What a firmware writes to its flash is kept per exact firmware version.
 - **Slow devices.** When the device cannot keep up and the sound breaks up, the app offers to restart the firmware
   at a lower clock (80 or 60 MHz).

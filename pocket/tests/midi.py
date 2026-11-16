@@ -61,6 +61,7 @@ class Midi(unittest.TestCase):
         self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=fw]').click()")
         n = lambda: self.js("return document.querySelectorAll('#fwList .fwc').length")
         all_ = n(); self.assertGreater(all_, 50)
+        self.js("document.querySelector('#fwFind').click()"); time.sleep(0.3)  # the search is a dialog
         box = self.d.find_element("css selector", "#fwSearch"); box.send_keys("felucca"); time.sleep(0.4)
         self.assertTrue(0 < n() < all_)
         box.send_keys("zzzz"); time.sleep(0.4); self.assertEqual(n(), 0); self.assertIn("No firmware matches", self.js("return document.querySelector('#fwList').textContent"))
