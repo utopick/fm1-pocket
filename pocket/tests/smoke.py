@@ -59,7 +59,7 @@ try:
     assert abs(m[0] - m[1]) < 2 and abs(m[4] - m[1]) < 2 and m[1] > 12 and abs(m[2]) < 1 and abs(m[3]) < 1, "edge, rail, knobs, screen: the same space between them: %s" % m
     flip = lambda: js("document.querySelector('#flip').click()")
     flip(); flip(); parts(1, 0, "upper part"); size(844, 390, "switch-top")
-    flip(); parts(1, 1, "complete again"); flip(); parts(0, 1, "keys"); assert shown("#fm > #rail button") == 3, "no rail over the keys"
+    flip(); parts(1, 1, "complete again"); flip(); got = [shown("#up .kn"), shown("#up .pb"), shown("#kb .k")]; assert got == [8, 12, 27], "keys view: the upper part shrunk above the keys (the two OCT buttons are under 14 px tall there): %s" % got; assert shown("#fm > #rail button") == 3, "no rail over the keys"
     # LOOK: each chooser is a button that shows what it gives
     choose = lambda pane, v: js("document.querySelector(arguments[0] + ' .pick[data-v=\"' + arguments[1] + '\"]').click()", pane, v)
     choose("#pvKeys", "piano"); assert js("return document.querySelector('#kb').dataset.keys") == "piano"; parts(0, 1, "piano keys"); size(844, 390, "switch-piano")
