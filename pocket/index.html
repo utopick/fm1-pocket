@@ -255,7 +255,7 @@
       @keyframes mfping { 30% { transform: scale(1.18); } }
       /* a control named in the text: a little button or knob, tap it to see where it is */
       #menu #manBody b.ctl { display: inline-block; cursor: pointer; padding: 0 0.4em; margin: 0 0.1em; border-radius: 0.4em; font: 800 0.78em/1.5 ui-monospace, Menlo, monospace; letter-spacing: 0.5px; color: var(--ink); background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
-      #menu #manBody b.ctl.k { border-radius: 999px; padding: 0 0.6em; }
+      #menu #manBody b.ctl.round { border-radius: 999px; padding: 0 0.6em; } /* (not "k": that is the class of the keys) */
       #menu #manBody .flash { animation: mfflash 1.4s ease-out; }
       @keyframes mfflash { 0%, 40% { background: color-mix(in srgb, var(--lit) 35%, transparent); } }
       /* FIRMWARE: the list of banners (one to a row, scrolling, snapping like a carousel) on the left, the four actions in a column on the right (see LOOK) */
@@ -5491,7 +5491,7 @@ registerProcessor("fm1", Fm1);
           const c = ctlsIn(part), zone = MZONE[part], name = c[0] || zone;
           if (!name) return into.append(el("b", "", part));
           (c.length ? p.push(...c) : z.push(zone));
-          const chip = el("b", "ctl" + (/^(KNOB\d|MASTER|SELECT|PRESETS|ALGORITHM)$/.test(name) ? " k" : ""), part);
+          const chip = el("b", "ctl" + (/^(KNOB\d|MASTER|SELECT|PRESETS|ALGORITHM)$/.test(name) ? " round" : ""), part);
           chip.dataset.c = name;
           chip.title = "Show it on the FM-1";
           into.append(chip);
