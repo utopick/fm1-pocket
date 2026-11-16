@@ -19,7 +19,7 @@
     vertical     a narrow window on a computer: screen on top, knobs, buttons, keys in two rows (a phone is always sideways:
                  held upright, the page is drawn turned)
     complete     sideways, the whole FM-1 as it is
-    keys, up     sideways, only the keys or only the upper part, full screen (the KEYS / TOP / ALL button goes round the three)
+    keys, up     sideways, the keys (with the upper part shrunk above them) or only the upper part, full screen (the KEYS / TOP / ALL button goes round the three)
 
   Storage (namespaced fm1.*)
     localStorage  fm1.fw (firmware picked), fm1.view (complete | keys | up), fm1.keys (fm | piano), fm1.skin, fm1.fx (screen filter)
@@ -163,9 +163,14 @@
       @media (orientation: landscape), (pointer: coarse) {
 
         [data-view="up"] #up { --u: min(calc(100cqw / 1400), calc(100cqh / 540)); flex: 1; }
-        [data-view="keys"] #up, [data-view="up"] #kb { display: none; }
-        /* only the keys: the row keeps its proportions (about 1 : 4.5) and sits at the bottom, as on the unit, instead of stretching to the height of the screen */
+        [data-view="up"] #kb { display: none; }
+        /* the keys view: the keys keep their proportions (about 1 : 4.5) and sit at the bottom, as on the unit; the rail is a row above, and the upper part
+           (knobs, screen, buttons) is shrunk into what is left between them (the height of the rail and the gaps is taken off) */
         [data-view="keys"] #kb { flex: none; height: min(100%, 22cqw); margin-top: auto; }
+        [data-view="keys"] #up { --u: min(calc(100cqw / 1400), calc((100cqh - 22cqw - 64px) / 540)); flex: 1; min-height: 0; }
+        /* shrunk, the labels shrink with it (no 7 px floor) so they stay inside their knob and button, a miniature of the panel */
+        [data-view="keys"] .kn label { font-size: calc(14 * var(--u)); letter-spacing: 0; }
+        [data-view="keys"] .pb { font-size: calc(13 * var(--u)); }
       }
       @media (orientation: portrait) and (pointer: fine) {
         #flip { display: none; }
@@ -400,7 +405,7 @@
     <div id="rail">
       <button id="logo" title="Menu: firmware, look, options, about" aria-label="Menu">FM1<b>.</b></button>
       <button id="power" title="Power: turn the FM-1 on with the chosen firmware, or off" aria-label="Power" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9M6.6 6.6a7.6 7.6 0 1 0 10.8 0" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" /></svg></button>
-      <button id="flip" title="Next view: the whole FM-1, only the keys, or only the upper part (knobs, screen, buttons), full screen">KEYS</button>
+      <button id="flip" title="Next view: the whole FM-1, the keys with the upper part shrunk above them, or only the upper part (knobs, screen, buttons), full screen">KEYS</button>
       <button id="helpFw" title="Manual of the firmware that is running (its own, from its repository), or this app's manual" aria-label="Manual">?</button>
       <div class="grow"><span id="status" role="status"></span></div>
     </div>
@@ -2005,7 +2010,7 @@
           "- **ON** starts the FM-1 with the chosen firmware. **OFF** stops it.",
           "- Press the keys and the buttons. Several fingers at once work. Slide across the keys.",
           "- Drag a knob up or down to turn it. MASTER is the volume.",
-          "- **KEYS / TOP / ALL** goes round three views: the whole FM-1, only the keys, only the knobs, screen and buttons.",
+          "- **KEYS / TOP / ALL** goes round three views: the whole FM-1, the keys (the knobs, screen and buttons shrunk above them), only the knobs, screen and buttons.",
           "- A phone is always played sideways. Held upright, the FM-1 is drawn turned: turn the phone.",
           "## Menu (the FM1. button)",
           "- **FIRMWARE**: a card for each firmware. **USE** runs it. **DOWNLOAD** keeps it on this device, so it runs with no connection (marked ●). **OPEN FILE** runs your own .fwsc file. **LOAD BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware.",
@@ -2039,7 +2044,7 @@
           "- **ON** enciende el FM-1 con el firmware elegido. **OFF** lo apaga.",
           "- Pulsa las teclas y los botones. Funcionan varios dedos a la vez. Desliza sobre las teclas.",
           "- Arrastra un pote hacia arriba o hacia abajo para girarlo. MASTER es el volumen.",
-          "- **KEYS / TOP / ALL** recorre tres vistas: el FM-1 entero, solo las teclas, solo los potes, la pantalla y los botones.",
+          "- **KEYS / TOP / ALL** recorre tres vistas: el FM-1 entero, las teclas (con la parte de arriba pequeña encima), solo los potes, la pantalla y los botones.",
           "- En el móvil siempre se toca en horizontal. En vertical, el FM-1 se dibuja girado: gira el móvil.",
           "## Menú (el botón FM1.)",
           "- **FIRMWARE**: una tarjeta por firmware. **USE** lo ejecuta. **DOWNLOAD** lo guarda en este dispositivo, para usarlo sin conexión (marcado con ●). **OPEN FILE** ejecuta tu propio archivo .fwsc. **LOAD BANK** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE.",
