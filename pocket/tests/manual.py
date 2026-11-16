@@ -30,6 +30,9 @@ try:
         assert js("return document.querySelector('#manFig').offsetParent !== null"), "no miniature beside the FM-1 manual"
         assert js("return document.querySelectorAll('#manFig [data-c]').length") == 3 + 8 + 14, "controls of the miniature"
         assert js("return document.querySelectorAll('#manBody b.ctl').length") > 15, "chips in the text"
+        # every chip is a visible little box in the line (a class of the keys once made the knob chips vanish)
+        bad = js("return [...document.querySelectorAll('#manBody b.ctl')].filter(b => getComputedStyle(b).display !== 'inline-block' || b.getBoundingClientRect().width < 10).map(b => b.textContent)")
+        assert bad == [], "chips that do not show: %s" % bad
         # the line at the top decides what is lit: FX is about FX, with SELECT and the knobs only mentioned
         js("const b = document.querySelector('#manBody'), x = [...b.querySelectorAll('[data-p]')].find(e => e.dataset.p === 'FX'); b.scrollTop = x.offsetTop - b.offsetTop - 4")
         until(lambda: lit() == ["FX"], "FX is not lit at the FX entry (%s: %s)" % (lang, lit()))
