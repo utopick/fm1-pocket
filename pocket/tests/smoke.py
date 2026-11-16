@@ -90,11 +90,11 @@ try:
     size(844, 390, "x")
     js("document.querySelector('#menu .tabs [data-tab=fw]').click()")
     assert js("return document.querySelectorAll('#fwList .fwc').length") > 20 and js("return document.querySelectorAll('#fwList .fwc.on').length") == 1
-    tops = js("return [...document.querySelectorAll('#fwList .fwc')].slice(0, 5).map(c => Math.round(c.getBoundingClientRect().top))")
-    assert len(set(tops[:4])) == 1 and tops[4] > tops[0], "not four cards to a row: %s" % tops
+    lefts = js("return [...document.querySelectorAll('#fwList .fwc')].slice(0, 3).map(c => [Math.round(c.getBoundingClientRect().left), Math.round(c.getBoundingClientRect().top)])")
+    assert len({l[0] for l in lefts}) == 1 and lefts[1][1] > lefts[0][1], "the banners are not one to a row: %s" % lefts
     # a card whose picture does not load shows the "no image" fellow
     js("const i = document.querySelector('#fwList .fwc.on img'); if (!i.src.startsWith('data:image/svg')) i.src = 'http://127.0.0.1:9/x.webp'"); d.get_screenshot_as_png(); time.sleep(1)  # the card in view (pictures out of view wait), and a frame drawn
-    assert "FREE" in q("#stor span") and js("return document.querySelector('#stor').offsetHeight") == 20, "no storage bar"
+    assert "FREE" in q("#stor span") and js("return document.querySelector('#stor').offsetHeight") == 26, "no storage bar"
     assert js("return document.querySelector('#fwList .fwc.on img').src.startsWith('data:image/svg+xml') && document.querySelector('#fwList .fwc.on img').naturalWidth > 0"), "no placeholder picture"
     if os.environ.get("SHOT"): d.save_screenshot(os.path.join(os.environ["SHOT"], "noimg.png"))
     # a dangerous action asks first: half a slide does nothing, CANCEL closes, the whole slide does it
@@ -134,8 +134,8 @@ try:
     js("lang = 'en'; document.querySelector('#manFm').click()"); assert "ALGORITHM" in q("#manBody") and "32 algorithms" in q("#manBody")
     js("document.querySelector('#manLang').click()"); assert "32 algoritmos" in q("#manBody") and "<" not in js("return document.querySelector('#manBody b').innerHTML")
     js("document.querySelector('#manApp').click()"); assert "Qué es" in q("#manBody")
-    js("document.querySelector('#manLang').click(); document.querySelector('#licence').click()")
-    assert "Joakim Eriksson" in q("#shBody") and "Permission is hereby granted" in q("#shBody"); js("document.querySelector('#shClose').click()")
+    js("document.querySelector('#manLang').click()")
+    assert "Joakim Eriksson" in q("#licBody") and "Permission is hereby granted" in q("#licBody"), "the licences are not in the About card"
     # what the firmware writes to its flash is kept, and given back to it when it starts again
     js("const f = run.base.slice(); f[8192] ^= 255; keepFlash(f)"); time.sleep(0.5)
     status = q("#status")
