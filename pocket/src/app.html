@@ -183,12 +183,18 @@
       #menu { position: fixed; inset: 0; z-index: 5; background: var(--body2); color: var(--silk); display: flex; touch-action: auto; font: 13px/1.35 system-ui, sans-serif; }
       #menu[hidden], #menu [hidden] { display: none; }
       #menu .card { flex: 1; min-width: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-      #menu .bar { display: flex; gap: 8px; align-items: center; flex: none; }
+      #menu .bar { display: flex; gap: 8px; align-items: center; flex: none; order: 2; }
+      #menu .bar h2 { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #menu .bar h2 span { font-weight: 700; font-size: 13px; letter-spacing: 1px; color: var(--m-dim); }
       #menu h2 { margin: 0 4px; font: 900 18px system-ui; }
       #menu h2 b { color: var(--silk); }
-      #menu .tabs { flex: 1; min-width: 0; display: flex; gap: 6px; }
-      #menu .tabs button { flex: 1; min-width: 0; padding: 6px 2px; }
-      #menuClose { flex: none; width: 76px !important; }
+      /* the home of the menu: a grid of big icon buttons, one for each tab. A tab fills the screen above the bottom bar, whose BACK returns here */
+      #menu .tabs { display: none; flex: 1; min-height: 0; overflow: auto; grid-template-columns: repeat(auto-fit, minmax(clamp(96px, 28vmin, 170px), 1fr)); gap: 10px; align-content: center; }
+      #menu[data-tab="home"] .tabs { display: grid; }
+      #menu .tabs button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: clamp(84px, 26vmin, 150px); padding: 8px 2px; }
+      #menu .tabs svg { width: 38%; max-width: 56px; max-height: 40%; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      #menu[data-tab="home"] #menuBack, #menu:not([data-tab="home"]) #menuClose { display: none; }
+      #menuBack, #menuClose { flex: none; width: 140px !important; }
       #menu section { flex: 1; min-height: 0; overflow: auto; display: none; flex-direction: column; gap: 10px; }
       #menu[data-tab="fw"] section[data-tab="fw"], #menu[data-tab="look"] section[data-tab="look"], #menu[data-tab="conn"] section[data-tab="conn"], #menu[data-tab="info"] section[data-tab="info"], #menu[data-tab="man"] section[data-tab="man"] { display: flex; }
       /* the firmwares: cards, four to a row at most, in a list that scrolls. The actions stay under it */
@@ -329,11 +335,12 @@
       #menu a { color: inherit; }
       @media (orientation: portrait) and (pointer: fine) {
         #menu section.row { flex-direction: column; }
-        #menu .tabs button { font-size: 9px; }
       }
       /* a phone held sideways has about 390 px of height: the menu gives it back to the panes (no pane scrolls except the list of firmwares and the manual) */
       @media (max-height: 460px) {
         #menu .card { padding: 6px; gap: 6px; }
+        #menu .tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+        #menu .tabs button { min-height: 0; height: 100%; max-height: 150px; }
         #menu button { min-height: 34px; padding-top: 3px; padding-bottom: 3px; }
         #menu section > .grid button i { display: none; }
         #menu section > .grid { gap: 5px; }
@@ -401,16 +408,12 @@
 
     <div id="menu" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-label="Menu">
-        <div class="bar">
-          <h2>FM1<b>.</b></h2>
-          <div class="tabs" role="tablist">
-            <button data-tab="fw" role="tab" title="Choose the firmware, restart it, open a file, erase saves">FIRMWARE</button>
-            <button data-tab="look" role="tab" title="View, keys, skin and screen filter">LOOK</button>
-            <button data-tab="conn" role="tab" title="MIDI and installing the app">OPTIONS</button>
-            <button data-tab="man" role="tab" title="The manual: this app, and how the FM-1 works. English and Spanish">MANUAL</button>
-            <button data-tab="info" role="tab" title="Thanks, credits and licences">ABOUT</button>
-          </div>
-          <button id="menuClose" title="Close the menu">CLOSE</button>
+        <div class="tabs" role="tablist">
+          <button data-tab="fw" role="tab" title="Choose the firmware, restart it, open a file, erase saves"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>FIRMWARE</button>
+          <button data-tab="look" role="tab" title="View, keys, skin and screen filter"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.4 0 2-1 1.5-2.2-.6-1.4.3-2.8 1.8-2.8H18a3 3 0 0 0 3-3c0-5-4-10-9-10z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/></svg>LOOK</button>
+          <button data-tab="conn" role="tab" title="MIDI and installing the app"><svg viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M4 12h3M11 12h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/><circle cx="9" cy="12" r="2"/></svg>OPTIONS</button>
+          <button data-tab="man" role="tab" title="The manual: this app, and how the FM-1 works. English and Spanish"><svg viewBox="0 0 24 24"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19v-14M9 8h6M9 12h6"/></svg>MANUAL</button>
+          <button data-tab="info" role="tab" title="Thanks, credits and licences"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>ABOUT</button>
         </div>
         <section data-tab="fw">
           <input id="fwSearch" type="search" placeholder="Search firmwares: name, author, what it does" aria-label="Search firmwares" autocomplete="off" />
@@ -541,6 +544,11 @@
             <p class="hint">Unofficial: not affiliated with M-VAVE, JieLi or any of them.</p>
           </div>
         </section>
+        <div class="bar">
+          <h2>FM1<b>.</b> <span id="menuWhere"></span></h2>
+          <button id="menuBack" title="Back to the menu's icons">BACK</button>
+          <button id="menuClose" title="Close the menu">CLOSE</button>
+        </div>
         <input type="file" id="file" accept=".fwsc" hidden />
         <input type="file" id="bankFile" accept=".syx" hidden />
       </div>
@@ -863,7 +871,7 @@
         ENC_KEYS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1], ",": [2, -1], ".": [2, 1] };
       const keyId = (k) => (PIANO.includes(k) ? 21 + PIANO.indexOf(k) : (KEYB[k] ?? -1));
       addEventListener("keydown", (e) => {
-        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden || document.getElementById("mdPanel")) return e.key === "Escape" && (!$("#sure").hidden ? sureClose() : !$("#sheet").hidden ? ($("#sheet").hidden = true) : menuShow(false));
+        if (e.metaKey || e.ctrlKey || e.altKey || !$("#menu").hidden || document.getElementById("mdPanel")) return e.key === "Escape" && (!$("#sure").hidden ? sureClose() : !$("#sheet").hidden ? ($("#sheet").hidden = true) : $("#menu").dataset.tab !== "home" ? menuTab("home") : menuShow(false));
         if (ENC_KEYS[e.key]) return e.preventDefault(), turn(...ENC_KEYS[e.key]);
         const id = keyId(e.key.toLowerCase());
         if (id < 0) return;
@@ -1356,13 +1364,14 @@
       turned.addEventListener("change", lookFace);
       function menuTab(t) {
         $("#menu").dataset.tab = t;
-        paintFx();
-        for (const b of $$("#menu .tabs button")) b.classList.toggle("on", b.dataset.tab === t);
+        if (t !== "home") paintFx();
+        $("#menuWhere").textContent = t === "home" ? "" : "· " + $(`#menu .tabs [data-tab=${t}]`).textContent;
       }
       for (const b of $$("#menu .tabs button")) b.onclick = () => menuTab(b.dataset.tab);
       const menuShow = (on) => (($("#menu").hidden = !on), on && (listFace(), realFace(), $("#fwList .fwc.on")?.scrollIntoView({ block: "nearest" })));
-      menuTab("fw");
-      $("#logo").onclick = () => menuShow(true);
+      menuTab("home");
+      $("#menuBack").onclick = () => menuTab("home");
+      $("#logo").onclick = () => (menuTab("home"), menuShow(true));
       $("#menuClose").onclick = () => menuShow(false);
 
       // ======================================================================
