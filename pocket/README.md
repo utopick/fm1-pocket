@@ -34,7 +34,7 @@ installation as an app.
 - **MIDI**: keys play the FM-1 through its MIDI IN. Knobs and pads work the FM-1's own knobs and buttons, with a
   starting assignment for known controllers (Akai MPK mini, Launchkey) and a drawing of the controller to assign
   and learn each control (the Pocket apps' device panel).
-- A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch.
+- A manual in English and Spanish in its own tab (this app, and how the FM-1 works with its stock firmware, after M-VAVE's user manual), the licences, computer keys, multi-touch. In the FM-1 part of the manual a small FM-1 sits beside the text: the controls the paragraph is about light up as you read (a ring for the others it mentions), the names in the text are little buttons and knobs you can tap to see where they are, and tapping a control on the small FM-1 jumps to its entry (`pocket/tests/manual.py`).
 - **Installable (PWA)**: its own window, full screen, and it works offline. The menu wears the chosen skin.
 
 ## A real FM-1 on USB (OPTIONS, REAL FM-1) — written, not yet tried on a unit

@@ -223,6 +223,38 @@
       #menu #manBody h3:first-child { margin-top: 0; }
       #menu #manBody p, #menu #manBody ul, #menu #manBody li { margin: 6px 0; font-size: 15px; line-height: 1.5; color: inherit; }
       #menu #manBody ul { padding-left: 18px; }
+      /* the manual of the FM-1 has a small FM-1 beside the text. The controls the text is about are lit on it; tap one to jump to its entry (ctl chips in the text do the reverse) */
+      #menu .manwrap { flex: 1; min-height: 0; display: flex; gap: 12px; }
+      #menu #manFig { flex: 0 0 46%; min-width: 0; align-self: center; }
+      #menu #manFig[hidden] { display: none; }
+      @media (max-aspect-ratio: 1/1) { #menu #manFig { display: none; } }
+      .mf { display: grid; grid-template-columns: 38% minmax(0, 1fr); gap: 10px; padding: 10px; border-radius: 14px; background: linear-gradient(var(--body1), var(--body2)); box-shadow: inset 0 0 0 1px #ffffff1c; font: 800 9px system-ui, sans-serif; color: var(--ink); }
+      .mf .fs { aspect-ratio: 1; align-self: start; display: flex; flex-direction: column; gap: 4%; padding: 7%; border-radius: 14%; background: linear-gradient(150deg, #1d1d20, #060607 45%, #0b0b0c); }
+      .mf .fs div { border-radius: 4px; background: #0c1016; color: #9fd8b4; font: 700 8px ui-monospace, Menlo, monospace; padding: 2px 4px; cursor: pointer; display: flex; align-items: center; }
+      .mf .fs [data-c="top"], .mf .fs [data-c="bot"] { flex: none; height: 15%; }
+      .mf .fs [data-c="mid"] { flex: 1; background: linear-gradient(#0000 47%, #e8d44a 47% 53%, #0000 53%), #3a3d44; }
+      .mf .fs [data-c="bot"] { justify-content: space-between; }
+      .mf .fr { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+      .mf .fkr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+      .mf .fbr { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; padding: 5px; border-radius: 8px; background: var(--tray); }
+      .mf .fbr .w3 { grid-column: span 3; }
+      .mf .fk { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; font-size: 7px; letter-spacing: 0.3px; color: var(--silk); min-width: 0; }
+      .mf .fk i { width: 70%; max-width: 34px; aspect-ratio: 1; border-radius: 50%; position: relative; background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--cap), #fff 16%), var(--cap) 62%); box-shadow: 0 2px 3px #0008; }
+      .mf .fk i::after { content: ""; position: absolute; left: 50%; top: 8%; width: 10%; height: 36%; margin-left: -5%; border-radius: 9px; background: var(--keyline); }
+      .mf .fb { min-width: 0; min-height: 30px; padding: 0; border: 0; border-radius: 7px; cursor: pointer; font: 800 8px system-ui, sans-serif; letter-spacing: 0; color: var(--ink); background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
+      .mf .fb small { display: block; font-size: 7px; border-top: 1px solid currentColor; margin: 1px 4px 0; padding-top: 1px; }
+      .mf .fb.lit { color: #2a1a03; background: linear-gradient(color-mix(in srgb, var(--btn1), var(--lit) 85%), color-mix(in srgb, var(--btn2), var(--lit) 70%)); box-shadow: inset 0 0 0 1px var(--silk), 0 0 8px var(--lit); }
+      .mf .fb.lit2 { box-shadow: inset 0 0 0 2px var(--lit); }
+      .mf .fk.lit i { box-shadow: 0 0 0 2px var(--lit), 0 0 9px var(--lit); }
+      .mf .fk.lit2 i { box-shadow: 0 0 0 2px var(--lit); }
+      .mf .fs .lit { outline: 2px solid var(--lit); box-shadow: 0 0 8px var(--lit); }
+      .mf .ping { animation: mfping 0.7s ease-out; }
+      @keyframes mfping { 30% { transform: scale(1.18); } }
+      /* a control named in the text: a little button or knob, tap it to see where it is */
+      #menu #manBody b.ctl { display: inline-block; cursor: pointer; padding: 0 0.4em; margin: 0 0.1em; border-radius: 0.4em; font: 800 0.78em/1.5 ui-monospace, Menlo, monospace; letter-spacing: 0.5px; color: var(--ink); background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
+      #menu #manBody b.ctl.k { border-radius: 999px; padding: 0 0.6em; }
+      #menu #manBody .flash { animation: mfflash 1.4s ease-out; }
+      @keyframes mfflash { 0%, 40% { background: color-mix(in srgb, var(--lit) 35%, transparent); } }
       #fwSearch { flex: none; min-height: 36px; border-radius: 10px; border: 1px solid var(--rim); background: var(--m-panel); color: var(--silk); padding: 4px 12px; font: 14px system-ui, sans-serif; width: 100%; }
       #menu .cards { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(max(300px, 25% - 8px), 1fr)); gap: 8px; align-content: start; padding-right: 4px; }
       #menu .fwc { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: 1fr auto; gap: 6px 10px; padding: 8px; border-radius: 12px; border: 1px solid var(--rim); background: var(--m-panel); min-width: 0; min-height: 190px; }
@@ -548,7 +580,7 @@
           </div>
         </section>
         <section data-tab="man">
-          <div id="manBody"></div>
+          <div class="manwrap"><div id="manBody"></div><div id="manFig" hidden></div></div>
           <div class="grid">
             <button id="manApp" title="The manual of this app"><i>MANUAL</i>THIS APP</button>
             <button id="manFm" title="How the FM-1 itself works, with its own firmware"><i>MANUAL</i>THE FM-1</button>
@@ -2093,19 +2125,102 @@
         $("#sheet").hidden = false;
       }
       let manPart = "app";
+      // the controls the manual can show: a name in the text (the same in English and Spanish) is a control of the miniature
+      const MCTL = new Set(["MASTER", "SELECT", "PRESETS", "ALGORITHM", "KNOB1", "KNOB2", "KNOB3", "KNOB4", "OCT-", "OCT+", "FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"]),
+        MZONE = { "Top bar": "top", Centre: "mid", "Bottom bar": "bot", "Barra superior": "top", Centro: "mid", "Barra inferior": "bot" };
+      // the controls named in a text, in order; "KNOB1 to 3" and "KNOB1 to KNOB4" give every knob between
+      function ctlsIn(text) {
+        const out = [], re = /[A-Z][A-Z0-9+-]*/g;
+        for (let m; (m = re.exec(text)); ) {
+          if (!MCTL.has(m[0])) continue;
+          out.push(m[0]);
+          const r = /^ (?:to|a) (?:KNOB)?([1-4])/.exec(text.slice(re.lastIndex));
+          if (r && /^KNOB[1-4]$/.test(m[0])) for (let k = +m[0][4] + 1; k <= +r[1]; k++) out.push("KNOB" + k);
+        }
+        return out;
+      }
+      // a line of the manual: **bold** names of controls are chips, and the line remembers its controls (data-p the ones it is about, data-s the others it mentions)
+      function manLine(text, into) {
+        const p = [], z = [];
+        text.split("**").forEach((part, i) => {
+          if (i % 2 === 0) return into.append(part);
+          const c = ctlsIn(part), zone = MZONE[part], name = c[0] || zone;
+          if (!name) return into.append(el("b", "", part));
+          (c.length ? p.push(...c) : z.push(zone));
+          const chip = el("b", "ctl" + (/^(KNOB\d|MASTER|SELECT|PRESETS|ALGORITHM)$/.test(name) ? " k" : ""), part);
+          chip.dataset.c = name;
+          chip.title = "Show it on the FM-1";
+          into.append(chip);
+        });
+        into.dataset.p = p.join(",");
+        into.dataset.z = z.join(",");
+        into.dataset.s = ctlsIn(text).filter((c) => !p.includes(c)).join(",");
+        return into;
+      }
+      // the miniature FM-1 beside the text (built once, wears the skin through the same colours as the device)
+      function buildManFig() {
+        const f = el("div", "mf"), mk = (n, label) => Object.assign(el("div", "fk"), { title: label + ": where it is, and its entry" }),
+          knob = (n) => { const k = mk(n, n); k.dataset.c = n; k.append(el("i"), el("span", "", n)); return k; },
+          btn = (n, cls = "") => { const b = el("button", "fb " + cls); b.dataset.c = n; b.title = n + ": where it is, and its entry"; b.append(n === "PLAY" ? "PLAY" : n); if (n === "PLAY") b.append(el("small", "", "STOP")); return b; },
+          scr = el("div", "fs"), right = el("div", "fr"), kr1 = el("div", "fkr"), kr2 = el("div", "fkr"), br = el("div", "fbr");
+        for (const [c, t, cls] of [["top", "001 PIANO"], ["mid", ""], ["bot", "1/2 LFO"]]) { const z = el("div", cls || "", t); z.dataset.c = c; z.title = { top: "Top bar", mid: "Centre", bot: "Bottom bar" }[c] + " of the screen"; scr.append(z); }
+        kr1.append(...["MASTER", "SELECT", "PRESETS", "ALGORITHM"].map(knob));
+        kr2.append(...["KNOB1", "KNOB2", "KNOB3", "KNOB4"].map(knob));
+        br.append(btn("OCT-", "w3"), btn("OCT+", "w3"), ...["FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"].map((n) => btn(n)));
+        right.append(kr1, kr2, br);
+        f.append(scr, right);
+        $("#manFig").append(f);
+      }
+      // light the controls: p the ones the line is about (lit), s the others it mentions (a ring)
+      function manLit(p = [], s = [], ping) {
+        for (const e of $$("#manFig [data-c]")) {
+          const c = e.dataset.c, on = p.includes(c);
+          e.classList.toggle("lit", on);
+          e.classList.toggle("lit2", !on && s.includes(c));
+          if (on && ping) (e.classList.remove("ping"), void e.offsetWidth, e.classList.add("ping"));
+        }
+      }
+      const split = (v) => (v ? v.split(",") : []);
+      // the line at the top of the text decides what is lit
+      function manFollow() {
+        const body = $("#manBody"), top = body.getBoundingClientRect().top + 4;
+        for (const e of body.querySelectorAll("[data-p]")) if (e.getBoundingClientRect().bottom > top) return manLit([...split(e.dataset.p), ...split(e.dataset.z)], split(e.dataset.s));
+        manLit();
+      }
       function manual() {
         const out = [];
         let ul = null;
         for (const l of (manPart === "app" ? HELP : HELP_FM)[lang]) {
-          if (l.startsWith("- ")) (ul || out.push((ul = el("ul"))), ul.append(rich(l.slice(2), el("li"))));
-          else ((ul = null), out.push(l.startsWith("## ") ? el("h3", "", l.slice(3)) : rich(l, el("p"))));
+          const more = manPart === "fm" ? manLine : rich;
+          if (l.startsWith("- ")) (ul || out.push((ul = el("ul"))), ul.append(more(l.slice(2), el("li"))));
+          else ((ul = null), out.push(l.startsWith("## ") ? el("h3", "", l.slice(3)) : more(l, el("p"))));
         }
         $("#manBody").replaceChildren(...out);
         $("#manBody").scrollTop = 0;
+        if (!$("#manFig").firstChild) buildManFig();
+        $("#manFig").hidden = manPart !== "fm";
+        manFollow();
         $("#manApp").classList.toggle("on", manPart === "app");
         $("#manFm").classList.toggle("on", manPart === "fm");
         label($("#manLang"), "LANGUAGE · IDIOMA", lang === "es" ? "ESPAÑOL" : "ENGLISH");
       }
+      $("#manBody").onscroll = manFollow;
+      // a chip in the text lights its control; a control of the miniature goes to the entry that explains it
+      $("#manBody").onclick = (e) => {
+        const c = e.target.closest("b.ctl");
+        if (c) manLit([c.dataset.c], [], true);
+      };
+      $("#manFig").onclick = (e) => {
+        const t = e.target.closest("[data-c]");
+        if (!t) return;
+        const d = [...$$("#manBody [data-p]")].find((x) => [...split(x.dataset.p), ...split(x.dataset.z)].includes(t.dataset.c));
+        manLit([t.dataset.c], [], true);
+        if (!d) return;
+        d.scrollIntoView({ block: "start", behavior: "smooth" });
+        d.classList.remove("flash");
+        void d.offsetWidth;
+        d.classList.add("flash");
+      };
       $("#manApp").onclick = () => ((manPart = "app"), manual());
       $("#manFm").onclick = () => ((manPart = "fm"), manual());
       $("#manLang").onclick = () => (store("fm1.lang", (lang = lang === "es" ? "en" : "es")), manual(), toast(lang === "es" ? "Manual en español" : "Manual in English"));
