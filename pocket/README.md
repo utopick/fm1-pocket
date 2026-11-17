@@ -81,4 +81,7 @@ README says and copy the three files.
   [the FM-1 Firmware Hub](https://thefirmwarehub.com/).
 - The skin colours named after the FM-1 are approximations by eye. Black follows a product photo, grey follows
   fm1-emu's drawing.
+- Menu icons (FIRMWARE, LOOK, OPTIONS, MANUAL, ABOUT) from [Open Game Icons](https://open-game-icons.net/), CC BY 3.0
+  (https://creativecommons.org/licenses/by/3.0/): Circuitry and Book cover by Lorc, Palette, Settings knobs and Info by
+  Delapouite. Recoloured to follow the theme.
 - Not affiliated with M-VAVE.
