@@ -244,9 +244,9 @@ class Real(unittest.TestCase):
         self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
         self.assertFalse(self.js("return document.querySelector('#railScreen').hidden"), "Tether found: the screen button is on the rail")
         self.assertFalse(self.js("return document.querySelector('#railSound').hidden"), "a unit with a speaker: the sound button too")
-        self.assertIn("ON", self.text("#railScreen"))
+        self.assertEqual(self.js("return [railScreen.textContent, railScreen.getAttribute('aria-pressed'), railSound.textContent, railSound.getAttribute('aria-pressed')]"), ["SCREEN", "true", "SOUND", "false"])
         self.js("document.querySelector('#railScreen').click()")
-        self.assertEqual(self.text("#railScreen"), "SCREEN OFF")
+        self.assertEqual(self.js("return railScreen.getAttribute('aria-pressed')"), "false", "off: dim")
         self.click('#realSync')
         self.assertTrue(self.js("return document.querySelector('#railScreen').hidden"), "Tether off: the buttons go")
 
@@ -260,6 +260,12 @@ class Real(unittest.TestCase):
         self.js("document.querySelector('#sureNo') && document.querySelector('#sureNo').click()")
         self.js("realOffer()")
         self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "once per unit")
+
+    def test_exit_shows_only_when_the_app_runs_full_screen(self):
+        self.assertTrue(self.js("return document.querySelector('#appExit').hidden"), "a browser tab: no EXIT")
+        self.js("document.documentElement.requestFullscreen().catch(() => {})"); time.sleep(0.8)
+        if self.js("return !!document.fullscreenElement"):
+            self.assertFalse(self.js("return document.querySelector('#appExit').hidden"), "full screen: EXIT shows")
 
     def test_backup_while_tether_runs_points_to_midi_mode(self):
         self.js("window.__tether = true")
