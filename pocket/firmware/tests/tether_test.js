@@ -39,7 +39,7 @@ function ppm(f) {
 
 test("the panel goes out as exact MIDI bytes; HELLO is answered, MASTER sent again", () => {
   const out = midi(run("panel", ["10 keys 0x1", "20 keys 0x4000001", "30 keys 0", "40 btn 12", "50 btndown 0", "60 btnup 0",
-    "70 enc 2 3", "80 enc 6 -70", "90 master 515", "100 master 700", "110 master 1023", "200 end"], { 150: [T.hello()] }));
+    "70 enc 2 3", "80 enc 6 -70", "90 master 515", "100 master 700", "110 master 1023", "200 end"], { 0: [T.ping()], 150: [T.hello()] }));
   assert.deepStrictEqual(out, [
     "1 ms MIDI out BF 27 64", // MASTER at power-on (512 / 8)
     "10 ms MIDI out 90 53 100", "20 ms MIDI out 90 79 100", "30 ms MIDI out 80 53 0", "30 ms MIDI out 80 79 0",
@@ -51,8 +51,25 @@ test("the panel goes out as exact MIDI bytes; HELLO is answered, MASTER sent aga
   assert.deepStrictEqual([h.name, h.proto, h.audioOut], ["TETHER 0.1", 2, true]);
 });
 
+test("without a page the unit is a plain MIDI controller; a page takes it over, and 3 s of silence gives it back", () => {
+  const out = midi(run("ctl", ["10 keys 0x1", "20 keys 0", "30 btn 1", "40 keys 0x1", "50 keys 0", "60 btn 12", "70 btn 0", "80 enc 2 3", "90 enc 5 -2",
+    "100 enc 2 100", "110 master 700", "200 keys 0x1", "3400 end"], { 150: [T.ping()] }));
+  assert.deepStrictEqual(out, [
+    "1 ms MIDI out B0 7 64",                                   // MASTER first, as CC 7 on channel 1
+    "10 ms MIDI out 90 53 100", "20 ms MIDI out 80 53 0",      // keys: channel 1, F3 = 53
+    "40 ms MIDI out 90 65 100", "50 ms MIDI out 80 65 0",      // after OCT+ (30): an octave up
+    "60 ms MIDI out 99 46 100", "61 ms MIDI out 89 46 0",      // PLAY (button 12) is pad 10: note 46, channel 10
+    "80 ms MIDI out B0 70 70",                                 // K1 = CC 70: 64 + 3 detents x 2
+    "90 ms MIDI out B0 73 60",                                 // K4 = CC 73: 64 - 2 x 2
+    "100 ms MIDI out B0 70 127",                               // clamped at 127
+    "110 ms MIDI out B0 7 87",                                 // MASTER
+    "150 ms MIDI out BF 27 87",                                 // the page's PING: linked, MASTER sent again, now as CC 27 (channel 16)
+    "200 ms MIDI out 90 53 100",                               // linked: the panel as PROTOCOL.md says (no octave shift)
+    "3151 ms MIDI out 80 53 0", "3151 ms MIDI out 90 53 100", "3151 ms MIDI out B0 7 87"]);  // 3 s without the page: a controller again; the held key is let go and pressed again (OCT- at 70 ms put the octave back to 0)
+});
+
 test("LEDS sets the lit and dim LEDs by id", () => {
-  const out = midi(run("leds", ["100 leds", "200 leds", "300 end"], { 50: [T.leds([0, 12, 14, 40])], 150: [T.leds([1], [2, 1])] }));
+  const out = midi(run("leds", ["100 leds", "200 leds", "300 end"], { 0: [T.ping()], 50: [T.leds([0, 12, 14, 40])], 150: [T.leds([1], [2, 1])] }));
   assert.deepStrictEqual(out.slice(1), ["100 ms LEDS 10000005001 00000000000", "200 ms LEDS 00000000002 00000000004"]);
 });
 

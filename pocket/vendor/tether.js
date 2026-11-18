@@ -5,7 +5,7 @@
 // (tiles of 16 x 16, each as one colour, runs, a small palette or raw; only the tiles that changed since the last frame).
 const Tether = (() => {
   const TAG = [0x7d, 0x46, 0x50, 0x54], VER = 1;
-  const CMD = { HELLO: 0x01, LEDS: 0x02, SCREEN: 0x03, HELLO_REPLY: 0x41, ACK: 0x42, NEED_KEY: 0x43 };
+  const CMD = { HELLO: 0x01, LEDS: 0x02, SCREEN: 0x03, PING: 0x04, HELLO_REPLY: 0x41, ACK: 0x42, NEED_KEY: 0x43 };
   const SIDE = 240, TILE = 16, ROW = SIDE / TILE, TILES = ROW * ROW, BODY_MAX = 640;
   const PAYLOAD_MAX = Math.floor(((BODY_MAX - TAG.length - 7) * 7) / 8); // tag, VV CC FF SL SH FL, SS: 550 bytes
   const OP = { SOLID: 0, RLE: 1, PALETTE: 2, RAW: 3 };
@@ -33,6 +33,7 @@ const Tether = (() => {
   }
 
   const hello = () => message(CMD.HELLO);
+  const ping = () => message(CMD.PING); // every second while linked: the unit is the page's panel for 3 s after any message, else a plain MIDI controller
   // lit, dim: arrays of LED ids (FM-1: 0..13 the buttons, 14 + key the keys); no dim: every dim LED off
   function leds(lit, dim) {
     const mask = (ids) => {
@@ -136,6 +137,6 @@ const Tether = (() => {
     return null;
   }
 
-  return { CMD, OP, TILE, TILES, PAYLOAD_MAX, BODY_MAX, message, pack7, unpack7, hello, leds, to565, tileRecord, Encoder, parse };
+  return { CMD, OP, TILE, TILES, PAYLOAD_MAX, BODY_MAX, message, pack7, unpack7, hello, ping, leds, to565, tileRecord, Encoder, parse };
 })();
 if (typeof module !== "undefined") module.exports = Tether;
