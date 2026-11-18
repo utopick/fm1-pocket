@@ -222,6 +222,62 @@ class Real(unittest.TestCase):
         self.assertTrue(self.js("return tetherFirmware().then(f => f.bytes.length > 100000)"), "the bundled package checks out")
         self.assertEqual(self.js("return window.__errs"), [])
 
+    def test_tether_as_a_plain_controller_sends_no_screen_and_offers_no_sound(self):
+        self.js("window.__tether = true; window.__tetherCa = 1")
+        self.js("document.querySelector('#optScreen').click(); document.querySelector('#optSound').click()")
+        self.assertEqual(self.js("return [document.querySelector('#optScreen i').textContent, document.querySelector('#optSound i').textContent]"), ["OFF", "OFF"])
+        self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
+        self.assertIn("TETHER", self.text("#realSync"))
+        self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "sound off: no offer, even from a unit with a speaker")
+        self.js("window.__tx.length = 0; tetherHook.frame(new Uint16Array(57600).fill(0x1234))"); time.sleep(0.6)
+        self.assertEqual(self.js("return __tx.filter(m => m[6] === 3).length"), 0, "screen off: no frame goes out")
+        self.js("ledNow[8] = 1; tetherHook.leds()"); time.sleep(0.2)
+        self.assertEqual(self.js("return __tx.filter(m => m[6] === 2).length"), 1, "the lights still follow")
+        self.js("window.__fwIn.onmidimessage({ data: [0x90, 55, 100] })")
+        self.assertEqual(self.js("return holds[16]"), 1, "the keys still play")
+        self.click('#optScreen'); self.wait("__tx.filter(m => m[6] === 3).length > 0", 5)  # back on: the screen follows at once
+        self.assertEqual(self.js("return window.__errs"), [])
+
+    def test_the_main_screen_shows_tether_s_buttons_and_offers_a_unit_that_appears(self):
+        self.js("window.__tether = true; window.__tetherCa = 1")
+        self.assertTrue(self.js("return document.querySelector('#railScreen').hidden"), "no Tether: no buttons")
+        self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
+        self.assertFalse(self.js("return document.querySelector('#railScreen').hidden"), "Tether found: the screen button is on the rail")
+        self.assertFalse(self.js("return document.querySelector('#railSound').hidden"), "a unit with a speaker: the sound button too")
+        self.assertIn("ON", self.text("#railScreen"))
+        self.js("document.querySelector('#railScreen').click()")
+        self.assertEqual(self.text("#railScreen"), "SCREEN OFF")
+        self.click('#realSync')
+        self.assertTrue(self.js("return document.querySelector('#railScreen').hidden"), "Tether off: the buttons go")
+
+    def test_a_unit_found_while_the_menu_is_closed_is_offered_once(self):
+        self.js("window.__tether = true")
+        self.open_real(); self.click('#realConn')
+        self.js("document.querySelector('#menuClose').click(); offered = null; REAL.sync = false")
+        self.js("realOffer()")
+        self.assertFalse(self.js("return document.querySelector('#sure').hidden"), "the main screen asks")
+        self.assertIn("USE THE REAL FM-1", self.text("#sureOpt"))
+        self.js("document.querySelector('#sureNo') && document.querySelector('#sureNo').click()")
+        self.js("realOffer()")
+        self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "once per unit")
+
+    def test_backup_while_tether_runs_points_to_midi_mode(self):
+        self.js("window.__tether = true")
+        self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
+        self.click('#realBackup')
+        self.assertIn("MIDI MODE", self.text("#jobTitle"))
+        self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no helper is offered, nothing is sent")
+        self.click('#jobOk')
+
+    def test_a_job_that_goes_quiet_gets_a_close_button(self):
+        self.open_real()
+        self.js("REAL.busy = true; jobOpen('BACKUP…'); jobSeen -= 50000")
+        self.wait("!document.querySelector('#jobOk').hidden", 8)
+        self.assertIn("NO ANSWER", self.text("#jobTitle"))
+        self.click('#jobOk')
+        self.assertFalse(self.js("return REAL.busy"), "closing frees the unit for the next try")
+        self.assertTrue(self.js("return document.querySelector('#job').hidden"))
+
     def test_backup_sends_the_helper_then_reads_the_flash(self):
         self.open_real(); self.click('#realConn')
         self.js("window.__saved = null; HTMLAnchorElement.prototype.click = function () { __saved = this.download; }")
