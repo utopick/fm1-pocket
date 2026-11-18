@@ -56,14 +56,97 @@ static void reply(uint32_t cmd, const uint8_t *d, uint32_t n)
     ota_wire_send(m, 9u + i);
 }
 
-/* ---- the panel -> MIDI (main loop, and while the screen's DMA runs) */
-static uint32_t idle_ok, keys_sent, master_v = 255;
-static int32_t master_sent = -1000;
+/* ---- the panel -> MIDI (main loop, and while the screen's DMA runs)
+ * Two modes. LINKED: a page (FM1.Pocket) spoke within LINK_MS (any valid SysEx, PING each second): the panel goes out as
+ * PROTOCOL.md section 1 says. Otherwise the unit is a plain MIDI CONTROLLER: keys on channel 1 shifted by OCT- / OCT+,
+ * the other buttons as pads (notes 36.., channel 10), knobs as absolute CCs (70..76, channel 1, 2 steps a detent),
+ * MASTER as CC 7; the screen shows the octave, channels, the last control touched and the incoming MIDI clock. */
+#define LINK_MS 3000u
+#define PAD0 36u
+#if BOARD_SMK37
+#define BTN_OCTD 4u
+#define BTN_OCTU 5u
+static const uint8_t CCN[NENC] = {74, 75, 76, 70, 71, 72, 73};
+#else
+#define BTN_OCTD 0u
+#define BTN_OCTU 1u
+static const uint8_t CCN[NENC] = {74, 75, 70, 71, 72, 73, 76};   /* SELECT, ALGORITHM, K1..K4, PRESETS */
+#endif
+static uint32_t lost, frame_open, lost_f;   /* (the screen's state, below) */
+#define NPAD (NBTN - 2u)
+#define UI_KEYS 1u
+#define UI_LAST 2u
+#define UI_CLOCK 4u
+#define UI_ALL 0xFFu
+static uint32_t idle_ok, keys_sent, master_v = 255, linked, link_ms, btn_on, btn_pad, ui_dirty = UI_ALL;
+static int32_t master_sent = -1000, oct;
+static uint8_t knote[27], cc_v[NENC] = {64, 64, 64, 64, 64, 64, 64};
+static char last_txt[24] = "-";
+static uint32_t clk_bpm, clk_run;
+
+static uint32_t pad_of(uint32_t k) { return k - (k > BTN_OCTD) - (k > BTN_OCTU); }
+static char *sapp(char *p, const char *s) { while (*s) *p++ = *s++; return p; }
+static char *sint(char *p, int32_t v)
+{
+    char t[11];
+    uint32_t n = 0, u = v < 0 ? (uint32_t)-v : (uint32_t)v;
+    if (v < 0) *p++ = '-';
+    do { t[n++] = (char)('0' + u % 10u); u /= 10u; } while (u);
+    while (n) *p++ = t[--n];
+    return p;
+}
+static char *note_name(char *p, uint32_t n)
+{
+    static const char *const N[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    p = sapp(p, N[n % 12u]);
+    return sint(p, (int32_t)(n / 12u) - 1);
+}
+static void last_set(const char *a, uint32_t id, uint32_t v, int as_note)   /* "KEY F#3 58", "PAD 5 N40", "KNOB CC71 83" */
+{
+    char *p = sapp(last_txt, a);
+    *p++ = ' ';
+    if (as_note) p = note_name(p, id);
+    else { p = sapp(p, "CC"); p = sint(p, (int32_t)id); }
+    *p++ = ' ';
+    p = sint(p, (int32_t)v);
+    *p = 0;
+    ui_dirty |= UI_LAST;
+}
+
+static void all_off(void)                       /* what is held is let go in the mapping it was pressed in */
+{
+    uint32_t k;
+    for (k = 0; k < 27u; k++)
+        if (keys_sent >> k & 1u) midi_send(0x80u, knote[k], 0);
+    for (k = 0; k < NBTN; k++)
+        if (btn_on >> k & 1u) {
+            if (btn_pad >> k & 1u) midi_send(0x89u, PAD0 + pad_of(k), 0);
+            else midi_send(0x8Fu, k, 0);
+        }
+    keys_sent = btn_on = btn_pad = 0;           /* (a key still held is pressed again in the new mode) */
+}
+static void leds_clear(void)
+{
+    uint32_t i;
+    for (i = 0; i < 42u; i++) { fm1_led_key(i, 0); fm1_led_key_glow(i, 0); }
+}
+static void set_link(uint32_t on)
+{
+    all_off();
+    leds_clear();
+    linked = on;
+    master_v = 255u;                            /* MASTER is sent where it is, in the new mode */
+    master_sent = -1000;
+    if (on) { lost = 1; frame_open = 0; lost_f = 255u; }
+    else ui_dirty = UI_ALL;
+}
+
 static void panel(void)
 {
     uint32_t keys, ch, k, b, rel, v;
     int32_t d, m;
     if (!idle_ok) return;                       /* (not in the rescue, not before app_main) */
+    if (linked && fm1_ms - link_ms > LINK_MS) set_link(0);   /* the page went quiet: a plain controller */
     keys = fm1_in.notes & 0x7FFFFFFu;
     ch = keys ^ keys_sent;
     keys_sent = keys;
@@ -74,26 +157,130 @@ static void panel(void)
 #else
             uint32_t vel = 100u;                /* the FM-1's keys have no velocity */
 #endif
-            if (keys >> k & 1u) midi_send(0x90u, KEY0 + k, vel);
-            else midi_send(0x80u, KEY0 + k, 0);
+            if (keys >> k & 1u) {
+                int32_t n = (int32_t)(KEY0 + k) + (linked ? 0 : 12 * oct);
+                knote[k] = (uint8_t)(n < 0 ? 0 : n > 127 ? 127 : n);
+                midi_send(0x90u, knote[k], vel);
+                if (!linked) { last_set("KEY", knote[k], vel, 1);
+#if !BOARD_SMK37
+                    fm1_led_key(14u + k, 1);
+#endif
+                }
+            } else {
+                midi_send(0x80u, knote[k], 0);
+#if !BOARD_SMK37
+                if (!linked) fm1_led_key(14u + k, 0);
+#endif
+            }
         }
     b = fm1_input_edges(&rel);
     for (k = 0; k < NBTN; k++) {
-        if (b >> k & 1u) midi_send(0x9Fu, k, 127);
-        if (rel >> k & 1u) midi_send(0x8Fu, k, 0);
+        if (b >> k & 1u) {
+            if (linked) { midi_send(0x9Fu, k, 127); btn_on |= 1u << k; }
+            else if (k == BTN_OCTD || k == BTN_OCTU) {
+                oct += k == BTN_OCTU ? (oct < 3) : -(oct > -3);
+                ui_dirty |= UI_KEYS;
+            } else {
+                midi_send(0x99u, PAD0 + pad_of(k), 100);
+                btn_on |= 1u << k;
+                btn_pad |= 1u << k;
+                last_set("PAD", PAD0 + pad_of(k), 100, 1);
+#if !BOARD_SMK37
+                fm1_led_key(k, 1);
+#endif
+            }
+        }
+        if (rel >> k & 1u && btn_on >> k & 1u) {
+            if (btn_pad >> k & 1u) {
+                midi_send(0x89u, PAD0 + pad_of(k), 0);
+#if !BOARD_SMK37
+                fm1_led_key(k, 0);
+#endif
+            }
+            else midi_send(0x8Fu, k, 0);
+            btn_on &= ~(1u << k);
+            btn_pad &= ~(1u << k);
+        }
     }
     for (k = 0; k < NENC; k++)
         for (d = fm1_enc_take(ENC_SELECT + k); d;) {
-            int32_t s = d > 63 ? 63 : d < -63 ? -63 : d;
-            midi_send(0xBFu, 20u + k, (uint32_t)(64 + s));
-            d -= s;
+            if (!linked) {                      /* an absolute CC, 2 steps a detent */
+                int32_t a = (int32_t)cc_v[k] + 2 * d;
+                a = a < 0 ? 0 : a > 127 ? 127 : a;
+                if (a != cc_v[k]) { cc_v[k] = (uint8_t)a; midi_send(0xB0u, CCN[k], (uint32_t)a); last_set("KNOB", CCN[k], (uint32_t)a, 0); }
+                break;
+            } else {
+                int32_t s = d > 63 ? 63 : d < -63 ? -63 : d;
+                midi_send(0xBFu, 20u + k, (uint32_t)(64 + s));
+                d -= s;
+            }
         }
     m = (int32_t)master_k10;
     v = (uint32_t)m >> 3;
     if (v != master_v && (m - master_sent > 6 || master_sent - m > 6 || v == 0u || v == 127u)) {   /* the pot jitters */
         master_sent = m;
         master_v = v;
-        midi_send(0xBFu, 27u, v);
+        if (linked) midi_send(0xBFu, 27u, v);
+        else { midi_send(0xB0u, 7u, v); last_set("MASTER", 7u, v, 0); }
+    }
+}
+
+/* ---- the controller's screen (main loop only): the lines that changed are drawn again */
+static void ctl_draw(void)
+{
+    char t[32], *p;
+    if (ui_dirty == UI_ALL) {
+        lcd_fill(0, 0, 240, 240, C_BLACK);
+        draw_text_box(0, 10, 240, &FONT_L, APP_NAME, RGB(180, 140, 255), 1);
+        draw_text_box(0, 52, 240, &FONT_S, "MIDI CONTROLLER", RGB(210, 210, 210), 1);
+        p = sapp(t, "PADS  ch10  ");
+        p = sint(p, PAD0);
+        *p++ = '-';
+        p = sint(p, PAD0 + NPAD - 1u);
+        *p = 0;
+        draw_text_box(8, 120, 224, &FONT_S, t, RGB(230, 230, 230), 0);
+        draw_text_box(0, 198, 240, &FONT_S, "open FM1.Pocket to link", RGB(120, 120, 120), 1);
+        draw_text_box(0, 218, 240, &FONT_S, "v" APP_VER, RGB(90, 90, 90), 1);
+    }
+    if (ui_dirty & UI_KEYS) {
+        p = sapp(t, "KEYS  ch1  oct ");
+        if (oct > 0) *p++ = '+';
+        p = sint(p, oct);
+        *p = 0;
+        draw_text_box(8, 96, 224, &FONT_S, t, RGB(230, 230, 230), 0);
+    }
+    if (ui_dirty & UI_LAST) {
+        p = sapp(t, "LAST  ");
+        p = sapp(p, last_txt);
+        *p = 0;
+        draw_text_box(8, 144, 224, &FONT_S, t, RGB(140, 220, 200), 0);
+    }
+    if (ui_dirty & UI_CLOCK) {
+        p = sapp(t, "CLOCK ");
+        if (clk_bpm) { p = sint(p, (int32_t)clk_bpm); p = sapp(p, " BPM "); p = sapp(p, clk_run ? "RUN" : "STOP"); }
+        else p = sapp(p, "none");
+        *p = 0;
+        draw_text_box(8, 168, 224, &FONT_S, t, RGB(230, 200, 120), 0);
+    }
+    ui_dirty = 0;
+}
+
+/* the incoming MIDI clock (F8, 24 a quarter note) and transport, counted over one second */
+static void clock_poll(void)
+{
+    static uint32_t t0, ticks;
+    uint8_t st, d1, d2;
+    while (midi_get(&st, &d1, &d2)) {
+        if (linked) continue;                   /* (the page has no use for them: they are only drained) */
+        if (st == 0xF8u) ticks++;
+        else if (st == 0xFAu || st == 0xFBu) { clk_run = 1; ui_dirty |= UI_CLOCK; }
+        else if (st == 0xFCu) { clk_run = 0; ui_dirty |= UI_CLOCK; }
+    }
+    if (fm1_ms - t0 >= 1000u) {
+        uint32_t bpm = ticks * 5u / 2u;         /* ticks a second / 24 * 60 */
+        if (bpm != clk_bpm && !linked) { clk_bpm = bpm; ui_dirty |= UI_CLOCK; }
+        ticks = 0;
+        t0 = fm1_ms;
     }
 }
 
@@ -194,8 +381,10 @@ static void tether_sysex(const uint8_t *p, uint32_t n)   /* the bytes between F0
         return;                                 /* not "FPT" */
     for (i = 4; i + 1u < n; i++) sum += p[i];
     sum = (sum & 0x7Fu) == p[n - 1u];
+    if (sum) { link_ms = fm1_ms; if (!linked) set_link(1); }   /* any valid message from the page keeps the link */
     if (p[5] == 0x01u) { if (sum) hello(); return; }   /* HELLO? whatever its version */
     if (p[4] != PROTO) return;
+    if (p[5] == 0x04u) return;                  /* PING: only the link above */
     if (p[5] == 0x02u) {                        /* LEDS: lit mask [, dim mask], 7 ids a byte */
         if (sum && (n == 13u || n == 19u))
             for (i = 0; i < 42u; i++) {
@@ -245,12 +434,11 @@ static void tether_sysex(const uint8_t *p, uint32_t n)   /* the bytes between F0
 static void app_main(void)
 {
     lcd_fill(0, 0, 240, 240, C_BLACK);
-    draw_text_box(0, 84, 240, &FONT_L, APP_NAME, RGB(180, 140, 255), 1);
-    draw_text_box(0, 128, 240, &FONT_S, "waiting for FM1.Pocket", RGB(210, 210, 210), 1);
-    draw_text_box(0, 212, 240, &FONT_S, "v" APP_VER, RGB(90, 90, 90), 1);
     idle_ok = 1;
     for (;;) {
         platform_poll();                        /* (our SysEx is handled in there) */
         panel();
+        clock_poll();
+        if (!linked && ui_dirty) ctl_draw();
     }
 }

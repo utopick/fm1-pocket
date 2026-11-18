@@ -600,6 +600,7 @@
     function hint(text) { const h = el?.querySelector("#mdHint"); if (h) h.textContent = text; }
     function draw() {
       if (!el) return;
+      if (el.dataset.inline) return drawDevice(); // the inline drawing has no profile list or hint
       profile = record().profile || guess(device);
       const p = prof(); base = p.base;
       const sel = el.querySelector("#mdProfile");

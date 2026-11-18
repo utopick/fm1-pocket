@@ -108,6 +108,11 @@ class Midi(unittest.TestCase):
         for want in (False, True):
             self.midi(0xb0, 64, 127); self.midi(0x99, 43, 100); self.midi(0x89, 43, 0); self.midi(0xb0, 64, 0); time.sleep(0.2)
             self.assertEqual(self.js("return document.querySelector('#menu').hidden"), want, "FM-1 MENU pad")
+        # keys on any channel (a Launchkey MK4 sends 16) reach the firmware on channel 1; a pad that has a function does not reach it
+        got = self.js("""const log = []; node = { port: { postMessage: (m) => m.type === 'midi' && log.push(m.bytes) } };
+            for (const m of [[0x9f, 60, 100], [0x8f, 60, 0], [0xef, 0, 64], [0x99, 36, 100], [0x89, 36, 0]]) __inp.onmidimessage({ data: new Uint8Array(m) });
+            node = null; return log""")
+        self.assertEqual(got, [[0x90, 60, 100], [0x80, 60, 0], [0xe0, 0, 64]])
         self.midi(0xb0, 70, 64); self.midi(0xb0, 71, 10); self.midi(0xb0, 71, 90)  # knobs with no firmware running: nothing breaks
         self.assertEqual(self.errors(), [])
 

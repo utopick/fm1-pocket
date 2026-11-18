@@ -1705,8 +1705,11 @@
           const key = (cc ? "c" : "n") + (st & 15) + ":" + a;
           if (midiPanel.route(from, key, cc, on, b) || midiPanel.fallback(from, key, cc, on, b)) return;
         }
-        midiIn(Array.from(data));
-        realThru(data);
+        // a controller plays the FM-1 whatever channel it sends on (a Launchkey MK4 sends its keys on 16): the firmware listens on channel 1
+        const m = Array.from(data);
+        if (m[0] >= 0x80 && m[0] < 0xf0) m[0] &= 0xf0;
+        midiIn(m);
+        realThru(m);
       }
       const midiPanel = createMidiPanel(MI, miRun, midiMsg);
       // pad lights: a pad that works an FM-1 button shows that button's LED on the controller's own output (a note-on whose velocity picks the colour).
@@ -1983,6 +1986,7 @@
         const st = REAL.tether;
         if (!st) return;
         clearTimeout(st.timer);
+        clearInterval(st.pinger);
         for (const id of st.down) dropKey(id);
         REAL.tether = null;
         realFace();
@@ -2078,6 +2082,8 @@
         }
         if (!hello || !REAL.sync) return toast(REAL.sync ? "Sync on: what you play goes to both, and the real FM-1's notes and clock come here" : "Sync off");
         REAL.tether = { enc: new Tether.Encoder(), inflight: false, timer: 0, down: new Set(), info: hello };
+        // the unit is this page's panel for 3 s after the last message and a plain MIDI controller after that: a PING a second keeps the link (not while a job owns the port)
+        REAL.tether.pinger = setInterval(() => { if (!REAL.busy) try { REAL.fw.out.send(Tether.ping()); } catch {} }, 1000);
         tether.ledKey = "";
         tether.lcd = tether.lcd || new Uint16Array(57600);
         tetherFlush();

@@ -59,6 +59,23 @@ the first MIDI byte holds bits 0..6 of byte 0, the second bit 7 of byte 0 and bi
 last MIDI byte holds what is left, padded with zero bits. `n` bytes take `ceil(8n / 7)` MIDI bytes; `m` MIDI bytes
 unpack to `floor(7m / 8)` bytes, so the length is exact. (This is the M-UPGRADE packing.)
 
+## 2b. Linked and standalone (firmware 0.6)
+
+The unit is the page's panel (section 1) while it hears from the page: **any valid message from the page**, and a page sends a
+PING (`04`) every second so the link holds even when nothing else is sent (a screen that does not change, the screen switched
+off). After `3000 ms` of silence the unit is a **plain MIDI controller**, and back to the panel at the page's next message:
+
+| Control | Standalone (no page) |
+|---|---|
+| keys | notes on channel 1, `53 + key + 12 x octave`; OCT- / OCT+ shift the octave (-3..+3) and send nothing |
+| the other buttons (FM-1: 12, SMK-37: 16) | pads: notes `36 + pad`, channel 10, velocity 100 (FM-1: FX = 36 ... REC = 47) |
+| encoders | absolute CC on channel 1, 2 steps a detent, from 64: K1..K4 = 70..73, SELECT 74, ALGORITHM 75, PRESETS 76 (SMK-37: SELECT 74, ALGORITHM 75, PRESETS 76, K1..K4 70..73) |
+| MASTER | CC 7, channel 1 |
+
+Held keys and pads are let go in the mapping they were pressed in when the mode changes. The unit's screen shows the octave,
+the channels, the last control touched and the incoming MIDI clock (F8, transport). The LEDs follow the buttons and keys held.
+A page older than 0.6 sends no PING: the unit then returns to standalone 3 s after its last message.
+
 ## 3. Commands
 
 Page to unit:
@@ -68,6 +85,7 @@ Page to unit:
 | `01` | HELLO? | none |
 | `02` | LEDS | 6 bytes: lit mask, then optionally 6 bytes: dim mask |
 | `03` | SCREEN | `FF SL SH FL` then a packed payload (section 4) |
+| `04` | PING | none; no reply |
 
 Unit to page:
 
