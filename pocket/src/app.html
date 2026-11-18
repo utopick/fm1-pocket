@@ -28,7 +28,7 @@
                                       catalog   the firmware list as last fetched from fm1-emu's page
                                       shot:<id>  a picture (PNG data URL) of that firmware's screen, taken when it ran here
   Network: the firmware list (fm1-emu's firmwares.json), a firmware's package from its author and the Firmware Hub's
-  picture of each firmware for its card, only when online. Everything read back or fetched is checked before use.
+  picture of each firmware for its card, and a firmware's manual (api.github.com lists its repository, raw.githubusercontent.com has the file), only when online. Everything read back or fetched is checked before use.
 -->
 <html lang="en">
   <head>
@@ -245,8 +245,8 @@
       .mf .fk { display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; font-size: 7px; letter-spacing: 0.3px; color: var(--silk); min-width: 0; }
       .mf .fk i { width: 70%; max-width: 34px; aspect-ratio: 1; border-radius: 50%; position: relative; background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--cap), #fff 16%), var(--cap) 62%); box-shadow: 0 2px 3px #0008; }
       .mf .fk i::after { content: ""; position: absolute; left: 50%; top: 8%; width: 10%; height: 36%; margin-left: -5%; border-radius: 9px; background: var(--keyline); }
-      .mf .fb { min-width: 0; min-height: 30px; padding: 0; border: 0; border-radius: 7px; cursor: pointer; font: 800 8px system-ui, sans-serif; letter-spacing: 0; color: var(--ink); background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
-      .mf .fb small { display: block; font-size: 7px; border-top: 1px solid currentColor; margin: 1px 4px 0; padding-top: 1px; }
+      .mf .fb { min-width: 0; min-height: 30px; padding: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.05; overflow: hidden; border: 0; border-radius: 7px; cursor: pointer; font: 800 8px system-ui, sans-serif; letter-spacing: 0; color: var(--ink); background: linear-gradient(var(--btn1), var(--btn2)); box-shadow: inset 0 0 0 1px var(--rim); }
+      .mf .fb small { display: block; font-size: 7px; line-height: 1; border-top: 1px solid currentColor; margin: 1px 4px 0; padding-top: 1px; }
       .mf .fb.lit { color: #2a1a03; background: linear-gradient(color-mix(in srgb, var(--btn1), var(--lit) 85%), color-mix(in srgb, var(--btn2), var(--lit) 70%)); box-shadow: inset 0 0 0 1px var(--silk), 0 0 8px var(--lit); }
       .mf .fb.lit2 { box-shadow: inset 0 0 0 2px var(--lit); }
       .mf .fk.lit i { box-shadow: 0 0 0 2px var(--lit), 0 0 9px var(--lit); }
@@ -268,6 +268,14 @@
       #menu .fwc img { grid-column: 1; width: 100%; height: auto; aspect-ratio: 1; align-self: center; border-radius: 8px; background: #06070a; object-fit: contain; image-rendering: pixelated; }
       #menu .fwc .t { grid-column: 2; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 3px; font-size: 1em; color: var(--m-dim); overflow: hidden; align-self: stretch; }
       #menu .fwc .t b { color: var(--silk); font-size: 1.45em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
+      #menu .fwc .t b:has(.n) { display: flex; align-items: center; gap: 0.6em; }
+      #menu .fwc .t b .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+      #menu .fwc .t em.chip { flex: none; font: 700 0.45em ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 0.5px; padding: 0.25em 0.7em; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+      #menu .fwc .t em.new { color: #7fdcc0; }
+      #menu .fwc .t em.any { color: #ffce84; }
+      #menu .fwc .t em.old { color: #ff8a9a; }
+      #find #chipOnly { flex: none; }
+      #find #chipOnly.on { background: var(--lit); color: #14091f; }
       #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
       #menu .fwc .t small { font-size: 1em; line-height: 1.35; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; }
       #menu .fwc .act { grid-column: 3; display: flex; flex-direction: column; gap: 6px; }
@@ -304,15 +312,32 @@
       /* the REAL FM-1 pane never scrolls: two columns (status and buttons | the flash map), one column in a narrow window; the long texts are dialogs */
       /* the REAL FM-1 pane: four numbered steps (an infographic that is also the buttons), one sentence, the play button and the flash map (always there, grey until
          there is data). Everything is in em and the em follows the window (11 px on a phone held sideways, up to 21 px on a big screen), so it looks the same everywhere. */
-      #menu #pvReal { overflow: hidden; font-size: clamp(11px, 2.6vmin, 30px); align-content: center; }
-      #pvReal { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 1.1em 1.3em; color: var(--silk); max-width: 120em; width: 100%; margin: 0 auto; }
-      @media (max-aspect-ratio: 1/1) { #pvReal { grid-template-columns: minmax(0, 1fr); } }
+      #menu #pvReal { overflow: hidden; font-size: clamp(11px, 2.6vmin, 30px); align-content: stretch; }
+      #midiLive { flex: 1; min-height: 0; display: flex; }
+      #midiLive[hidden] { display: none; }
+      #menu #pvMidi .grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+      #menu #pvMidi { overflow: auto; }
+      #menu #pvMidi .grid { flex: 0 0 auto; }
+      #menu #pvMidi:has(#midiLive:not([hidden])) .grid { flex: 0 0 auto; }
+      #menu #pvMidi:has(#midiLive:not([hidden])) .grid button { min-height: 0; padding: 0.5em 0.2em; font-size: 0.8em; }
+      #midiLive .mdDevice { flex: 1; min-height: 0; display: flex; margin: 0; }
+      #midiLive svg { width: 100%; max-height: 100%; margin: auto; }
+      #pvReal { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); gap: 1.1em 1.3em; color: var(--silk); width: 100%; height: 100%; margin: 0 auto; }
+      /* the steps across the whole top, then the controls on the left and the flash map filling the right side */
+      #realSteps { grid-column: 1 / -1; grid-row: 1; }
+      #realLeft { grid-column: 1; grid-row: 2; }
+      #realRight { grid-column: 2; grid-row: 2; height: 100%; aspect-ratio: 1 / 1.12; justify-self: end; min-height: 0; display: flex; }
+      #realMap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+      @media (max-aspect-ratio: 1/1) { #pvReal { grid-template-columns: minmax(0, 1fr); } #realSteps, #realLeft, #realRight { grid-column: 1; grid-row: auto; } #realRight { min-height: 18em; } }
       #realLeft { display: flex; flex-direction: column; gap: 0.7em; min-width: 0; }
       #menu #pvReal p { margin: 0; color: var(--m-dim); display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
-      #menu #realNames { font-size: 1.1em; line-height: 1.3; -webkit-line-clamp: 1; }
+      #menu #pvReal #realMsg { font-size: 0.92em; display: block; overflow: visible; flex: none; white-space: pre-line; color: var(--silk); line-height: 1.5; }
+      #menu #realNames { font-size: 1.1em; line-height: 1.3; display: block; overflow: visible; flex: none; }
       #menu #pvReal #realNext { font-size: 1.3em; line-height: 1.3; font-weight: 700; color: var(--silk); -webkit-line-clamp: 2; min-height: 2.6em; }
-      #realSteps { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.2em; }
+      #realSteps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.2em; }
       #realSteps .step { position: relative; min-height: 6.6em; padding: 0.3em 0.2em 0.3em; font-size: 1.4em; font-weight: 800; line-height: 1.2; overflow: visible; }
+      @media (max-height: 460px) { #realSteps .step { min-height: 3.4em; font-size: 1.05em; } #realMapHint { display: none; } #realMapKey li { font-size: 0.8em; overflow: hidden; text-overflow: ellipsis; } #realRight { aspect-ratio: 1 / 1.25; } #menu #realMapKey { align-self: stretch; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); } #menu #realLeft { padding-bottom: 0; overflow: auto; } #menu #realRow { flex: none; min-height: 4.2em; } #menu #realMapKey li { overflow: hidden; } }
       #realSteps .step i { font-size: 0.68em; letter-spacing: 0.5px; margin-bottom: 0.4em; }
       /* the number, and an arrow to the next step */
       #realSteps .step::before { content: attr(data-n); position: absolute; left: 0.4em; top: 0.35em; width: 1.5em; height: 1.5em; border-radius: 50%; display: grid; place-items: center; background: var(--rim); color: var(--silk); font-size: 0.8em; font-weight: 800; }
@@ -324,31 +349,33 @@
       #realSteps .next { border-color: var(--lit); box-shadow: inset 0 0 0 2px var(--lit); }
       #realSteps .next::before { background: var(--lit); color: #14091f; }
       #pvReal button:disabled { opacity: 0.38; cursor: default; }
-      #realRow { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 0.6em; }
-      #realRow button { min-height: 4.6em; font-size: 1.15em; }
+      #realRow { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 0.6em; margin-top: auto; flex: 1 0 5em; max-height: 11em; }
+      #realRow button { min-height: 0; font-size: 1.25em; }
       #realRow .play i { font-size: 0.68em; letter-spacing: 0.5px; }
-      #menu #pvReal #realDisclaimer { font-size: 0.92em; line-height: 1.3; color: #ffb3bd; }
       #realRight { min-width: 0; display: flex; flex-direction: column; }
       #realMap { min-width: 0; font-size: 1em; line-height: 1.25; color: var(--silk); }
       #realMapHint { font-weight: 400; color: var(--m-dim); }
-      #realMapFlex { display: flex; gap: 1em; align-items: flex-start; margin-top: 0.6em; }
-      #realMapGrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 1px; flex: none; width: min(52%, 18em); aspect-ratio: 1; }
+      #realMapFlex { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 0.8em; align-items: center; margin-top: 0.6em; }
+      #realMapGrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 1px; flex: 1 1 0; min-height: 0; width: auto; max-width: 100%; aspect-ratio: 1; }
       #realMapGrid i { aspect-ratio: 1; border-radius: 2px; background: var(--c); }
       #realMapGrid i.b { opacity: 0.3; } /* blank sector inside a region */
       #realMapGrid i.f { background: repeating-linear-gradient(45deg, #3a3532 0 2px, #2a2624 2px 4px); }
       #realMap.empty #realMapGrid i { background: #6b6b70; opacity: 0.22; } /* nothing read yet: the same picture, grey */
       #realMap.empty li u { background: #6b6b70; }
       #realMap.empty li { opacity: 0.5; }
-      #realMapKey { margin: 0; padding: 0; list-style: none; min-width: 0; flex: 1; }
-      #realMapKey li { display: flex; gap: 0.5em; align-items: baseline; font-size: 0.95em; line-height: 1.45; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+      /* the key is as wide as its words need and grows to the left, over the free space under the text; the left column keeps room for it */
+      #realMapKey { margin: 0; padding: 0; list-style: none; flex: none; align-self: flex-end; width: max-content; display: grid; grid-template-columns: repeat(4, max-content); gap: 0 1.2em; position: relative; z-index: 1; }
+      #realRight, #realMap { overflow: visible; }
+      #realLeft { padding-bottom: 3.4em; }
+      #realMapKey li { display: flex; gap: 0.5em; align-items: baseline; font-size: 0.95em; line-height: 1.45; white-space: nowrap; }
       #realMapKey li u { flex: none; width: 0.9em; height: 0.9em; border-radius: 2px; background: var(--c); align-self: center; }
       /* MORE: big buttons over the menu */
-      #more { position: fixed; inset: 0; z-index: 6; background: #000c; display: grid; place-items: center; touch-action: auto; font: clamp(13px, 2vmin, 20px)/1.4 system-ui, sans-serif; }
+      #more { position: fixed; inset: 0; z-index: 6; background: #000c; display: grid; place-items: center; touch-action: auto; font: clamp(14px, 3.4vmin, 30px)/1.4 system-ui, sans-serif; }
       #more[hidden] { display: none; }
-      #more .box { width: min(92%, 36em); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 1.1em; padding: 1em; display: flex; flex-direction: column; gap: 0.8em; }
-      #more h3 { margin: 0; font: 800 0.85em ui-monospace, Menlo, monospace; letter-spacing: 2px; }
-      #more .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6em; }
-      #more button { min-height: 4em; border-radius: 0.7em; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); font-weight: 800; cursor: pointer; }
+      #more .box { width: 85vw; height: 85vh; overflow: auto; background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 1.1em; padding: 1em; display: flex; flex-direction: column; gap: 0.8em; }
+      #more h3 { margin: 0; font: 800 1.1em ui-monospace, Menlo, monospace; letter-spacing: 2px; }
+      #more .grid { display: grid; flex: 1; min-height: 0; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 0.8em; }
+      #more button { min-height: 0; font-size: 1.5em; border-radius: 0.7em; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); font-weight: 800; cursor: pointer; }
       #more button:disabled { opacity: 0.38; cursor: default; }
       #more button i { display: block; font: 700 0.65em ui-monospace, Menlo, monospace; font-style: normal; letter-spacing: 1px; opacity: 0.7; margin-bottom: 0.25em; }
       #menu [data-sub="skin"] #pvSkin { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(92px, 13% - 8px), 1fr)); grid-auto-rows: max-content; align-content: start; overflow: auto; padding-right: 4px; }
@@ -432,13 +459,18 @@
       /* a dangerous action asks first: a slider to pull to the end, so a stray tap cannot do it */
       #sure { position: fixed; inset: 0; z-index: 7; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
       #sure[hidden] { display: none; }
-      #sure .box { width: min(92%, 460px); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+      #sure .box { width: 85vw; max-height: 85vh; overflow: auto; justify-content: center; font-size: clamp(14px, 3.4vmin, 30px); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
       #sure p { margin: 0; }
-      #sure #sureWarn { font-size: 12px; color: #ffb3bd; border: 1px solid #ff7a8c88; border-radius: 10px; padding: 8px 10px; }
+      /* the warning on entering REAL FM-1: big and red */
+      #sure.alarm { background: #1a0006e8; }
+      #sure.alarm .box { width: 90vw; border: 3px solid #ff3b57; background: linear-gradient(#3a0610, #1d0309); box-shadow: 0 0 40px #ff3b5755; font-size: clamp(16px, 4.4vmin, 38px); }
+      #sure.alarm #sureText { font-weight: 800; color: #ffd9de; line-height: 1.35; }
+      #sure.alarm #sureText::before { content: "⚠ UNOFFICIAL TOOL"; display: block; font: 800 0.75em ui-monospace, Menlo, monospace; letter-spacing: 3px; color: #ff6b82; margin-bottom: 0.5em; }
+      #sure #sureWarn { font-size: 0.85em; color: #ffb3bd; border: 1px solid #ff7a8c88; border-radius: 10px; padding: 8px 10px; }
       /* a job on the real unit (backup, protector, install...): a dialog that stays until it is read, so there is always an answer and nowhere else to go meanwhile */
       #job { position: fixed; inset: 0; z-index: 8; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
       #job[hidden] { display: none; }
-      #job .box { width: min(92%, 460px); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; max-height: 90vh; overflow: auto; }
+      #job .box { width: 85vw; font-size: clamp(14px, 3.4vmin, 30px); background: var(--m-panel); color: var(--silk); border: 1px solid var(--rim); border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px; max-height: 85vh; overflow: auto; }
       #job h3 { margin: 0; font: 800 14px ui-monospace, Menlo, monospace; letter-spacing: 2px; }
       #job.bad h3 { color: #ff7a8c; }
       #job.ok h3 { color: #8ff5df; }
@@ -447,15 +479,15 @@
       #job li { margin-bottom: 4px; }
       #job a { color: var(--silk); }
       #jobBar { width: 100%; height: 14px; accent-color: var(--lit); }
-      #jobOk { min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
+      #jobOk { min-height: clamp(44px, 12vmin, 90px); font-size: 1em; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #sure .hint { font: 800 10px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: var(--m-dim); text-align: center; }
-      #sureSlide { appearance: none; -webkit-appearance: none; width: 100%; height: 52px; margin: 0; border-radius: 26px; background: linear-gradient(90deg, #3a1420, #ff5e7a); cursor: pointer; }
-      #sureSlide::-webkit-slider-thumb { -webkit-appearance: none; width: 72px; height: 52px; border-radius: 26px; background: var(--silk); border: 0; box-shadow: 0 2px 6px #000a; }
+      #sureSlide { appearance: none; -webkit-appearance: none; width: 100%; height: clamp(52px, 12vmin, 90px); margin: 0; border-radius: 999px; background: linear-gradient(90deg, #3a1420, #ff5e7a); cursor: pointer; }
+      #sureSlide::-webkit-slider-thumb { -webkit-appearance: none; width: clamp(72px, 18vmin, 130px); height: clamp(52px, 12vmin, 90px); border-radius: 999px; background: var(--silk); border: 0; box-shadow: 0 2px 6px #000a; }
       #sureSlide::-moz-range-thumb { width: 72px; height: 52px; border-radius: 26px; background: var(--silk); border: 0; }
       #sureOpt { display: flex; gap: 8px; }
-      #sureOpt button { flex: 1; min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
+      #sureOpt button { flex: 1; min-height: clamp(44px, 12vmin, 90px); font-size: 1em; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #sureOpt button.on { background: var(--lit); border-color: var(--silk); color: #14091f; }
-      #sureNo { min-height: 44px; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
+      #sureNo { min-height: clamp(44px, 12vmin, 90px); font-size: 1em; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
       #toast.show { opacity: 1; }
     </style>
@@ -496,9 +528,9 @@
           <div id="fwList"></div>
           <div class="grid">
             <button id="fwFind" title="Search the firmwares by name, author or what they do"></button>
-            <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FILE</button>
-            <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>DX7 · .SYX</i>LOAD BANK</button>
-            <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR</button>
+            <button id="open" title="Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FIRMWARE FILE</button>
+            <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>.SYX</i>LOAD DX7 BANK</button>
+            <button id="forget" title="Delete every downloaded firmware from this device (their saves stay). Asks first."><i>DOWNLOADS</i>CLEAR DATA</button>
           </div>
           <select id="fw" hidden title="The firmware the FM-1 runs"></select>
         </section>
@@ -515,13 +547,15 @@
         <section data-tab="conn" data-sub="midi">
           <div class="box pane" id="pvMidi">
             <h3>MIDI CONTROLLER</h3>
-            <p>Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and <b>DEVICE</b> shows a drawing of it where you can change any of them, and <b>MAP</b> learns your controller step by step (keys, pads, knobs, sustain, bend, transport). Knobs 1 to 4 are the FM-1's left knobs and 5 to 8 its right ones; the pads are its buttons. The sustain pedal is a MOD key: while it is held, the pads and knobs become a second set (pad 9 up). The MOD button turns that on or off.</p>
+            <div id="midiLive" hidden></div>
+            <p id="midiAbout">Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and <b>DEVICE</b> shows a drawing of it where you can change any of them, and <b>MAP</b> learns your controller step by step (keys, pads, knobs, sustain, bend, transport). Knobs 1 to 4 are the FM-1's left knobs and 5 to 8 its right ones; the pads are its buttons. The sustain pedal is a MOD key: while it is held, the pads and knobs become a second set (pad 9 up). The MOD button turns that on or off.</p>
             <p id="midiNames">Not connected yet.</p>
             <div class="grid">
               <button id="midi" title="Connect your MIDI keyboards and controllers"><i>CONTROLLER</i>CONNECT MIDI</button>
               <button id="midiDev" title="A drawing of your controller: see what each key, pad and knob does, and assign them"><i>DRAWING · LEARN</i>DEVICE</button>
               <button id="midiMap" title="Map your controller step by step: keys, pads, knobs, sustain, bend, transport. Saved, exported, imported."><i>STEP BY STEP</i>MAP</button>
               <button id="midiMod" title="MOD: while the sustain pedal (or the key MAP found) is held, the pads and knobs become a second set. Tap to turn it on or off."><i>SUSTAIN PEDAL</i>MOD</button>
+              <button id="midiLights" title="LIGHTS: the pads of a controller that takes lights (Novation Launchkey) show the lights of the FM-1 buttons they work. Tap to turn it on or off."><i>PAD LIGHTS</i>LIGHTS</button>
             </div>
           </div>
           <div class="box pane" id="pvInst">
@@ -553,12 +587,11 @@
             <div id="realLeft">
               <p id="realNames">Not connected yet.</p>
               <p id="realNext"></p>
+              <p id="realMsg" hidden></p>
               <div id="realRow">
                 <button id="realSync" class="play" title="Play with the real FM-1: what you play on this screen goes to the real unit too, and what the real unit plays (notes and clock) comes here. Not a MIDI keyboard, not a firmware installer."></button>
                 <button id="realMoreBtn" title="Restart the unit, inspect it, save the backup file, the steps and the warnings">MORE</button>
               </div>
-              <p id="realDisclaimer"></p>
-              <p id="realMsg" hidden></p>
             </div>
             <div id="realRight">
               <div id="realMap" class="empty">
@@ -577,11 +610,13 @@
                 <li><b>BACKUP again.</b> It has to show the protector. It is kept, so this is done once per unit.</li>
                 <li><b>Protector's MIDI mode:</b> switch the unit off, hold <b>PLAY</b> while switching it on, choose MIDI mode on its screen, then CONNECT here. (Holding PLAY at power-on always opens the m-bootloader menu: it is the way back if a firmware does not start.)</li>
                 <li>In <b>FIRMWARE</b>, an <b>INSTALL</b> button appears on each card once all of this is in place. M-VAVE's own FM-1.fwsc (OPEN FILE) puts the original firmware back the same way.</li>
+                <li>If a unit stops starting: see <b>WARNINGS</b> for the way back (the chip's own boot mode and the unbricker).</li>
               </ol></template>
             <template id="tplWarn"><b>Before anything is written to the unit</b>
               <ol>
                 <li>BACKUP first, and copy the file off this computer.</li>
-                <li>The protector (<a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>) goes in before any custom firmware. Without it a bad firmware can leave the unit dead, and only a USB_KEY dongle, or a second working unit running <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>, brings it back.</li>
+                <li>The protector (<a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>) goes in before any custom firmware. Without it a bad firmware can leave the unit not starting.</li>
+                <li><b>If a unit does not start, it can usually be brought back.</b> The chip has its own boot mode that no update can erase: switch the unit off, hold OCT-, OCT+ and HOME for 5 seconds while switching it on (or hold OCT- as you switch on). If the computer then sees a USB disk called <b>WL82 UBOOT1.00</b>, <a href="https://github.com/Quixotic7/MvaveFM1Unbricker" target="_blank" rel="noopener">MvaveFM1Unbricker</a> ( <a href="https://quixotic7.github.io/MvaveFM1Unbricker/" target="_blank" rel="noopener">illustrated guide</a>) writes the firmware back from your backup or an official package, with only a USB cable; <a href="https://thefirmwarehub.com/tools/rescue/" target="_blank" rel="noopener">the Hub's rescue page</a> has more. Official firmware backups: <a href="https://github.com/Quixotic7/FM1Backups" target="_blank" rel="noopener">FM1Backups</a>. If nothing shows on USB at all, it takes a small board (<a href="https://github.com/kurogedelic/FM-1-transporter" target="_blank" rel="noopener">FM-1 Transporter</a>) or a second working unit running <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>. This page cannot do that part: the computer has to talk to the unit as a USB disk.</li>
                 <li>A unit with the newer flash chip (UC25HQ80, JEDEC B36014) has had little testing: install the protector with <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> first, not here.</li>
                 <li>After the protector, BACKUP again here: a custom firmware is only offered when that backup shows the protector.</li>
                 <li>Do not unplug or switch off during a write.</li>
@@ -608,6 +643,7 @@
             <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app adds a phone-first front to it, a mapper for MIDI controllers and installation as an app.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
             <h3>ALSO THANKS</h3>
+            <p><b>Tether</b> (GPL-3.0), the firmware this page can install so a real FM-1 becomes the panel of this one, is built on <b>Dinghy</b> (zvenson), which is built on <b>Felucca</b> (hugelton) and SLOOP (isod89), all GPL-3.0. Its source is in <a href="https://github.com/utopick/fm1-pocket/tree/pocket/pocket/firmware" target="_blank" rel="noopener">pocket/firmware</a> of this page's repository; the package inside this page is built from it by <code>autobuild.sh</code>.</p>
             <p><b>jvitkauskas</b> (MIT): <a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>, the protector and its USB MIDI updater (v2.4 is bundled; its specification is how this page talks to the unit), <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> (the flash map's regions and colours; the way to install the protector on the newer chip) and <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>.</p>
             <p><b>M-VAVE</b> made the FM-1; the manual here follows its user manual, in our own words. <b>The firmware authors</b> and <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the Firmware Hub</a> made everything you can run.</p>
             <p><b>Menu icons</b> from <a href="https://open-game-icons.net/" target="_blank" rel="noopener">Open Game Icons</a>, under <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a>: Circuitry and Book cover by <a href="https://lorcblog.blogspot.com/" target="_blank" rel="noopener">Lorc</a>; Palette, Settings knobs and Info by <a href="https://delapouite.com/" target="_blank" rel="noopener">Delapouite</a>. Colour changed.</p>
@@ -629,6 +665,7 @@
       <div class="box" role="dialog" aria-modal="true" aria-label="Search firmwares">
         <h3>SEARCH FIRMWARES</h3>
         <input id="fwSearch" type="search" placeholder="Name, author, what it does" aria-label="Search firmwares" autocomplete="off" />
+        <button id="chipOnly" title="Show only the firmwares that save on FM-1s with the newer flash chip (the Firmware Hub's own check, read from each package)">SAVES ON NEWER FM-1s</button>
         <div class="row">
           <button id="findClear" title="Clear the search: show every firmware">CLEAR</button>
           <button id="findGo" title="Close the search and show what matches">SHOW</button>
@@ -681,6 +718,9 @@
 
     <script id="real-fm1">
 /*@REALFM1@*/
+    </script>
+    <script id="tether">
+/*@TETHER@*/
     </script>
     <script id="midi-device">
 /*@MIDIDEVICE@*/
@@ -736,6 +776,7 @@
       const MAX_PACKAGE = 32 * 1024 * 1024,
         SECTOR = 4096;
       const CATALOG_URL = "https://joakimeriksson.github.io/fm1-emu/firmwares.json",
+        HUB_CATALOG = "https://thefirmwarehub.com/catalog.json", // the Firmware Hub's own list: it has firmwares fm1-emu's lacks (same mapping as update-firmwares.py)
         HUB_IMG = "https://thefirmwarehub.com/img/w160/"; // the Firmware Hub's picture of each firmware's screen, <id>.webp
 
       // ======================================================================
@@ -760,6 +801,7 @@
       const kvDel = (k) => idb("readwrite", (s) => s.delete(k)).catch(() => {});
       const kvKeys = () => idb("readonly", (s) => s.getAllKeys()).catch(() => []);
       // a firmware list from anywhere (the one built in, the one kept, the one fetched): only well-formed entries, cut to size
+      const CHIPS = ["new", "any", "old"]; // the Firmware Hub's reading of a package: saves on the newer flash chip, does not check the chip, knows only the first FM-1s'
       const str = (v, n) => (typeof v === "string" ? v.slice(0, n) : "");
       function vetCatalog(o) {
         const list = Array.isArray(o) ? o : o && Array.isArray(o.firmwares) ? o.firmwares : [],
@@ -769,7 +811,7 @@
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "" });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "" });
         }
         return out;
       }
@@ -842,6 +884,7 @@
         px = new Uint32Array(img.data.buffer),
         ledNow = new Float32Array(41),
         ledAvg = new Float32Array(41); // smoothed: a dimmed LED read 30 times a second wavers, and would shimmer
+      let tetherHook = null; // set by the REAL FM-1 block: { frame(Uint16Array), leds() }
       function showFrame(m) {
         if (m.lcd) {
           for (let i = 0; i < 57600; i++) {
@@ -849,6 +892,7 @@
             px[i] = 0xff000000 | ((((p & 31) * 255) / 31) << 16) | (((((p >> 5) & 63) * 255) / 63) << 8) | (((p >> 11) * 255) / 31);
           }
           lcd.putImageData(img, 0, 0);
+          tetherHook && tetherHook.frame(m.lcd);
         }
         for (let i = 0; i < 41; i++) {
           // an LED driven at a low duty still looks bright to the eye (and a boot animation of the keys is driven that way): a square root, with noise below it cut
@@ -857,11 +901,15 @@
             v = Math.abs(t - ledAvg[i]) < 0.02 ? (ledAvg[i] = t) : (ledAvg[i] += (t - ledAvg[i]) * 0.3);
           if (Math.abs(v - ledNow[i]) > 0.03 && lights[i]) lights[i].style.setProperty("--led", (ledNow[i] = v).toFixed(2));
         }
+        padLights();
+        tetherHook && tetherHook.leds();
       }
       function dark() {
         lcd.clearRect(0, 0, 240, 240);
         ledNow.fill(0);
         ledAvg.fill(0);
+        padLights();
+        tetherHook && (tetherHook.frame(new Uint16Array(57600)), tetherHook.leds());
         lights.forEach((e) => e && e.style.setProperty("--led", 0));
       }
 
@@ -977,29 +1025,75 @@
       let local = null; // a package opened from a file: { id: "local", name, bytes }
       let realReady = () => false; // set by the REAL FM-1 block: every check is in place, so the cards may offer INSTALL
       let backup = null; // the flash of the user's own FM-1, saved by REAL FM-1 and wrapped as a package: { id: "backup", name, bytes }, kept under "bak:fm1" (the DELETE of downloads leaves it)
-      // The manual of a firmware is the README of its repository (raw.githubusercontent.com answers any page): fetched when asked or when the
-      // firmware is downloaded, kept on this device (man:<id>) so it reads offline. Text only: it is shown as elements, never as HTML.
-      function readmeUrls(repo) {
+      // The manual of a firmware: its repository is searched for a manual or a guide (GitHub lists the repository's files in one request, and the
+      // best-named text file wins), then the usual file names, and only then the README. kind says which it is ("manual" or "readme"), so the page
+      // can say so. Fetched when asked or when the firmware is downloaded, kept on this device (man:<id>) so it reads offline. Text only: it is
+      // shown as elements, never as HTML.
+      const repoOf = (repo) => {
         const m = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/(?:tree|blob)\/([\w.\/-]+))?\/?$/.exec(repo || "");
-        if (!m) return [];
-        const [, o, r, rest] = m;
-        if (rest && /\.(md|markdown|txt)$/i.test(rest)) return ["https://raw.githubusercontent.com/" + o + "/" + r + "/" + rest];
-        return ["README.md", "readme.md", "Readme.md", "README.markdown", "README.txt", "README"].map((n) => "https://raw.githubusercontent.com/" + o + "/" + r + "/HEAD/" + n);
+        return m && { o: m[1], r: m[2], rest: m[3] || "" };
+      };
+      const rawUrl = (g, path) => "https://raw.githubusercontent.com/" + g.o + "/" + g.r + "/HEAD/" + path.split("/").map(encodeURIComponent).join("/");
+      // how much a file of the repository looks like a manual: 0 not at all
+      function manualScore(path) {
+        const base = path.split("/").pop();
+        if (!/\.(md|markdown|txt)$/i.test(base) || /^(readme|changelog|changes|license|licence|copying|contributing|code_of_conduct|security|notice|todo|authors)\b/i.test(base) || /(^|\/)(node_modules|\.github|test|tests|examples?)\//i.test(path)) return 0;
+        if (/manual|handbook|user[-_ ]?guide/i.test(base)) return 5;
+        if (/guide|instructions|usage|tutorial|help|how[-_ ]?to|reference/i.test(base)) return 4;
+        if (/(^|\/)(docs?|documentation|manual)\//i.test(path)) return /index|overview|intro|start/i.test(base) ? 3 : 2;
+        return 0;
+      }
+      async function fetchText(url) {
+        try {
+          const r = await fetch(url);
+          return r.ok ? (await r.text()).slice(0, 300000) : null;
+        } catch {
+          return null;
+        }
+      }
+      async function findManual(f) {
+        const g = repoOf(f.repo);
+        if (!g) return null;
+        const names = ["MANUAL.md", "Manual.md", "manual.md", "docs/MANUAL.md", "docs/manual.md", "docs/Manual.md", "USER_GUIDE.md", "GUIDE.md", "docs/guide.md"];
+        let paths = [];
+        try {
+          const r = await fetch("https://api.github.com/repos/" + g.o + "/" + g.r + "/git/trees/HEAD?recursive=1");
+          const tree = r.ok ? (await r.json()).tree : null;
+          if (Array.isArray(tree)) paths = tree.filter((t) => t && t.type === "blob" && typeof t.path === "string").map((t) => t.path);
+        } catch {}
+        const ranked = paths.map((p) => [manualScore(p), p]).filter((x) => x[0]).sort((a, b) => b[0] - a[0] || a[1].length - b[1].length).map((x) => x[1]);
+        for (const path of (paths.length ? ranked : names).slice(0, 3)) {
+          const text = await fetchText(rawUrl(g, path));
+          if (text) return { text, url: rawUrl(g, path), kind: "manual", path };
+        }
+        return null;
+      }
+      function readmeUrls(repo) {
+        const g = repoOf(repo);
+        if (!g) return [];
+        if (g.rest && /\.(md|markdown|txt)$/i.test(g.rest)) return ["https://raw.githubusercontent.com/" + g.o + "/" + g.r + "/" + g.rest];
+        return ["README.md", "readme.md", "Readme.md", "README.markdown", "README.txt", "README"].map((n) => rawUrl(g, n));
       }
       async function manualOf(f) {
-        const kept = await kvGet("man:" + f.id);
-        if (kept && typeof kept.text === "string") return kept;
-        if (!navigator.onLine) throw Error("you are offline and its manual is not kept on this device yet");
-        for (const url of readmeUrls(f.repo)) {
-          try {
-            const r = await fetch(url);
-            if (!r.ok) continue;
-            const rec = { text: (await r.text()).slice(0, 300000), url, date: new Date().toISOString().slice(0, 10) };
-            await kvPut("man:" + f.id, rec).catch(() => {});
-            return rec;
-          } catch {}
+        const kept = await kvGet("man:" + f.id), have = kept && typeof kept.text === "string" ? kept : null;
+        if (have && have.kind) return have; // a manual, or the README when there was nothing better, kept when first looked for
+        if (!navigator.onLine) {
+          if (have) return have;
+          throw Error("you are offline and its manual is not kept on this device yet");
         }
-        throw Error("no README was found at its repository");
+        let rec = await findManual(f);
+        if (!rec)
+          for (const url of readmeUrls(f.repo)) {
+            const text = await fetchText(url);
+            if (text) { rec = { text, url, kind: "readme" }; break; }
+          }
+        if (!rec) {
+          if (have) return have;
+          throw Error("no manual or README was found at its repository");
+        }
+        rec.date = new Date().toISOString().slice(0, 10);
+        await kvPut("man:" + f.id, rec).catch(() => {});
+        return rec;
       }
       // a small markdown reader: headings, lists, code, quotes, **bold**, `code`, [links](https://...) and nothing else (tags and pictures are dropped)
       function mdNodes(text) {
@@ -1036,7 +1130,7 @@
         try {
           const m = await manualOf(f), link = el("a", "", "Open its page: " + f.repo);
           link.href = f.repo; link.target = "_blank"; link.rel = "noopener";
-          sheet(f.name + " · MANUAL", [...mdNodes(m.text), el("hr"), el("p", "", "From its repository (" + m.date + "), written by its author."), link]);
+          sheet(f.name + " · " + (m.kind === "manual" ? "MANUAL" : "README"), [...mdNodes(m.text), el("hr"), el("p", "", m.kind === "manual" ? "Its manual (" + (m.path || "from its repository") + ", " + m.date + "), written by its author." : "No manual was found: this is the README of its repository (" + m.date + "), written by its author."), link]);
         } catch (e) {
           const link = el("a", "", f.repo);
           link.href = f.repo; link.target = "_blank"; link.rel = "noopener";
@@ -1211,6 +1305,9 @@
       const mb = (n) => (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + " MB";
       const fwDate = {}; // when each kept package was published (the Last-Modified its host sent when it was downloaded), by id: the list itself has no dates
       const fwWhen = (f) => f.date || fwDate[f.id] || "";
+      // what the hub says of a package and the flash chip: the newer FM-1s (flash 0xB36014) need a firmware that knows it, or saves stay in RAM
+      const CHIP_TAG = { new: ["NEWER CHIP ✓", "Saves on every FM-1, the newer chip (0xB36014) too"], any: ["ANY CHIP", "Does not check the chip: it works on every FM-1, not tried on the newer chip (0xB36014) by the hub"], old: ["FIRST FM-1s ONLY", "Knows only the first FM-1s' flash chip: on a newer FM-1 (0xB36014) it keeps saves in RAM only, and updates from it may fail"] };
+      let fwChipOnly = false; // the filter: only firmwares that save on the newer chip
       let fwQuery = ""; // what the search box holds: it filters the list of banners
       let want = stored("fm1.fw") || "grimm"; // the firmware chosen (the list may not hold it yet: it fills in steps)
       function listFace() {
@@ -1241,6 +1338,11 @@
           if (f === local || f === backup || !navigator.onLine) own();
           else img.src = HUB_IMG + f.id + ".webp";
           t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. Kept on this device. Nothing is uploaded." : f === local ? "Kept on this device. Nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")));
+          if (f.chip) { // the chip tag sits to the right of the title, where there is room
+            const b = t.querySelector("b"), tag = el("em", "chip " + f.chip, CHIP_TAG[f.chip][0]);
+            tag.title = CHIP_TAG[f.chip][1];
+            b.replaceChildren(el("span", "n", b.textContent), tag);
+          }
           t.title = f.about || f.name;
           // one button: DOWNLOAD until the package is kept on this device, then USE
           go.title = have ? "Run " + f.name + " on the FM-1" : "Download " + f.name + " and keep it on this device: it then runs offline";
@@ -1250,7 +1352,7 @@
           inst.title = "Install " + f.name + " on the real FM-1 (through the protector's MIDI mode). Asks first.";
           inst.onclick = () => realInstall(f);
           man.hidden = !f.repo || f === local || f === backup;
-          man.title = "The manual of " + f.name + ": the README of its repository (kept on this device once read)";
+          man.title = "The manual of " + f.name + ": found in its repository, or its README when there is none (kept on this device once read)";
           man.onclick = () => showManual(f);
           // the saves belong to the exact package, so its package must be on this device to be found; the one that is running starts again, fresh
           wipe.disabled = !have;
@@ -1277,8 +1379,9 @@
           return c;
         };
         // the search box filters what is listed (name, author, text); the pick of the firmware itself is not touched
-        label($("#fwFind"), fwQuery ? "“" + fwQuery.slice(0, 14) + "”" : "NAME · AUTHOR", "SEARCH");
-        const q = fwQuery.toLowerCase(), shown = (f) => !q || (f.name + " " + (f.author || "") + " " + (f.about || "")).toLowerCase().includes(q);
+        label($("#fwFind"), fwQuery ? "“" + fwQuery.slice(0, 14) + "”" : fwChipOnly ? "NEWER CHIP ONLY" : "NAME · AUTHOR", "SEARCH FIRMWARE");
+        $("#chipOnly").classList.toggle("on", fwChipOnly);
+        const q = fwQuery.toLowerCase(), shown = (f) => (!fwChipOnly || f === backup || f === local || f.chip === "new" || f.chip === "any") && (!q || (f.name + " " + (f.author || "") + " " + (f.about || "")).toLowerCase().includes(q));
         // yours first (the backup of your unit, your file, then what is downloaded), then the rest, each in the order of the list
         const cards = [backup, local].filter(Boolean).concat(FIRMWARES.filter((f) => kept.has(f.id)), FIRMWARES.filter((f) => !kept.has(f.id))).filter(shown).map(card);
         $("#fwList").replaceChildren(...(cards.length ? cards : [el("p", "", "No firmware matches “" + fwQuery + "”.")]));
@@ -1292,10 +1395,10 @@
         }, () => {});
       }
       // USE: choose it, close the menu, and run it (turning the FM-1 on if it is off)
-      function use(id) {
+      function use(id, stay) {
         store("fm1.fw", (want = id));
         listFace();
-        menuShow(false);
+        if (!stay) menuShow(false);
         if (node) boot();
         else turnOn();
       }
@@ -1327,7 +1430,7 @@
         else toast(local.name + " ready: tap ON");
       };
       // actions that destroy something ask first, with a slider to pull to the end
-      let sureGo = null;
+      let sureGo = null, sureCancel = null;
       let sureChoice = 0; // with opts, the dialog asks which one (the first by default) and gives its number to go
       function sure(text, go, opts) {
         $("#sureText").textContent = text;
@@ -1338,7 +1441,7 @@
         sureGo = go;
         $("#sure").hidden = false;
       }
-      const sureClose = () => (($("#sureOpt").hidden = true), ($("#sure").hidden = true), ($("#sureWarn").hidden = true), (sureGo = null));
+      const sureClose = () => (($("#sure").classList.remove("alarm")), (sureCancel = null), ($("#sureOpt").hidden = true), ($("#sure").hidden = true), ($("#sureWarn").hidden = true), (sureGo = null));
       $("#sureSlide").onchange = () => {
         if (+$("#sureSlide").value < 97) return ($("#sureSlide").value = 0), toast("Slide all the way to confirm");
         const go = sureGo, pick = sureChoice;
@@ -1350,10 +1453,11 @@
       $("#fwSearch").oninput = () => ((fwQuery = $("#fwSearch").value.trim()), listFace());
       $("#fwSearch").onkeydown = (e) => void (e.key === "Enter" && findShow(false)); // (void: an on-handler that returns false cancels the key)
       $("#findGo").onclick = () => findShow(false);
-      $("#findClear").onclick = () => ((fwQuery = ""), ($("#fwSearch").value = ""), listFace(), $("#fwSearch").focus());
+      $("#chipOnly").onclick = () => ((fwChipOnly = !fwChipOnly), listFace());
+      $("#findClear").onclick = () => ((fwQuery = ""), (fwChipOnly = false), ($("#fwSearch").value = ""), listFace(), $("#fwSearch").focus());
       $("#find").onclick = (e) => e.target === $("#find") && findShow(false);
       $("#helpFw").onclick = () => (current() && current().repo ? showManual(current()) : ((manPart = "fm"), menuShow(true), menuTab("man"), manual()));
-      $("#sureNo").onclick = () => (sureClose(), toast("Cancelled"));
+      $("#sureNo").onclick = () => { const back = sureCancel; sureClose(); back ? back() : toast("Cancelled"); };
       $("#forget").onclick = () =>
         sure("Delete every downloaded firmware and your opened file from this device? Their saves stay, and so does the backup of your FM-1. They can be downloaded again when online.", async () => {
           for (const k of await kvKeys()) if (/^(pkg|man|date):/.test(String(k))) await kvDel(k);
@@ -1381,8 +1485,21 @@
         listFace();
         if (!navigator.onLine) return;
         try {
-          const fresh = vetCatalog(await (await fetch(CATALOG_URL, { cache: "no-cache" })).json());
+          const raw = await (await fetch(CATALOG_URL, { cache: "no-cache" })).json(), fresh = vetCatalog(raw);
           if (fresh.length < 20) return; // a broken list does not replace a good one
+          // the hub's firmwares that list lacks (and that fm1-emu does not hold back): added after its own, so the page has them without a new release
+          try {
+            const have = new Set([...(raw.firmwares || []).flatMap((f) => [f.id, f.hub]), ...Object.keys(raw.skipped || {})]);
+            const hub = await (await fetch(HUB_CATALOG, { cache: "no-cache" })).json();
+            const hubBy = new Map((hub.firmwares || []).map((h) => [h.id, h])), hubOf = new Map((raw.firmwares || []).map((r) => [r.id, r.hub || r.id]));
+            for (const f of fresh) {
+              const h = hubBy.get(hubOf.get(f.id));
+              if (!h) continue;
+              if (CHIPS.includes(h.chip)) f.chip = h.chip;
+              if (!f.date && /^\d{4}-\d{2}-\d{2}/.test(h.date)) f.date = h.date.slice(0, 10);
+            }
+            fresh.push(...vetCatalog((hub.firmwares || []).filter((h) => h && typeof h.pkg === "string" && !have.has(h.id) && !fresh.some((f) => f.id === h.id)).map((h) => ({ id: h.id, name: h.name, version: h.version, author: h.author, license: h.lic, about: h.what, date: h.date, chip: h.chip, package: "https://thefirmwarehub.com/" + h.pkg, repo: h.site || "" }))));
+          } catch {}
           const run = current();
           FIRMWARES = fresh.map((f) => (run && run.id === f.id && run.version === f.version ? run : f));
           kvPut("catalog", fresh).catch(() => {});
@@ -1406,7 +1523,7 @@
         const b = document.body.dataset,
           skin = SKINS.find((s) => s[0] === root.skin) || SKINS[0];
         label($("#keys"), "KEYS", kbd.keys === "fm" ? "FM-1" : "PIANO");
-        label($("#skin"), SKINS.indexOf(skin) < SKINS.findIndex((x) => x[0] === "pocket") ? "SKIN · FM-1 COLOUR" : "SKIN · OURS", skin[1]);
+        label($("#skin"), SKINS.indexOf(skin) < SKINS.findIndex((x) => x[0] === "pocket") ? "FM-1 COLOUR" : "OURS", "SKIN: " + skin[1]);
         label($("#fx"), "SCREEN FILTER", (FXS.find((f) => f[0] === scr.fx) || FXS[0])[1]);
         for (const [pane, now] of [["#pvKeys", kbd.keys], ["#pvSkin", root.skin], ["#pvFx", scr.fx]]) for (const c of $$(pane + " .pick")) c.classList.toggle("on", c.dataset.v === now);
         $("#flip").textContent = { complete: "KEYS", keys: "TOP", up: "ALL" }[b.view]; // what the next tap shows
@@ -1457,6 +1574,7 @@
         sec.dataset.sub = sub;
         for (const b of sec.querySelectorAll("button[data-sub]")) b.classList.toggle("on", b.dataset.sub === sub);
         paintFx();
+        if (sub === "real") (sure(REAL_DISCLAIMER, () => {}), $("#sure").classList.add("alarm"), (sureCancel = () => lookSub("midi", sec))); // every time the REAL FM-1 page is opened: a slider to accept, CANCEL goes back
       }
       // the filter examples show the FM-1's screen as it is now, or a test card while it is off
       function paintFx() {
@@ -1521,7 +1639,9 @@
         names: [],
         map: {},
         actions: () => ACTIONS,
-        defaults: () => ({ knobs: ["master", "enc0", "enc1", "enc2", "enc3", "enc4", "enc5", "enc6"].map(act), pads: ["btn8", "btn9", "btn10", "btn11", "btn2", "btn3", "btn4", "btn5", "btn12", "btn13", "flip", "power", "btn6", "btn7", null, "logo"].map((id) => id && act(id)) }),
+        defaults: () => ({ knobs: ["master", "enc0", "enc1", "enc2", "enc3", "enc4", "enc5", "enc6"].map(act), pads: ["btn8", "btn9", "btn10", "btn11", "btn2", "btn3", "btn4", "btn5", "btn12", "btn13", "flip", "power", "btn6", "btn7", null, "logo"].map((id) => id && act(id)) , 
+        // 16 pads in two rows of 8 (Launchkey): the FM-1's own button matrix in columns 1 to 6 (FX SEL ENV LFO EDIT GLO over HOME SAVE ARP SEQ PLAY REC), then OCT- OCT+ over KEYS and the FM-1 menu
+        pads16: ["btn2", "btn3", "btn4", "btn5", "btn6", "btn7", "btn0", "btn1", "btn8", "btn9", "btn10", "btn11", "btn12", "btn13", "flip", "logo"].map(act) }),
         down: new Map(), // control -> held (buttons)
         last: new Map(), // control -> last CC value, and what is left of a turn (encoders)
       };
@@ -1551,6 +1671,7 @@
           on = cmd === 0x90 && b > 0,
           off = cmd === 0x80 || (cmd === 0x90 && b === 0),
           cc = cmd === 0xb0;
+        if (st === 0xf8 || st === 0xfe) return; // the controller's clock and active sensing: the emulator has no use for them (the panel has counted them)
         if (on || off || cc) {
           const key = (cc ? "c" : "n") + (st & 15) + ":" + a;
           if (midiPanel.route(from, key, cc, on, b) || midiPanel.fallback(from, key, cc, on, b)) return;
@@ -1559,6 +1680,27 @@
         realThru(data);
       }
       const midiPanel = createMidiPanel(MI, miRun, midiMsg);
+      // pad lights: a pad that works an FM-1 button shows that button's LED on the controller's own output (a note-on whose velocity picks the colour).
+      // [dim, bright] palette indexes of the Novation pads (off 0): amber for the buttons, green for PLAY, red for REC. Not checked against the device's chart.
+      const LIGHT_COLOURS = { novation: { 12: [23, 21], 13: [7, 5], def: [11, 9] } };
+      let padSent = {}, lightsOn = stored("fm1.lights") !== "0";
+      const lightsFace = () => (label($("#midiLights"), "PAD LIGHTS", "LIGHTS " + (lightsOn ? "ON" : "OFF")), $("#midiLights").classList.toggle("on", lightsOn));
+      function padLights(clear) {
+        if (!MI.acc) return;
+        for (const name of MI.names) {
+          const kind = midiPanel.lightsOf(name), out = kind && [...MI.acc.outputs.values()].find((o) => o.name === name && o.state !== "disconnected");
+          if (!out) continue;
+          for (const { ch, note, action } of midiPanel.padList(name)) {
+            const id = /^btn(\d+)$/.exec(action || "")?.[1], c = LIGHT_COLOURS[kind];
+            const lv = clear || !lightsOn || id == null ? 0 : ledNow[id], col = lv > 0.55 ? (c[id] || c.def)[1] : lv > 0.12 ? (c[id] || c.def)[0] : 0, k = name + ch + ":" + note;
+            if (padSent[k] === col || (padSent[k] == null && !col)) continue;
+            padSent[k] = col;
+            try { out.send([0x90 | ch, note, col]); } catch {}
+          }
+        }
+      }
+      $("#midiLights").onclick = () => (store("fm1.lights", (lightsOn = !lightsOn) ? "1" : "0"), lightsFace(), padLights(), toast(lightsOn ? "Pad lights on: the pads show the FM-1's lights" : "Pad lights off"));
+      lightsFace();
       function midiFace() {
         MI.names = [];
         if (MI.acc)
@@ -1569,6 +1711,10 @@
           }
         $("#midi").classList.toggle("on", MI.names.length > 0);
         $("#midiNames").textContent = MI.names.length ? "Connected: " + MI.names.join(", ") : MI.acc ? "No MIDI device found: plug one in." : "Not connected yet.";
+        // a controller is there: its wireframe, lit as it is played, takes the place of the text
+        for (const id of ["midiAbout", "midiNames"]) $("#" + id).hidden = MI.names.length > 0;
+        $("#midiLive").hidden = !MI.names.length;
+        midiPanel.embed(MI.names.length ? $("#midiLive") : null);
         return MI.names;
       }
       $("#midi").onclick = async () => {
@@ -1595,13 +1741,20 @@
       // itself checks the package (header, chip key, every CRC) before it erases anything.
       // ======================================================================
       const MBOOT = { stage: "/*@MBOOT_STAGE@*/", uboot: "/*@MBOOT_UBOOT@*/", sha: { stage: "/*@MBOOT_STAGE_SHA@*/", uboot: "/*@MBOOT_UBOOT_SHA@*/" } };
-      const isRealFM1 = (name) => /\bFM-1\b/i.test(name || "");
+      // the stock firmware calls its USB MIDI port "FM-1 MIDI 1", but the ones built on Felucca (GR!MM among them) call it "Felucca"
+      // the Tether firmware built by firmware/autobuild.sh, inlined by build.py (checked by SHA-256 before it is used)
+      const TETHER_PKG = { b64: "/*@TETHER_FWSC@*/", sha: "/*@TETHER_SHA@*/" };
+      async function tetherFirmware() {
+        const bytes = unb64(TETHER_PKG.b64);
+        if ((await sha256(bytes)) !== TETHER_PKG.sha) throw Error("the bundled Tether package is damaged");
+        return { id: "tether", name: "Tether", version: "", bytes };
+      }
+      const isRealFM1 = (name) => /\bFM-1\b|felucca|gr!?mm|m-?vave/i.test(name || "");
       const isUpdatePort = (name) => /update/i.test(name || "");
       const REAL = { acc: null, fw: null, up: null, fwLink: null, upLink: null, info: null, sync: false, busy: false, saved: null, stored: null, ident: "" };
       const REAL_LOG = [];
       // said on the pane and over every slider that touches the unit
-      const REAL_DISCLAIMER = "CAUTION. Unofficial tool, not affiliated with M-VAVE, JieLi or the makers of m-bootloader. Writing to a unit can leave it dead: you use it at your own risk, with no warranty. Back up first and never unplug or switch off while it works.";
-      $("#realDisclaimer").textContent = "⚠ Unofficial tool. Writing to a unit can leave it dead: at your own risk. Read WARNINGS (MORE).";
+      const REAL_DISCLAIMER = "CAUTION. Unofficial tool, not affiliated with M-VAVE, JieLi or the makers of m-bootloader. Writing to a unit can stop it from starting (usually recoverable: see WARNINGS), and you use it at your own risk, with no warranty. Back up first and never unplug or switch off while it works.";
       const realSure = (text, go) => (sure(text, go), ($("#sureWarn").textContent = REAL_DISCLAIMER), ($("#sureWarn").hidden = false));
       const jobOpen = (title) => ($("#job").className = "", ($("#jobTitle").textContent = title), ($("#jobText").textContent = ""), ($("#jobBar").hidden = true), ($("#jobOk").hidden = true), ($("#job").hidden = false));
       const jobEnd = (ok) => { $("#job").className = ok ? "ok" : "bad"; $("#jobBar").hidden = true; $("#jobOk").hidden = false; $("#jobOk").focus(); };
@@ -1621,7 +1774,7 @@
       const unb64 = (t) => Uint8Array.from(atob(t), (c) => c.charCodeAt(0));
       const sha256 = async (bytes) => hex(await crypto.subtle.digest("SHA-256", bytes));
       // the real unit's notes, bend, clock and start/stop arrive in the emulator when SYNC is on; what you play goes the other way
-      const realThru = (data) => REAL.sync && REAL.fw && data[0] < 0xf0 && REAL.fw.out.send(Uint8Array.from(data));
+      const realThru = (data) => REAL.sync && !REAL.tether && REAL.fw && data[0] < 0xf0 && REAL.fw.out.send(Uint8Array.from(data));
       function realFace() {
         const names = [REAL.fw && "firmware port: " + REAL.fw.name, REAL.up && "update port: " + REAL.up.name].filter(Boolean);
         const rec = REAL.saved || (REAL.stored?.uid === REAL.info?.uid ? REAL.stored : null), pr = rec?.protector, prText = !rec ? " · protector: back up to find out" : pr?.installed ? " · protector: installed " + pr.version + (rec === REAL.stored ? " (from the backup kept here, " + rec.date.slice(0, 10) + ")" : "") : " · protector: NOT installed";
@@ -1630,12 +1783,12 @@
         for (const b of $$("#fwList .inst")) b.hidden = b.dataset.own === "1" || !installReady();
         const s = $("#realSync");
         s.classList.toggle("on", REAL.sync);
-        label(s, "THIS FM-1 ⇄ THE REAL ONE · NOT A KEYBOARD", REAL.sync ? "PLAYING TOGETHER · ON" : "PLAY WITH THE REAL FM-1 · OFF");
+        label(s, !REAL.fw && REAL.acc ? (REAL.up ? "THE UNIT IS IN MIDI MODE" : "NEEDS THE UNIT RUNNING ITS FIRMWARE") : "THIS FM-1 ⇄ THE REAL ONE · NOT A KEYBOARD", !REAL.fw && REAL.up ? "INSTALL TETHER ON THIS FM-1" : REAL.tether ? "TETHER · THE REAL PANEL · ON" : REAL.sync ? "PLAYING TOGETHER · ON" : "PLAY WITH THE REAL FM-1 · OFF");
         // what cannot be pressed now is greyed out; the line under the status says what comes next
         const i = REAL.info, idle = !REAL.busy; // rec: as above
         const newer = (rec?.jedec ?? i?.jedec) === 0xb36014, can = {
           realConn: idle,
-          realSync: idle && !!REAL.fw,
+          realSync: idle && (!!REAL.fw || (!!REAL.up && !!i?.mboot)), // with the firmware: play together; in the protector's MIDI mode: install Tether
           realBackup: idle && (!!REAL.fw || (!!REAL.up && !!i?.mboot)),
           realProt: idle && !!REAL.fw && !!REAL.saved && !REAL.saved.protector?.installed && !newer,
           realRestart: idle && !!REAL.up,
@@ -1673,10 +1826,16 @@
         if (fw?.in !== REAL.fw?.in) {
           if (REAL.fw) REAL.fw.in.onmidimessage = null;
           REAL.fw = fw;
+          if (!fw) tetherStop(); // the unit went away
           REAL.fwLink = null;
           if (fw) {
             REAL.fwLink = new RealFM1.Link(fw.in, fw.out);
-            fw.in.onmidimessage = (e) => (e.data[0] === 0xf0 ? REAL.busy && REAL.fwLink.feed(e.data) : REAL.sync && midiIn(Array.from(e.data)));
+            fw.in.onmidimessage = (e) => {
+              const d = e.data;
+              if (REAL.tether || (d[0] === 0xf0 && d[1] === 0x7d)) return tetherIn(d); // the Tether firmware: its panel and its SysEx
+              if (d[0] === 0xf0) return REAL.busy && REAL.fwLink.feed(d);
+              REAL.sync && midiIn(Array.from(d));
+            };
           }
         }
         if (up?.in !== REAL.up?.in) {
@@ -1692,6 +1851,14 @@
           if (REAL.info?.mboot) {
             const r = (await kvGet(unitKey(REAL.info.uid)))?.last; // the backup this browser kept for this unit
             REAL.stored = r ? { uid: REAL.info.uid, jedec: r.jedec, crc32: r.crc32, protector: r.protector, date: r.date } : null;
+            // the kept backup is the last look at this flash: draw its map until a new read replaces it
+            if (r?.bytes && !REAL.map) { try {
+              REAL.map = RealFM1.flashMap(r.bytes); realMapDraw(REAL.map);
+              const hint = $("#realMapHint"), from = " · from the backup of " + String(r.date).slice(0, 10);
+              hint.textContent += from + " · checking it against the unit…";
+              // the unit's own checksum of its whole flash against the backup's: same device and same contents, or not
+              RealFM1.sameFlash(REAL.upLink, REAL.info, r.crc32).then((same) => { if (REAL.map && hint.textContent.includes("checking")) hint.textContent = hint.textContent.replace(" · checking it against the unit…", same ? " · ✓ the unit holds exactly this" : " · ✗ the unit's flash is NOT this: BACKUP again"); }, () => { hint.textContent = hint.textContent.replace(" · checking it against the unit…", " · could not check it against the unit"); });
+            } catch {} }
           }
           REAL.probing = false;
         }
@@ -1708,11 +1875,88 @@
           toast("MIDI with SysEx was not allowed", 3000);
         }
       };
-      $("#realSync").onclick = () => {
-        if (!REAL.fw) return toast("Connect a real FM-1 first (it must be running its firmware)");
-        REAL.sync = !REAL.sync;
+      // ---- Tether: a real FM-1 running the Tether firmware (pocket/firmware, protocol in firmware/PROTOCOL.md) is the emulator's panel.
+      // Its keys, buttons, encoders and MASTER play the emulator; the emulator's screen and LEDs go to the unit (SysEx, tiles that changed,
+      // one frame at a time: the next waits for the unit's ACK, and no ACK in 500 ms means a keyframe).
+      const tether = { waitHello: null, lcd: null, ledKey: "" };
+      function tetherFlush() {
+        const st = REAL.tether;
+        if (!st || REAL.busy || st.inflight || !tether.lcd) return;
+        const msgs = st.enc.encode(tether.lcd);
+        if (!msgs.length) return;
+        st.inflight = true;
+        try { for (const m of msgs) REAL.fw.out.send(m); } catch { return tetherStop(); }
+        st.timer = setTimeout(() => ((st.inflight = false), st.enc.needKey(), tetherFlush()), 500);
+      }
+      function tetherIn(d) {
+        const e = Tether.parse(d), st = REAL.tether;
+        if (!e) return;
+        if (e.type === "hello") return tether.waitHello && tether.waitHello(e);
+        if (!st) return;
+        if (e.type === "ack" || e.type === "needkey") {
+          clearTimeout(st.timer);
+          st.inflight = false;
+          if (e.type === "needkey") st.enc.needKey();
+          return tetherFlush();
+        }
+        const id = e.type === "key" && e.id >= 0 && e.id < 27 ? 14 + e.id : e.type === "button" && e.id < 14 ? e.id : -1;
+        if (id >= 0) {
+          if (e.value) st.down.has(id) || (st.down.add(id), holdKey(id));
+          else st.down.delete(id) && dropKey(id);
+        } else if (e.type === "encoder" && e.id < 7 && e.value) turn(e.id, e.value);
+        else if (e.type === "master") setPot((e.value / 127) * 1023);
+      }
+      function tetherStop() {
+        const st = REAL.tether;
+        if (!st) return;
+        clearTimeout(st.timer);
+        for (const id of st.down) dropKey(id);
+        REAL.tether = null;
         realFace();
-        toast(REAL.sync ? "Sync on: what you play goes to both, and the real FM-1's notes and clock come here" : "Sync off");
+      }
+      tetherHook = {
+        frame(px) {
+          if (!REAL.tether) return;
+          tether.lcd = Uint16Array.from(px);
+          tetherFlush();
+        },
+        leds() {
+          if (!REAL.tether || REAL.busy) return;
+          const lit = [], dim = [];
+          for (let i = 0; i < 41; i++) (ledNow[i] > 0.55 ? lit : ledNow[i] > 0.12 ? dim : []).push(i);
+          const key = lit.join() + "|" + dim.join();
+          if (key === tether.ledKey) return;
+          tether.ledKey = key;
+          try { REAL.fw.out.send(Tether.leds(lit, dim)); } catch {}
+        },
+      };
+      let tetherAsked = false; // the question below is asked once a visit
+      $("#realSync").onclick = async () => {
+        if (!REAL.fw && REAL.up) return tetherFirmware().then(realInstall, (e) => toast(e.message, 4000)); // the unit is in the protector's MIDI mode: the checks and the install are realInstall's
+        if (!REAL.fw) return toast("Connect a real FM-1 first (it must be running its firmware)");
+        if (REAL.sync) {
+          REAL.sync = false;
+          tetherStop();
+          realFace();
+          return toast("Sync off");
+        }
+        REAL.sync = true;
+        realFace();
+        // is the Tether firmware on the unit? it answers HELLO (whatever its port is called); another firmware says nothing
+        const hello = await new Promise((ok) => ((tether.waitHello = ok), REAL.fw.out.send(Tether.hello()), setTimeout(() => ok(null), 700)));
+        tether.waitHello = null;
+        if (!hello && REAL.sync && !tetherAsked) {
+          tetherAsked = true;
+          sure("The firmware on this unit is not Tether, so it can only play together with this page: what you play goes to both, and its notes and clock come here.\n\nTether is a firmware that makes the real FM-1 the panel of this one: all its keys, buttons and knobs play here, and this screen shows on the unit.", (pick) => pick === 1 && REAL.sync && ((REAL.sync = false), realFace(), realNotice("INSTALL TETHER", "Put the unit in the protector's MIDI mode (switch it off, hold PLAY while switching it on, choose MIDI mode), press CONNECT here, then press this same button: it says INSTALL TETHER ON THIS FM-1.\n\nThe checks come first: a backup of the unit, with the protector in it.", true)), ["JUST PLAY TOGETHER", "SET UP TETHER"]);
+        }
+        if (!hello || !REAL.sync) return toast(REAL.sync ? "Sync on: what you play goes to both, and the real FM-1's notes and clock come here" : "Sync off");
+        REAL.tether = { enc: new Tether.Encoder(), inflight: false, timer: 0, down: new Set(), info: hello };
+        tether.ledKey = "";
+        tether.lcd = tether.lcd || new Uint16Array(57600);
+        tetherFlush();
+        tetherHook.leds();
+        realFace();
+        toast("Tether found: the real FM-1 is the panel of this one (keys, buttons, knobs), and its screen shows this screen");
       };
       // wait for a port to come back (the unit restarts into another mode after a write)
       const realWait = async (test, ms) => {
@@ -1785,15 +2029,20 @@
         REAL.saved = { uid: info.uid, jedec: info.jedec, size: bytes.length, crc32, protector };
         REAL.stored = kept ? { uid: info.uid, jedec: info.jedec, crc32, protector, date: rec.date } : null;
         realFace();
-        const verdict = protector.installed ? " The protector (m-bootloader " + protector.version + ") is in this flash: custom firmwares can be installed (hold PLAY at power-on, choose MIDI mode, CONNECT)." : " The protector is NOT in this flash: no custom firmware can be installed yet.";
-        realSay((asFile ? "Backup saved as " + name + " (" + (bytes.length >> 10) + " KiB, checked against the chip's own checksum). Keep it somewhere safe." : "Backup kept in this browser (" + (bytes.length >> 10) + " KiB, checked against the chip's own checksum). The file of this unit's first backup was saved before: SAVE BACKUP gives this one.") + verdict);
+        const kib = (bytes.length >> 10) + " KiB, checked against the chip's own checksum";
+        realSay([
+          asFile ? "✓ Backup saved as " + name + " (" + kib + ")" : "✓ Backup kept in this browser (" + kib + ")",
+          asFile ? "✓ Keep the file somewhere safe" : "✓ This unit's first backup was saved as a file before: SAVE BACKUP gives this one",
+          protector.installed ? "✓ The protector (m-bootloader " + protector.version + ") is in this flash: custom firmwares can be installed" : "✗ The protector is NOT in this flash: no custom firmware can be installed yet",
+          ...(protector.installed ? ["→ To install: hold PLAY at power-on, choose MIDI mode, CONNECT"] : []),
+        ].join("\n"));
         toast(asFile ? "Backup saved: " + name : "Backup kept in this browser", 5000);
         // kept as the first firmware of the list, and run here: if it draws its screen, the copy is a good one
         const pkg = RealFM1.wrap(bytes, (/FM-1_\d+/.exec(REAL.ident) || ["FM-1_000"])[0]);
         const mine = { name: "MY FM-1 · " + new Date().toISOString().slice(0, 10), version: "", bytes: pkg };
         backup = { id: "backup", ...mine };
         await kvPut("bak:fm1", mine).catch(() => toast("No room to keep the backup in the list: use the file just saved", 4000));
-        use("backup");
+        use("backup", true); // stay on the MIDI page
         realCheck();
       }
       // does the backup run? its screen must draw something within 25 s (as the firmware smoke test does)
@@ -1801,12 +2050,12 @@
         const colours = () => new Set(new Uint32Array($("#lcd").getContext("2d").getImageData(0, 0, 240, 240).data.buffer)).size;
         for (let i = 0; i < 50; i++) {
           await new Promise((r) => setTimeout(r, 500));
-          if (node && colours() > 2) return realSay(realMsgNow() + " It runs here: its screen drew. Open OPTIONS, REAL FM-1 for the next step."), toast("Your backup runs in the emulator ✓", 5000);
+          if (node && colours() > 2) return realSay(realMsgNow() + "\n✓ It runs here: its screen drew"), toast("Your backup runs in the emulator ✓", 5000);
         }
-        realSay(realMsgNow() + " It did not draw a screen here in 25 s. The file is saved, but check it before trusting it.");
+        realSay(realMsgNow() + "\n✗ It did not draw a screen here in 25 s: the file is saved, but check it before trusting it");
         toast("The backup did not start in the emulator: " + $("#status").textContent, 6000);
       }
-      const realMsgNow = () => $("#realMsg").textContent.replace(/ It (runs here|did not draw).*$/, "");
+      const realMsgNow = () => $("#realMsg").textContent.replace(/\n[✓✗] It (runs here|did not draw)[\s\S]*$/, "");
       $("#realBackup").onclick = () => {
         if (REAL.up && REAL.info?.mboot) return realRun("Backup", backupNow);
         if (REAL.up) return realNotice("NOT A HELPER", "This unit answers, but it is not m-bootloader or its helper: nothing was sent.");
@@ -1919,7 +2168,7 @@
         if (REAL.saved.jedec === 0xb36014) {
           return realNotice("NEWER FLASH CHIP: USE M-FLASHER", "This unit has the newer flash chip (UC25HQ80, JEDEC B36014), which has had little testing with the protector: one unit did not start after it.\n\nInstall the protector with M-Flasher (github.com/jvitkauskas/m-flasher), then BACKUP here again. This page will not write the protector on this chip.");
         }
-        realSure("Install the protector (m-bootloader v2.4, MIT) on this FM-1? It replaces the boot area. Do not unplug the cable or switch the unit off until it restarts: a power cut can leave the unit dead, and only a USB_KEY dongle brings it back. Have your backup file copied off this computer first. M-Flasher is the maker's tested way; this page does the same as M-VAVE's updater would, with its own code.", () =>
+        realSure("Install the protector (m-bootloader v2.4, MIT) on this FM-1? It replaces the boot area. Do not unplug the cable or switch the unit off until it restarts: a power cut can leave the unit not starting (usually recoverable with a USB cable, through the chip's own boot mode: see WARNINGS). Have your backup file copied off this computer first. M-Flasher is the maker's tested way; this page does the same as M-VAVE's updater would, with its own code.", () =>
           realRun("Protector", async () => {
             await realIdent();
             await realServe(REAL.fwLink, await mbootImage("uboot"), true, "Installing the protector");
