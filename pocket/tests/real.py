@@ -24,6 +24,13 @@ function makeUnit() {
   const ask = (at) => { const n = total ? Math.min(512, total - at) : 512; tell(fwIn, R.frame(0x30, [0, at & 255, at >> 8 & 255, at >> 16 & 255, at >>> 24, n & 255, n >> 8, 0])); };
   const fwOut = { name: 'FM-1 MIDI 1', send(b) {
     window.__log.push('fw:' + Array.from(b.slice(0, 6)).map(x => x.toString(16)).join(' '));
+    if (b[0] === 0xf0 && b[1] === 0x7d) { // Tether (the page asks HELLO, sends screens and LEDs); only when the test says the unit runs it
+      (window.__tx = window.__tx || []).push(Array.from(b));
+      if (!window.__tether) return;
+      if (b[6] === 1) tell(fwIn, Tether.message(0x41, [1, 0, 27, 14, 7, ...Array.from('Tether').map(c => c.charCodeAt(0))]));
+      if (b[6] === 3 && (b[10] & 1)) tell(fwIn, Tether.message(0x42, [b[7]]));
+      return;
+    }
     const p = R.parse(b);
     if (!p) return;
     if (p.soft === 0x7f) { got = 0; total = 0; return ask(0); }
@@ -85,6 +92,10 @@ class Real(unittest.TestCase):
 
     def click(self, sel): self.js("document.querySelector(arguments[0]).click()", sel); time.sleep(0.3)
 
+    def dismiss(self): self.js("var s = document.querySelector('#sure'); if (!s.hidden && s.classList.contains('alarm')) { var r = document.querySelector('#sureSlide'); r.value = 100; r.dispatchEvent(new Event('change')) }"); time.sleep(0.2)  # the warning shown on entering REAL FM-1
+
+    def open_real(self): self.click('button[data-sub=real]'); self.dismiss()
+
     def slide(self):
         self.js("var s = document.querySelector('#sureSlide'); s.value = 100; s.dispatchEvent(new Event('change'))")
 
@@ -99,7 +110,7 @@ class Real(unittest.TestCase):
 
     def test_connect_asks_for_sysex_and_names_the_ports_and_leaves_the_controller_alone(self):
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.open_real(); self.click('#realConn'); time.sleep(0.5)
         self.assertTrue(self.js("return window.__sysex"))
         self.assertIn("firmware port: FM-1 MIDI 1", self.text("#realNames"))
         # CONNECT MIDI lists the controller, not the real unit
@@ -109,7 +120,7 @@ class Real(unittest.TestCase):
 
     def test_inspect_copies_a_read_only_report(self):
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.open_real(); self.click('#realConn'); time.sleep(0.5)
         self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
         self.click('#realInfo'); self.wait("window.__copied")
         r = self.js("return window.__copied")
@@ -118,25 +129,59 @@ class Real(unittest.TestCase):
 
     def test_restart_takes_the_unit_out_of_the_helper(self):
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.open_real(); self.click('#realConn'); time.sleep(0.5)
         self.click('#realRestart')  # no helper yet: it only says so
         self.assertFalse(self.js("return !!window.__restarted"))
         self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
         self.click('#realRestart'); self.slide(); self.wait("window.__restarted && document.querySelector('#realMsg').textContent.includes('back on its firmware')", 40)
 
     def test_sync_sends_what_you_play_to_the_unit(self):
-        self.click('button[data-sub=real]'); self.click('#realConn')
+        self.open_real(); self.click('#realConn')
         self.js("window.__sent = []; const o = window.__fwOut.send; window.__fwOut.send = (b) => { __sent.push(Array.from(b)); o(b); }")
         self.js("realThru([0x90, 60, 100])")
         self.assertEqual(self.js("return __sent.length"), 0, "sync is off: nothing goes out")
-        self.click('#realSync'); self.assertIn("PLAYING TOGETHER", self.text("#realSync"))
-        self.js("realThru([0x90, 60, 100]); realThru([0xf0, 1, 0xf7])")
+        self.click('#realSync'); self.assertIn("PLAYING TOGETHER", self.text("#realSync")); time.sleep(1)  # (it asks HELLO first: nobody answers)
+        self.js("__sent.length = 0; realThru([0x90, 60, 100]); realThru([0xf0, 1, 0xf7])")
         self.assertEqual(self.js("return __sent"), [[0x90, 60, 100]], "notes go, SysEx never does")
         self.js("window.__fwIn.onmidimessage({ data: new Uint8Array([0xf8]) })")  # the unit's clock arrives with no error
         self.assertEqual(self.js("return window.__errs"), [])
 
+    def test_tether_unit_is_the_panel_and_shows_the_screen(self):
+        self.js("window.__tether = true")
+        self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
+        self.assertIn("TETHER", self.text("#realSync"))
+        down = lambda i: self.js("return holds[arguments[0]]", i)
+        self.js("window.__fwIn.onmidimessage({ data: [0x90, 55, 100] }); window.__fwIn.onmidimessage({ data: [0x9f, 12, 0x7f] })")
+        self.assertEqual((down(16), down(12)), (1, 1), "a key (note 55 = key 2 = matrix id 16) and PLAY are held")
+        self.js("window.__fwIn.onmidimessage({ data: [0x80, 55, 0] }); window.__fwIn.onmidimessage({ data: [0x8f, 12, 0] })")
+        self.assertEqual((down(16), down(12)), (0, 0))
+        self.js("window.__fwIn.onmidimessage({ data: [0xbf, 22, 66] }); window.__fwIn.onmidimessage({ data: [0xbf, 27, 127] })")
+        self.assertEqual(self.js("return [clicks[2], pot]"), [2, 1023], "KNOB1 +2 clicks, MASTER full")
+        self.js("window.__tx.length = 0; tetherHook.frame(new Uint16Array(57600).fill(0x1234))")
+        self.wait("__tx.length > 0", 5); time.sleep(0.5)
+        first = self.js("return __tx.filter(m => m[6] === 3).length")
+        self.assertGreater(first, 0, "the first frame goes out as SysEx")
+        self.assertEqual(self.js("return REAL.tether.inflight"), False, "its ACK came back")
+        self.js("__tx.length = 0; tetherHook.frame(new Uint16Array(57600).fill(0x1234))"); time.sleep(0.4)
+        self.assertEqual(self.js("return __tx.filter(m => m[6] === 3).length"), 0, "the same frame again sends nothing")
+        self.js("ledNow[8] = 1; tetherHook.leds()"); time.sleep(0.2)
+        self.assertEqual(self.js("return __tx.filter(m => m[6] === 2).length"), 1, "HOME's LED goes out as one LEDS message")
+        self.click('#realSync'); self.assertNotIn("TETHER", self.text("#realSync"))
+        self.assertEqual(self.js("return window.__errs"), [])
+
+    def test_in_midi_mode_the_play_button_installs_tether_after_the_checks(self):
+        self.js("window.__startUpdate = true; window.__kind = 2")
+        self.open_real(); self.click('#realConn'); self.wait("REAL.info && REAL.info.mboot", 20)
+        self.assertIn("INSTALL TETHER", self.text("#realSync"))
+        self.assertFalse(self.js("return document.querySelector('#realSync').disabled"))
+        self.click('#realSync'); time.sleep(0.5)
+        self.assertFalse(self.js("return document.querySelector('#job').hidden"))
+        self.assertIn("LOCKED", self.text("#jobTitle"))  # no backup of this unit yet: the same checks as any firmware's INSTALL
+        self.assertTrue(self.js("return tetherFirmware().then(f => f.bytes.length > 100000)"), "the bundled package checks out")
+        self.assertEqual(self.js("return window.__errs"), [])
+
     def test_backup_sends_the_helper_then_reads_the_flash(self):
-        self.click('button[data-sub=real]'); self.click('#realConn')
+        self.open_real(); self.click('#realConn')
         self.js("window.__saved = null; HTMLAnchorElement.prototype.click = function () { __saved = this.download; }")
         self.click('#realBackup'); self.assertFalse(self.js("return document.querySelector('#sure').hidden"))
         self.slide()
@@ -157,7 +202,7 @@ class Real(unittest.TestCase):
         raw = subprocess.run(["node", "-e", """const R = require(process.argv[1] + '/vendor/real-fm1.js'), u = R.unweave(require('fs').readFileSync(process.argv[2])), f = u.files.find(f => f.type === 0);
           const flash = new Uint8Array(0x100000).fill(255); flash.set(u.image.subarray(f.offset, f.offset + f.size)); process.stdout.write(JSON.stringify(Array.from(flash)))""", ROOT, os.path.abspath(self.FW)], capture_output=True, check=True).stdout
         self.js("window.__flashInit = arguments[0]", json.loads(raw))
-        self.click('button[data-sub=real]'); self.click('#realConn')
+        self.open_real(); self.click('#realConn')
         self.js("HTMLAnchorElement.prototype.click = function () {}")
         self.click('#realBackup'); self.slide()
         self.wait("(document.querySelector('#realMsg').textContent.match(/It runs here|did not draw/) || [])[0]", 90)
@@ -165,13 +210,13 @@ class Real(unittest.TestCase):
         self.assertEqual(self.js("return window.__errs"), [])
 
     def test_the_protector_and_the_firmware_wait_for_their_steps(self):
-        self.click('button[data-sub=real]'); self.click('#realConn')
+        self.open_real(); self.click('#realConn')
         self.click('#realProt'); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no protector before a backup")
         self.install_card(); self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "no firmware without MIDI mode")
 
     def test_no_protector_no_custom_firmware(self):
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.open_real(); self.click('#realConn'); time.sleep(0.5)
         self.click('#realWarn'); self.assertIn("M-Flasher", self.text("#jobText")); self.click('#jobOk')  # the warnings are a dialog, the pane never scrolls
         self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
         self.assertIn("NOT in this flash", self.text("#realMsg"))
@@ -188,15 +233,16 @@ class Real(unittest.TestCase):
     def files(self): return [f for f in os.listdir(self.dl) if f.endswith(".bin")]
 
     def test_the_backup_is_kept_in_the_browser_and_its_file_is_saved_once(self):
+        self.js("document.querySelector('#logo').click()")  # the menu is open, as for a user: a backup must leave it open
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.open_real(); self.click('#realConn'); time.sleep(0.5)
         self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
         time.sleep(1); self.assertEqual(len(self.files()), 1)
         self.click('#realBackup'); self.wait("document.querySelector('#realMsg').textContent.includes('Backup kept in this browser')", 90)
         time.sleep(1); self.assertEqual(len(self.files()), 1, "the second backup must not pile up another file")
-        time.sleep(4)  # the backup starts the emulator and closes the menu: open it again
+        time.sleep(4)  # the backup starts the emulator and the menu stays on the REAL FM-1 page
         self.assertFalse(self.js("return document.querySelector('#job').hidden"), "the finished job waits for OK"); self.click('#jobOk')
-        self.js("document.querySelector('#menu').hidden = false; document.querySelector('#menu [data-tab=conn]').click(); document.querySelector('button[data-sub=real]').click()"); time.sleep(0.5)
+        self.assertFalse(self.js("return document.querySelector('#menu').hidden")); self.assertEqual(self.js("return document.querySelector('#menu section[data-tab=conn]').dataset.sub"), 'real')
         self.d.find_element('css selector', '#realMoreBtn').click(); time.sleep(0.4)  # SAVE BACKUP lives in MORE
         self.d.find_element('css selector', '#realSave').click(); time.sleep(2); self.assertEqual(len(self.files()), 2)  # SAVE BACKUP gives the kept one on demand
 
@@ -209,7 +255,7 @@ class Real(unittest.TestCase):
         self.d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": src})
         self.d.get(BASE + "index.html"); time.sleep(1.5)
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]')
+        self.open_real()
         self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
         self.click('#realConn'); time.sleep(1.5)
         self.click('#realInfo'); self.wait("window.__copied"); self.assertIn("install unlocked: no", self.js("return window.__copied"))
@@ -241,7 +287,7 @@ class Real(unittest.TestCase):
         # a reload forgets the session, not the browser: the kept backup unlocks it again
         self.d.refresh(); time.sleep(1.5)
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]')
+        self.open_real()
         self.js("window.__copied = null; Object.defineProperty(navigator, 'clipboard', {value: {writeText: t => (window.__copied = t, Promise.resolve())}, configurable: true})")
         self.click('#realConn'); time.sleep(1.5); self.click('#realInfo'); self.wait("window.__copied")
         self.assertIn("install unlocked: yes", self.js("return window.__copied"))
@@ -254,7 +300,7 @@ class Real(unittest.TestCase):
         self.d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": "Object.defineProperty(window, '__flashInit', { get() { const f = new Uint8Array(0x100000).fill(255); f.set(RealFM1.enc(0xffff, Uint8Array.from(%s)), 0xb0); return f; } });" % plain})
         self.d.get(BASE + "index.html"); time.sleep(1.5)
         self.click('#menu [data-tab=conn]') if self.js("return !!document.querySelector('#menu [data-tab=conn]')") else None
-        self.click('button[data-sub=real]'); self.click('#realConn'); time.sleep(0.5)
+        self.open_real(); self.click('#realConn'); time.sleep(0.5)
         self.click('#realBackup'); self.slide(); self.wait("document.querySelector('#realMsg').textContent.includes('Backup saved')", 90)
         self.assertIn("m-bootloader 2.4) is in this flash", self.text("#realMsg"))
         self.assertIn("protector: installed", self.text("#realNames"))

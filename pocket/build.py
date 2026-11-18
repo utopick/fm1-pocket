@@ -17,8 +17,10 @@ parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@FIRMWARES@*/": read("ve
          "/*@MIDIDEVICE@*/": read("vendor/midi-device.js"),  # the Pocket apps' MIDI device panel, the same file as theirs
          "/*@LICENSE_EMU@*/": read("vendor/LICENSE-fm1-emu").replace("&", "&amp;").replace("<", "&lt;"),
          "/*@LICENSE_MBOOT@*/": read("vendor/mboot/LICENSE-m-bootloader").replace("&", "&amp;").replace("<", "&lt;"),
+         "/*@TETHER@*/": read("vendor/tether.js"),  # the Tether firmware's protocol: a real FM-1 as the panel of the emulator (tests/tether.test.js)
          "/*@REALFM1@*/": read("vendor/real-fm1.js"),  # USB MIDI protocol for a real FM-1 (tested by tests/real-fm1.test.js)
          "/*@MBOOT_STAGE@*/": b64("vendor/mboot/fm1-stage.fwsc"), "/*@MBOOT_UBOOT@*/": b64("vendor/mboot/fm1-uboot.fwsc"),  # m-bootloader v2.4 (MIT)
+         "/*@TETHER_FWSC@*/": b64("vendor/tether.fwsc"), "/*@TETHER_SHA@*/": sha("vendor/tether.fwsc"),  # built by firmware/autobuild.sh
          "/*@MBOOT_STAGE_SHA@*/": sha("vendor/mboot/fm1-stage.fwsc"), "/*@MBOOT_UBOOT_SHA@*/": sha("vendor/mboot/fm1-uboot.fwsc"),
          "/*@WASM@*/": base64.b64encode(read("vendor/fm1_web.wasm", "rb")).decode()}
 for mark, text in parts.items():

@@ -125,6 +125,13 @@ const RealFM1 = (() => {
     return out;
   }
 
+  // is the unit's whole flash still the one with this CRC-32? One read-only question (0x24), no data moves.
+  async function sameFlash(link, info, crc) {
+    if (!info || !info.mboot || !info.capacity || info.capacity > 0x1000000) return false;
+    const r = await link.ask(CMD.CRC, readBody(0, info.capacity), (p) => p.cmd === CMD.CRC || p.cmd === 0, 8000, 2);
+    return !!r && r.cmd === CMD.CRC && r.body.length === 12 && le32(r.body, 8) === (crc >>> 0);
+  }
+
   // ---- what the protector's MIDI mode checks before it erases anything (m-bootloader's midi_update.c: find_flash, check_flash): a flash image of
   // whole sectors, the 32 bytes at 0x4000 readable with THIS chip's key, and the whole image against its CRC16. The unit can only show a refusal
   // on its own screen, so the page asks the same questions first and says which one fails.
@@ -249,6 +256,6 @@ const RealFM1 = (() => {
     }
   }
 
-  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, protector, flashMap, checkPackage, unweave, wrap, servePackage, crc16, crc32, enc };
+  return { CMD, SOFT, frame, parse, soft, Link, probe, backup, sameFlash, protector, flashMap, checkPackage, unweave, wrap, servePackage, crc16, crc32, enc };
 })();
 if (typeof module !== "undefined") module.exports = RealFM1;
