@@ -104,6 +104,10 @@ class Midi(unittest.TestCase):
         view = self.js("return document.body.dataset.view")
         self.midi(0xb0, 64, 127); self.midi(0x99, 38, 100); self.midi(0x89, 38, 0); self.midi(0xb0, 64, 0); time.sleep(0.2)
         self.assertNotEqual(self.js("return document.body.dataset.view"), view, "MOD + pad 3 did not press KEYS VIEW")
+        # FM-1 MENU (pad 16 = pad 8 with the pedal) opens the menu, and pressed again goes back to the FM-1
+        for want in (False, True):
+            self.midi(0xb0, 64, 127); self.midi(0x99, 43, 100); self.midi(0x89, 43, 0); self.midi(0xb0, 64, 0); time.sleep(0.2)
+            self.assertEqual(self.js("return document.querySelector('#menu').hidden"), want, "FM-1 MENU pad")
         self.midi(0xb0, 70, 64); self.midi(0xb0, 71, 10); self.midi(0xb0, 71, 90)  # knobs with no firmware running: nothing breaks
         self.assertEqual(self.errors(), [])
 
