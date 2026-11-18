@@ -24,6 +24,7 @@ installation as an app.
   A narrow window on a computer gets an upright layout (screen, knobs, buttons, keys in two rows).
 - **Keys** as the FM-1's own or as a piano. **Skins**: the nine colours the FM-1 is sold in (black follows a photo of the
   real one), then four of ours. **Screen filter**: LCD, CRT or clean.
+- **Feel**: buttons and keys sink when pressed, a lit one glows onto the panel, a knob's rim and mark turn under a light that stays still, and on Android a press and each click of an encoder give a short buzz (iOS has no vibration for web pages).
 - **Firmwares** from fm1-emu's list (the page reads `firmwares.json` from Joakim's site when online, so new
   ones appear by themselves; the Firmware Hub's `catalog.json` adds the ones fm1-emu's list lacks; the list built into the page is only the offline fallback, refreshed by `python3 pocket/update-firmwares.py`, which merges both and rebuilds). The
   FIRMWARE tab is a vertical list of banners, the ones you have first. A banner has one button, DOWNLOAD until the
