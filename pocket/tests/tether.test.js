@@ -112,7 +112,10 @@ test("HELLO, LEDS, and the unit's MIDI read back", () => {
   u.receive(T.leds([1], [2]));
   assert.deepStrictEqual(u.leds, [2, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0]);
   const reply = T.message(0x41, [1, 0, 27, 14, 7, ...Buffer.from("TETHER 0.1")]);
-  assert.deepStrictEqual(T.parse(reply), { type: "hello", proto: 1, board: "FM-1", keys: 27, buttons: 14, encoders: 7, name: "TETHER 0.1", version: 1 });
+  assert.deepStrictEqual(T.parse(reply), { type: "hello", proto: 1, board: "FM-1", keys: 27, buttons: 14, encoders: 7, audioOut: false, name: "TETHER 0.1", version: 1 }, "a protocol 1 unit: no CA, no speaker");
+  const r2 = T.parse(T.message(0x41, [2, 0, 27, 14, 7, 1, ...Buffer.from("TETHER 0.2")]));
+  assert.deepStrictEqual([r2.proto, r2.audioOut, r2.name], [2, true, "TETHER 0.2"], "protocol 2: CA bit 0 = the USB speaker, then the name");
+  assert.strictEqual(T.parse(T.message(0x41, [2, 0, 27, 14, 7, 0, ...Buffer.from("T")])).audioOut, false, "a protocol 2 build without the speaker");
   assert.deepStrictEqual(T.parse(T.message(0x42, [5])), { type: "ack", id: 5, value: 5 });
   assert.deepStrictEqual(T.parse(T.message(0x43, [9])), { type: "needkey", id: 9, value: 9 });
   const bad = T.message(0x42, [5]); bad[7] ^= 1;

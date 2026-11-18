@@ -86,7 +86,7 @@
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const guess = (s) => {
     if (/scale pocket|synido/i.test(s)) return "synido";
-    if (/\bfm-?1\b|felucca|gr!?mm/i.test(s)) return "fm1"; // (firmwares built on Felucca name their port after it)
+    if (/\bfm-?1\b|felucca|tether|gr!?mm/i.test(s)) return "fm1"; // (firmwares built on Felucca name their port after it)
     if (/mpk|akai/i.test(s)) return "akai";
     if (/nanokey/i.test(s)) return "korgkey";
     if (/nanopad|korg/i.test(s)) return "korgpad";

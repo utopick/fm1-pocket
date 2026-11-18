@@ -1,4 +1,8 @@
-# Tether protocol, version 1
+# Tether protocol, version 2
+
+Version 2 adds one byte to HELLO, `CA` (capabilities): bit 0 says the unit is also a USB speaker (section 6). Nothing
+else changed: every message still carries `VV` = `01`, so a version 2 page works with a version 1 unit (no `CA`, no
+speaker) and a version 1 page with a version 2 unit (it reads `CA` as the first letter of the name).
 
 How an FM-1 running the Tether firmware and a page (FM1.Pocket) talk over USB MIDI. Both sides are written from this
 file: the firmware (`firmware/src/tether.c`, GPL-3.0) and the page (`pocket/vendor/tether.js`, MIT). Numbers are
@@ -26,7 +30,7 @@ ENV, GLO, SAVE, HOME, EDIT, FX, SEQ, PLAY, REC; encoders 0..6 (CC 20..26) = K2..
 KNOB1..4); K1 is MASTER. Its pads, faders, wheels and outer keys are not sent in version 1.
 
 A tap shorter than one scan still sends the press, then the release. The unit sends the panel only; it ignores
-channel messages from the page (the emulator makes the sound, the unit's own audio is silent).
+channel messages from the page (the emulator makes the sound; a unit with `CA` bit 0 can play it, section 6).
 
 ## 2. SysEx: the frame every Tether message uses
 
@@ -36,7 +40,7 @@ F0 7D 46 50 54 VV CC <data ...> SS F7
 
 - `7D`: the MIDI manufacturer ID for non-commercial / educational use. `46 50 54` is ASCII "FPT" (FM1.Pocket Tether), so
   another 7D user is not taken for us.
-- `VV`: protocol version, `01`.
+- `VV`: the framing's version, `01` (in version 2 too: the framing did not change).
 - `CC`: the command (below).
 - `SS`: checksum, `(VV + CC + every data byte) & 0x7F`.
 - Every byte between `F0` and `F7` is 7-bit. **At most 640 bytes between `F0` and `F7`** (the unit's SysEx buffer,
@@ -69,15 +73,16 @@ Unit to page:
 
 | `CC` | Name | Data |
 |---|---|---|
-| `41` | HELLO | `PV BD NK NB NE` then the firmware's name, ASCII (up to 24 bytes), e.g. "TETHER 0.1" |
+| `41` | HELLO | `PV BD NK NB NE`, then `CA` if `PV` >= 2, then the firmware's name, ASCII (up to 24 bytes), e.g. "TETHER 0.1" |
 | `42` | ACK | `FF`: this frame is on the screen |
 | `43` | NEED KEY | `FF`: the frame being received when the unit lost track; the next frame must be a keyframe |
 
 ### HELLO
 
 The page sends `F0 7D 46 50 54 01 01 02 F7` to every MIDI output it has, and takes the input that answers HELLO
-within 500 ms as the unit: the port name plays no part. `PV` = protocol version (1), `BD` = board (0 FM-1, 1 SMK-37),
-`NK` = note keys (27), `NB` = buttons (14 or 18), `NE` = encoders (7). After HELLO the unit waits for a keyframe
+within 500 ms as the unit: the port name plays no part. `PV` = protocol version (2; 1 for the first builds), `BD` = board
+(0 FM-1, 1 SMK-37), `NK` = note keys (27), `NB` = buttons (14 or 18), `NE` = encoders (7), `CA` (only when `PV` >= 2) =
+capabilities: bit 0 the USB speaker (section 6), the other bits 0. A page reads the name after `CA` when `PV` >= 2. After HELLO the unit waits for a keyframe
 (it shows its own screen until then) and sends MASTER once.
 
 ### LEDS
@@ -143,3 +148,22 @@ reads its MIDI endpoint at most once per 0.5 ms (Dinghy's USB poll), so **at mos
 and less if the computer sends packets that are not full. The panel's SPI runs at 12 MHz: a 16-pixel band of the
 screen (240 x 16, 7,680 bytes) takes ~5 ms, the whole screen ~77 ms. `firmware/STATUS.md` has the figures measured on
 the host and what they mean in frames a second.
+
+## 6. The sound: the unit as a USB speaker (`CA` bit 0)
+
+Not MIDI: a second USB function. A Tether build with `TETHER_UAC_OUT` (the default) presents, beside its USB-MIDI and its
+USB audio input (the unit's output, for recording), a class-compliant USB Audio 1.0 speaker: interface 3, endpoint `0x04`
+OUT, isochronous **adaptive**, 16-bit stereo PCM at **44,100 Hz** only, up to 48 frames (192 bytes) a 1 ms packet. The
+host's operating system lists it as an audio output, named after the USB product string ("Felucca": `isRealFM1` in the
+page matches it). What the host plays there goes out of the unit's headphone / line output, after its MASTER knob, as
+the unit's own sound would; it is also what the unit's USB audio input sends back.
+
+The page offers it when HELLO has `CA` bit 0: it finds the output whose name matches the unit (browsers give output
+names only once the page may use a microphone, so it asks for one a moment if the names are empty, else lists the
+outputs to pick from) and plays into it with `AudioContext.setSinkId`. When Tether stops it offers the default output back.
+
+Clocks: the host sends by its clock, the unit plays by its I2S clock (not locked to USB, ~0.04 % apart). The unit keeps
+a ring of ~8 ms and, once a render (256 frames, 5.8 ms), makes up one frame (the mean of its neighbours) when the ring
+runs low or merges two when it runs high: up to 0.39 % of difference, ~18 small corrections a second in practice. No
+feedback endpoint (the only isochronous IN, EP4, is the audio input's). The ring empty: silence, then it fills again
+before playing. `TETHER_UAC_OUT=0` builds a unit without the speaker (HELLO `CA` = 0), for hosts that would not take it.

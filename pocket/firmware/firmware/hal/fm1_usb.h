@@ -12,7 +12,7 @@
  *   EP DMA:                fm1_usb_ep0_buf, fm1_usb_ep_txbuf / _rxbuf,
  *                          fm1_usb_ep0_send / fm1_usb_ep_send (csync first),
  *                          fm1_usb_rx_sync (ssync before reading an RX buffer)
- *   EP4 (own slots): fm1_usb_ep4_txbuf, fm1_usb_ep4_send (csync first);
+ *   EP4 (own slots): fm1_usb_ep4_txbuf, fm1_usb_ep4_send (csync first), fm1_usb_ep4_rxbuf (Tether);
  *                          isochronous mode is TXCSR2 bit 6 through the SIE (usb.c)
  *   fm1_usb_ep_enable(m)   CON0 &= ~(m << 19), m = bit per endpoint
  *   fm1_usb_sof_take()     SOF pending -> clear, 1
@@ -105,6 +105,9 @@ FM1_INLINE void fm1_usb_ep4_send(void *p, uint32_t n)
     FM1_USB_EP4_CNT = n;
     __asm__ volatile("csync" ::: "memory");
 }
+/* EP4 OUT (Tether's USB speaker, isochronous): its own DMA address too (SDK usb_set_dma_raddr, id 0, ep 4); the
+ * count is read through the SIE (RXCOUNT), as for EP1 */
+FM1_INLINE void fm1_usb_ep4_rxbuf(void *p) { FM1_USB_EP4_RADR = (uint32_t)(uintptr_t)p; }
 FM1_INLINE void fm1_usb_rx_sync(void) { __asm__ volatile("ssync" ::: "memory"); }
 
 FM1_INLINE void fm1_usb_ep_enable(uint32_t eps) { FM1_USB_CON0 &= ~(eps << 19); }

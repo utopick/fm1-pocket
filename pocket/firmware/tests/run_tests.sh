@@ -23,6 +23,10 @@ run "SMK-37: velocity, a pad, an outer key, the pitch wheel" env BOARD=smk37 sh 
 run "Tether: the panel -> MIDI bytes, LEDS, SCREEN frames from the page's encoder, a dropped message" node --test tests/tether_test.js
 $CC -Wno-int-to-pointer-cast -o "$OUT/sx_hold_test" tests/sx_hold_test.c
 run "Tether's SysEx path (usb.c, ota.c): held while one waits (NAK), resumed, 7D to the app, M-UPGRADE to the updater" "$OUT/sx_hold_test"
+$CC -Wno-int-to-pointer-cast -o "$OUT/uac_out_test" tests/uac_out_test.c
+run "Tether's USB speaker (usb.c): descriptors, the ring, underrun, two clocks for 2 minutes" "$OUT/uac_out_test"
+$CC -Wno-int-to-pointer-cast -DTETHER_UAC_OUT=0 -o "$OUT/uac_out_test0" tests/uac_out_test.c
+run "TETHER_UAC_OUT=0: the audio input only, Dinghy's descriptors" "$OUT/uac_out_test0"
 
 $CC -DBOARD_SMK37=1 -Ifirmware/hal -o "$OUT/smk_flash_test" tests/smk_flash_test.c
 run "SMK-37 flash map: settings, blobs, owner tag, slots in the store; never the head, BTIF/USRTRIM, USR, key_mac" "$OUT/smk_flash_test"

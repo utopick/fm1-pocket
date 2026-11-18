@@ -46,8 +46,9 @@ test("the panel goes out as exact MIDI bytes; HELLO is answered, MASTER sent aga
     "40 ms MIDI out 9F 12 127", "41 ms MIDI out 8F 12 0", "50 ms MIDI out 9F 0 127", "60 ms MIDI out 8F 0 0",
     "70 ms MIDI out BF 22 67", "80 ms MIDI out BF 26 1", "80 ms MIDI out BF 26 57", // -70 = -63, -7
     "100 ms MIDI out BF 27 87", "110 ms MIDI out BF 27 127", // 515: jitter, not sent
-    "150 ms SYSEX out " + hex(T.message(0x41, [1, 0, 27, 14, 7, ...Buffer.from("TETHER 0.1")])), "150 ms MIDI out BF 27 127"]);
-  assert.deepStrictEqual(T.parse(T.message(0x41, [1, 0, 27, 14, 7, ...Buffer.from("TETHER 0.1")])).name, "TETHER 0.1");
+    "150 ms SYSEX out " + hex(T.message(0x41, [2, 0, 27, 14, 7, 1, ...Buffer.from("TETHER 0.1")])), "150 ms MIDI out BF 27 127"]); // protocol 2, CA 1: the USB speaker
+  const h = T.parse(T.message(0x41, [2, 0, 27, 14, 7, 1, ...Buffer.from("TETHER 0.1")]));
+  assert.deepStrictEqual([h.name, h.proto, h.audioOut], ["TETHER 0.1", 2, true]);
 });
 
 test("LEDS sets the lit and dim LEDs by id", () => {

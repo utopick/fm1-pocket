@@ -1,13 +1,15 @@
-# Tether: status (first slice, protocol 1)
+# Tether: status (protocol 2: the panel, and the unit as a USB speaker)
 
-**Nothing here has run on an FM-1 yet.** Everything below was checked on a computer: Dinghy's host mode (the same
-`tether.c` compiled for macOS), node tests, and the real JieLi build with its checks.
+**The panel (keys, buttons, knobs, LEDs, the screen) works on the owner's FM-1. The USB speaker (protocol 2, section 6
+of PROTOCOL.md) has not run on a unit yet**: it was checked on a computer only (host tests below, the JieLi build).
+Everything else below was first checked the same way: Dinghy's host mode (the same `tether.c` compiled for macOS), node
+tests, and the real JieLi build with its checks.
 
 ## Verified on the host
 
 - **The JieLi build and its checks pass** (JieLi clang via `tools/get_toolchain.sh`, in Docker on macOS): FM-1 and the
   three SMK-37 packages build; no calls into the chip ROM, no register access outside `hal/`, `.ram_text` without calls.
-  FM-1: image 55,708 B, RAM .data+.bss 12,608 B of 98,304, pool 145,920 B of 344,064 (the 115,200-byte screen copy is
+  FM-1 (with the speaker): image 56,464 B, RAM .data+.bss 16,976 B of 98,304 (the speaker's ring is 4 KB), pool 145,920 B of 344,064 (the 115,200-byte screen copy is
   in the pool). Package identity `FM-1_960`.
 - **`tests/run_tests.sh`: ALL TESTS PASSED** (Dinghy's suite with the Tether build: host app, MIDI and SMK-37 scripts,
   flash map, update entry, update loader and its screen, SMK packages, installer; plus Tether's two tests).
@@ -24,8 +26,37 @@
 - `pocket/tests/tether.test.js` (the page side against a decoder written from PROTOCOL.md): round trips, loss, a damaged
   byte, a lost PRESENT, HELLO / LEDS / MIDI parsing, ImageData input.
 
+- `tests/uac_out_test.c` (usb.c's speaker on the host): the configuration descriptor chains to its length, the
+  interface count and the AC header's collection and length are right, the speaker is IT 3 (USB streaming) -> OT 4
+  (speaker) on interface 3 with EP4 OUT isochronous adaptive (192 B), the audio input is unchanged; the ring plays the
+  host's frames bit for bit after priming, an underrun gives silence and primes again, a packet with no room is dropped
+  whole; two clocks for 2 simulated minutes (the FM-1's ~44,117.6 Hz, 0.04 % slow, locked, +-0.3 %), with the host's
+  44 / 45 pattern and its packets taken at 0.5 ms polls with jitter: no underrun or overrun once playing, the output is the
+  host's sequence with only the corrections, and their number is what the clocks need (FM-1: 2,086 frames made up in 120 s
+  for ~2,112 needed, none merged; the ring at a render's start 302..369 frames). Built again with `TETHER_UAC_OUT=0`: the
+  descriptors are Dinghy's (178 bytes, 3 interfaces, bcdDevice 3.20).
+- `pocket/tests/real.py`: a fake protocol 2 unit with the speaker: the page asks, finds the output named Felucca (after
+  asking for the microphone, as the names were empty), skips the "default" alias, calls `setSinkId` with it, and offers
+  the default output back when Tether stops; with no FM-1-like name it lists the outputs; without `setSinkId` it says so;
+  a failed `setSinkId` keeps the output it had. A protocol 1 unit is not asked about the sound.
+
 ## Not verified (needs a unit)
 
+The USB speaker, all of it: that the JieLi USB block takes isochronous OUT on EP4 with the registers used (RXMAXP 0xFF,
+RXCSR2 bit 6 = ISO, the count from RXCOUNT, the DMA address in `EP4_RADR`; JieLi's own SDKs put their speaker's ISO OUT on
+the same endpoint number as their microphone's ISO IN, as this does, but their driver is a binary library); that one
+OUT buffer read at the 2 kHz poll never loses a packet (a render that delays the poll > 1 ms would; the poll also runs
+nested in the render, as the audio input's does); the real drift and the band's margins (the ring's low point is ~1.5 ms
+above an underrun); whether the corrections are audible on pure tones; whether macOS, Windows, Linux, Android and
+ChromeOS enumerate the new device (bcdDevice 3.60) and list the speaker, and what they name it (the page looks for
+"Felucca" or "FM-1"; else it lists the outputs); whether hosts send `SET_CUR` sampling frequency to `0x04` (taken and
+ignored: 44.1 kHz only) and hosts that only play 48 kHz (some Android phones: they would not use this output). The
+page side: that Chrome's `setSinkId` to the unit and back keeps working across the tab's suspend / resume, and what
+Chrome does when the unit is unplugged while it plays (the page then offers the default output back). The MASTER knob
+acts twice on this sound: the emulator gets it as MIDI (its own volume) and the unit's output scales by it too.
+If some host hides the whole device because of the speaker, build with `DINGHY_DEFS=-DTETHER_UAC_OUT=0`.
+
+The panel, first slice (the owner has since seen it work on a unit; not measured):
 USB itself: that real hosts (macOS, Windows, Linux, Android; Chrome's Web MIDI with SysEx) retry the NAKed packets as
 USB says and nothing is lost; the real SysEx rate; the screen's DMA timing and tearing (there is no sync to the
 panel's refresh); the LEDs' look (lit and dim); the MASTER jitter threshold (6 of 1023); fast encoder turns; the
@@ -71,6 +102,8 @@ in tether.c, marked `shortcut:`), and a faster SPI clock (`LCD_BAUD`, Dinghy run
 
 ## To build for a real FM-1 and try it
 
+`firmware/autobuild.sh` does all of this and puts the package in the page (see README.md). By hand:
+
 1. Linux x86-64, or macOS / Windows with Docker running. Python 3 with Pillow (`pip3 install Pillow mido python-rtmidi`).
 2. `tools/get_toolchain.sh` (JieLi's clang, to `~/.jieli/toolchain`; another folder: give it as an argument and set
    `JIELI_TOOLCHAIN`).
@@ -85,3 +118,6 @@ in tether.c, marked `shortcut:`), and a faster SPI clock (`LCD_BAUD`, Dinghy run
 6. On the unit: the screen says "TETHER waiting for FM1.Pocket". With any MIDI monitor: keys, buttons, encoders and
    MASTER give the messages of PROTOCOL.md 1. Send `F0 7D 46 50 54 01 01 02 F7`: the HELLO answer comes back. Then,
    once the page is wired, stream frames and watch the rate and the ACKs.
+7. The speaker: the computer should list a new audio output named Felucca. Play anything into it (or let the page do
+   it): it comes out of the unit, at MASTER. Listen for clicks on a sine (the corrections), and leave it playing for
+   minutes (the drift).

@@ -322,14 +322,14 @@
       #menu #pvMidi:has(#midiLive:not([hidden])) .grid button { min-height: 0; padding: 0.5em 0.2em; font-size: 0.8em; }
       #midiLive .mdDevice { flex: 1; min-height: 0; display: flex; margin: 0; }
       #midiLive svg { width: 100%; max-height: 100%; margin: auto; }
-      #pvReal { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr); gap: 1.1em 1.3em; color: var(--silk); width: 100%; height: 100%; margin: 0 auto; }
+      #pvReal { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto minmax(0, 1fr) auto; gap: 1.1em 1.3em; color: var(--silk); width: 100%; height: 100%; margin: 0 auto; }
       /* the steps across the whole top, then the controls on the left and the flash map filling the right side */
       #realSteps { grid-column: 1 / -1; grid-row: 1; }
       #realLeft { grid-column: 1; grid-row: 2; }
       #realRight { grid-column: 2; grid-row: 2; height: 100%; aspect-ratio: 1 / 1.12; justify-self: end; min-height: 0; display: flex; }
       #realMap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
-      @media (max-aspect-ratio: 1/1) { #pvReal { grid-template-columns: minmax(0, 1fr); } #realSteps, #realLeft, #realRight { grid-column: 1; grid-row: auto; } #realRight { min-height: 18em; } }
+      @media (max-aspect-ratio: 1/1) { #menu #pvReal { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; overflow: auto; } #realRight { height: auto; aspect-ratio: 1 / 1.15; justify-self: stretch; } #realSteps, #realLeft, #realRight, #menu #realMapKey { grid-column: 1; grid-row: auto; } #realRight { min-height: 18em; } }
       #realLeft { display: flex; flex-direction: column; gap: 0.7em; min-width: 0; }
       #menu #pvReal p { margin: 0; color: var(--m-dim); display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
       #menu #pvReal #realMsg { font-size: 0.92em; display: block; overflow: visible; flex: none; white-space: pre-line; color: var(--silk); line-height: 1.5; }
@@ -337,7 +337,7 @@
       #menu #pvReal #realNext { font-size: 1.3em; line-height: 1.3; font-weight: 700; color: var(--silk); -webkit-line-clamp: 2; min-height: 2.6em; }
       #realSteps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.2em; }
       #realSteps .step { position: relative; min-height: 6.6em; padding: 0.3em 0.2em 0.3em; font-size: 1.4em; font-weight: 800; line-height: 1.2; overflow: visible; }
-      @media (max-height: 460px) { #realSteps .step { min-height: 3.4em; font-size: 1.05em; } #realMapHint { display: none; } #realMapKey li { font-size: 0.8em; overflow: hidden; text-overflow: ellipsis; } #realRight { aspect-ratio: 1 / 1.25; } #menu #realMapKey { align-self: stretch; width: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); } #menu #realLeft { padding-bottom: 0; overflow: auto; } #menu #realRow { flex: none; min-height: 4.2em; } #menu #realMapKey li { overflow: hidden; } }
+      @media (max-height: 460px) { #realSteps .step { min-height: 3.4em; font-size: 1.05em; } #realMapHint { display: none; } #menu #realMapKey { grid-template-columns: repeat(auto-fill, minmax(11em, 1fr)); } #realMapKey li { font-size: 0.78em; } #realRight { aspect-ratio: 1 / 1.25; } #menu #realLeft { overflow: auto; } #menu #realRow { flex: none; min-height: 4.2em; } }
       #realSteps .step i { font-size: 0.68em; letter-spacing: 0.5px; margin-bottom: 0.4em; }
       /* the number, and an arrow to the next step */
       #realSteps .step::before { content: attr(data-n); position: absolute; left: 0.4em; top: 0.35em; width: 1.5em; height: 1.5em; border-radius: 50%; display: grid; place-items: center; background: var(--rim); color: var(--silk); font-size: 0.8em; font-weight: 800; }
@@ -349,7 +349,7 @@
       #realSteps .next { border-color: var(--lit); box-shadow: inset 0 0 0 2px var(--lit); }
       #realSteps .next::before { background: var(--lit); color: #14091f; }
       #pvReal button:disabled { opacity: 0.38; cursor: default; }
-      #realRow { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 0.6em; margin-top: auto; flex: 1 0 5em; max-height: 11em; }
+      #realRow { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 0.6em; flex: none; height: 4.8em; }
       #realRow button { min-height: 0; font-size: 1.25em; }
       #realRow .play i { font-size: 0.68em; letter-spacing: 0.5px; }
       #realRight { min-width: 0; display: flex; flex-direction: column; }
@@ -361,13 +361,11 @@
       #realMapGrid i.b { opacity: 0.3; } /* blank sector inside a region */
       #realMapGrid i.f { background: repeating-linear-gradient(45deg, #3a3532 0 2px, #2a2624 2px 4px); }
       #realMap.empty #realMapGrid i { background: #6b6b70; opacity: 0.22; } /* nothing read yet: the same picture, grey */
-      #realMap.empty li u { background: #6b6b70; }
-      #realMap.empty li { opacity: 0.5; }
-      /* the key is as wide as its words need and grows to the left, over the free space under the text; the left column keeps room for it */
-      #realMapKey { margin: 0; padding: 0; list-style: none; flex: none; align-self: flex-end; width: max-content; display: grid; grid-template-columns: repeat(4, max-content); gap: 0 1.2em; position: relative; z-index: 1; }
-      #realRight, #realMap { overflow: visible; }
-      #realLeft { padding-bottom: 3.4em; }
-      #realMapKey li { display: flex; gap: 0.5em; align-items: baseline; font-size: 0.95em; line-height: 1.45; white-space: nowrap; }
+      #pvReal:has(#realMap.empty) #realMapKey u { background: #6b6b70; }
+      #pvReal:has(#realMap.empty) #realMapKey li { opacity: 0.5; }
+      /* the key is a row of its own under both columns: as many columns as fit, its words wrap, nothing sits over the buttons */
+      #realMapKey { grid-column: 1 / -1; grid-row: 3; margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(15em, 1fr)); gap: 0 1.2em; }
+      #realMapKey li { display: flex; gap: 0.5em; align-items: baseline; font-size: 0.9em; line-height: 1.4; overflow-wrap: anywhere; }
       #realMapKey li u { flex: none; width: 0.9em; height: 0.9em; border-radius: 2px; background: var(--c); align-self: center; }
       /* MORE: big buttons over the menu */
       #more { position: fixed; inset: 0; z-index: 6; background: #000c; display: grid; place-items: center; touch-action: auto; font: clamp(14px, 3.4vmin, 30px)/1.4 system-ui, sans-serif; }
@@ -585,23 +583,23 @@
               <button id="realGo" data-n="4" class="step" title="Step 4: choose a firmware: its card has the INSTALL button once every check is in place"></button>
             </div>
             <div id="realLeft">
-              <p id="realNames">Not connected yet.</p>
-              <p id="realNext"></p>
-              <p id="realMsg" hidden></p>
               <div id="realRow">
                 <button id="realSync" class="play" title="Play with the real FM-1: what you play on this screen goes to the real unit too, and what the real unit plays (notes and clock) comes here. Not a MIDI keyboard, not a firmware installer."></button>
                 <button id="realMoreBtn" title="Restart the unit, inspect it, save the backup file, the steps and the warnings">MORE</button>
               </div>
+              <p id="realNames">Not connected yet.</p>
+              <p id="realNext"></p>
+              <p id="realMsg" hidden></p>
             </div>
             <div id="realRight">
               <div id="realMap" class="empty">
                 <b>FLASH MAP<span id="realMapHint"> · back up to see what is in the flash</span></b>
                 <div id="realMapFlex">
                   <div id="realMapGrid" role="img" aria-label="Map of the flash: used and blank sectors"></div>
-                  <ul id="realMapKey"></ul>
                 </div>
               </div>
             </div>
+            <ul id="realMapKey"></ul>
             <template id="tplHow"><b>How it goes</b>
               <ol>
                 <li><b>CONNECT</b> with the unit on, running its firmware, and its USB cable in.</li>
@@ -643,7 +641,7 @@
             <p>The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app adds a phone-first front to it, a mapper for MIDI controllers and installation as an app.</p>
             <p><b>Licence: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the FM-1 Firmware Hub</a>, whose pictures the cards show. Not affiliated with M-VAVE.</p>
             <h3>ALSO THANKS</h3>
-            <p><b>Tether</b> (GPL-3.0), the firmware this page can install so a real FM-1 becomes the panel of this one, is built on <b>Dinghy</b> (zvenson), which is built on <b>Felucca</b> (hugelton) and SLOOP (isod89), all GPL-3.0. Its source is in <a href="https://github.com/utopick/fm1-pocket/tree/pocket/pocket/firmware" target="_blank" rel="noopener">pocket/firmware</a> of this page's repository; the package inside this page is built from it by <code>autobuild.sh</code>.</p>
+            <p><b>Tether</b> (GPL-3.0), the firmware this page can install so a real FM-1 becomes the panel of this one, is built on <b>Dinghy</b> (zvenson), which is built on <b>Felucca</b> (hugelton) and SLOOP (isod89), all GPL-3.0. Its source is in <a href="https://github.com/utopick/fm1-pocket/tree/pocket/pocket/firmware" target="_blank" rel="noopener">pocket/firmware</a> of this page's repository; the package inside this page is built from it by <code>autobuild.sh</code>. With it the unit is also a USB speaker: the page can play its sound there (Chrome or Edge 110 or newer), and offers to bring it back when Tether stops.</p>
             <p><b>jvitkauskas</b> (MIT): <a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>, the protector and its USB MIDI updater (v2.4 is bundled; its specification is how this page talks to the unit), <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> (the flash map's regions and colours; the way to install the protector on the newer chip) and <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>.</p>
             <p><b>M-VAVE</b> made the FM-1; the manual here follows its user manual, in our own words. <b>The firmware authors</b> and <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">the Firmware Hub</a> made everything you can run.</p>
             <p><b>Menu icons</b> from <a href="https://open-game-icons.net/" target="_blank" rel="noopener">Open Game Icons</a>, under <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a>: Circuitry and Book cover by <a href="https://lorcblog.blogspot.com/" target="_blank" rel="noopener">Lorc</a>; Palette, Settings knobs and Info by <a href="https://delapouite.com/" target="_blank" rel="noopener">Delapouite</a>. Colour changed.</p>
@@ -1018,6 +1016,7 @@
       // power and boot: the machine runs in the audio thread (fm1-emu's own worklet), paced by the sound card
       // ======================================================================
       let ac = null,
+        sink = "", // the sound's output (AudioContext.setSinkId): "" the default, else a device, e.g. Tether's USB speaker
         seq = 0,
         run = null, // what is running: { f, hash, base, saved: Map(offset -> sector) }
         peak = 0; // the loudest sample lately (for the tests)
@@ -1247,6 +1246,7 @@
       async function powerOn() {
         if (matchMedia("(pointer: coarse)").matches) document.documentElement.requestFullscreen?.().then(() => screen.orientation.lock?.("landscape")).catch(() => {}); // a phone in a browser: the whole screen, sideways where the browser allows (the installed app already has it)
         ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+        if (sink) await ac.setSinkId(sink).catch(() => ((sink = ""), toast("The FM-1's sound output is gone: the sound plays here", 4000)));
         const url = URL.createObjectURL(new Blob([$("#worklet").textContent], { type: "text/javascript" }));
         try {
           await ac.audioWorklet.addModule(url);
@@ -1286,7 +1286,14 @@
       // the sound stops while the page is hidden, and the machine with it
       // hidden: ask for what the firmware has just saved (the worklet tells by itself only once a second), then stop the sound
       const flush = () => send({ type: "snapshot", seq, request: 0 });
-      document.addEventListener("visibilitychange", () => ac && (document.hidden ? (flush(), setTimeout(() => document.hidden && ac && ac.suspend(), 400)) : ac.resume()));
+      document.addEventListener("visibilitychange", () => {
+        if (!ac) return;
+        if (document.hidden) return flush(), setTimeout(() => document.hidden && ac && ac.suspend(), 400);
+        ac.resume();
+        // the hidden seconds look like a slow device: do not judge them, and give the clock back if they already lowered it
+        Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
+        if (mhz < 100 && run && node && $("#sure").hidden) sure("The clock was lowered to " + mhz + " MHz. Slide to restart " + run.f.name + " at 100 MHz. What it has not saved is lost.", () => ((mhz = 100), (perf.asked = false), boot(), toast(run.f.name + " at 100 MHz")));
+      });
       addEventListener("pagehide", flush);
 
       // ======================================================================
@@ -1749,7 +1756,7 @@
         if ((await sha256(bytes)) !== TETHER_PKG.sha) throw Error("the bundled Tether package is damaged");
         return { id: "tether", name: "Tether", version: "", bytes };
       }
-      const isRealFM1 = (name) => /\bFM-1\b|felucca|gr!?mm|m-?vave/i.test(name || "");
+      const isRealFM1 = (name) => /\bFM-1\b|felucca|tether|gr!?mm|m-?vave/i.test(name || "");
       const isUpdatePort = (name) => /update/i.test(name || "");
       const REAL = { acc: null, fw: null, up: null, fwLink: null, upLink: null, info: null, sync: false, busy: false, saved: null, stored: null, ident: "" };
       const REAL_LOG = [];
@@ -1888,6 +1895,8 @@
         try { for (const m of msgs) REAL.fw.out.send(m); } catch { return tetherStop(); }
         st.timer = setTimeout(() => ((st.inflight = false), st.enc.needKey(), tetherFlush()), 500);
       }
+      // the unit's order (SELECT, ALGORITHM, K1..K4, PRESETS) to the matrix numbers turn() takes (SELECT, PRESETS, ALGORITHM, K1..K4)
+      const TETHER_ENC = [0, 2, 3, 4, 5, 6, 1];
       function tetherIn(d) {
         const e = Tether.parse(d), st = REAL.tether;
         if (!e) return;
@@ -1903,7 +1912,7 @@
         if (id >= 0) {
           if (e.value) st.down.has(id) || (st.down.add(id), holdKey(id));
           else st.down.delete(id) && dropKey(id);
-        } else if (e.type === "encoder" && e.id < 7 && e.value) turn(e.id, e.value);
+        } else if (e.type === "encoder" && e.id < 7 && e.value) turn(TETHER_ENC[e.id], e.value);
         else if (e.type === "master") setPot((e.value / 127) * 1023);
       }
       function tetherStop() {
@@ -1913,6 +1922,34 @@
         for (const id of st.down) dropKey(id);
         REAL.tether = null;
         realFace();
+        if (sink) sure("Tether is off, but the sound still goes to the FM-1's output. Play it on this device again?", (pick) => pick === 0 && soundTo("", ""), ["SOUND HERE", "LEAVE IT ON THE FM-1"]);
+      }
+      // ---- Tether's sound: a unit whose HELLO says it is a USB speaker (protocol 2, CA bit 0) can play this page's sound,
+      // through its own output and MASTER. The output is picked with AudioContext.setSinkId (Chrome and Edge 110 or newer).
+      async function soundTo(id, label) {
+        try {
+          if (ac) await ac.setSinkId(id);
+          sink = id;
+          toast(id ? "The sound plays on " + label : "The sound plays on this device again", 3000);
+        } catch (e) {
+          toast("Could not move the sound" + (label ? " to " + label : "") + ": " + e.message, 4000);
+        }
+      }
+      async function tetherSound() {
+        if (!window.AudioContext?.prototype.setSinkId || !navigator.mediaDevices?.enumerateDevices) return toast("This browser cannot send the sound to another output (Chrome or Edge 110 or newer can): it stays here", 4000);
+        // ("default" and "communications" are aliases of another output: their names would match the FM-1 when it is the default)
+        const outs = () => navigator.mediaDevices.enumerateDevices().then((l) => l.filter((d) => d.kind === "audiooutput" && d.deviceId !== "default" && d.deviceId !== "communications"), () => []);
+        let list = await outs();
+        if (!list.some((d) => d.label)) {
+          // the browser names outputs only once the page may use a microphone: ask for it a moment (nothing is recorded)
+          await navigator.mediaDevices.getUserMedia({ audio: true }).then((m) => m.getTracks().forEach((t) => t.stop()), () => {});
+          list = await outs();
+        }
+        const fm1 = list.filter((d) => isRealFM1(d.label));
+        if (fm1.length === 1) return soundTo(fm1[0].deviceId, fm1[0].label);
+        if (!list.length) return toast("No sound output found: the sound stays on this device", 4000);
+        const names = list.map((d, i) => d.label || "OUTPUT " + (i + 1));
+        sure("Which output is the FM-1? Its USB speaker is called Tether.", (pick) => soundTo(list[pick].deviceId, names[pick]), names);
       }
       tetherHook = {
         frame(px) {
@@ -1957,6 +1994,7 @@
         tetherHook.leds();
         realFace();
         toast("Tether found: the real FM-1 is the panel of this one (keys, buttons, knobs), and its screen shows this screen");
+        if (hello.audioOut && !sink) sure("This unit can also play the sound, on its own output and headphones (its MASTER knob sets the level). Send this page's sound to the FM-1?", (pick) => pick === 0 && tetherSound(), ["SOUND ON THE FM-1", "KEEP IT HERE"]);
       };
       // wait for a port to come back (the unit restarts into another mode after a write)
       const realWait = async (test, ms) => {
