@@ -55,13 +55,18 @@ specification of [m-bootloader](https://github.com/jvitkauskas/m-bootloader) (MI
 
 If a unit stops starting, it can usually be brought back through the chip's own boot mode (the computer sees a USB disk `WL82 UBOOT1.00`) with [MvaveFM1Unbricker](https://github.com/Quixotic7/MvaveFM1Unbricker); the WARNINGS dialog says how and links it. Writes ask for a slide to confirm. Restoring a backup is not done here (use M-Flasher). Tests: `node --test pocket/tests/real-fm1.test.js` (a simulated unit and the real packages) and `python pocket/tests/real.py` (the page against a fake unit).
 
-## Tether: the real FM-1 as the emulator's panel (written, not yet tried on a unit)
+## Tether: the real FM-1 as the emulator's panel (the panel works on a unit; its sound out is not yet tried)
 
 `pocket/firmware/` (GPL-3.0, built on [Dinghy](https://github.com/zvenson/dinghy)) is a firmware that sends every key, button, encoder
 and the MASTER knob as MIDI and draws what the page sends to its screen and LEDs; the protocol is `firmware/PROTOCOL.md`, the page side
 `vendor/tether.js`. `firmware/autobuild.sh` builds it from nothing (fetches JieLi's toolchain and three SDK files, needs Docker on a Mac) and puts `vendor/tether.fwsc` in place; `build.py` inlines it, so the page carries it. To try it: with the unit in the protector's MIDI mode (and a backup with the protector in it), CONNECT and press **PLAY WITH THE REAL FM-1**, which then says INSTALL TETHER ON THIS FM-1 and runs the same checks as any install; switch the unit on normally, CONNECT, and press the button again: if the
 unit answers HELLO the button turns into TETHER · THE REAL PANEL · ON, the unit plays the emulator, and the emulator's screen and lights
-appear on the unit. Tests: `node --test pocket/tests/tether.test.js`, and `pocket/tests/real.py` (a fake Tether unit).
+appear on the unit. A Tether build whose HELLO says it is a USB speaker (protocol 2) is also offered the emulator's sound: the page
+finds the unit's audio output (usually named "Felucca"; if the browser gives no names it asks for the microphone a moment, which is
+only how browsers unlock output names, else it lists the outputs) and plays into it with `AudioContext.setSinkId` (Chrome and Edge 110 or
+newer), so the sound comes out of the FM-1, at its MASTER. When Tether stops the page offers to put the sound back on this device.
+Tests: `node --test pocket/tests/tether.test.js`, and `pocket/tests/real.py` (a fake Tether unit, the sound routing with a fake
+`setSinkId`).
 
 ## Roadmap
 

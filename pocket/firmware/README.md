@@ -4,8 +4,8 @@ A firmware for the M-VAVE FM-1 that makes the real unit the front panel of the F
 buttons, encoders and MASTER go to the page as MIDI, and the page sends back the LEDs and the emulator's screen. So
 anyone's FM-1 firmware can be tried in the emulator with real keys, knobs, lights and screen, without flashing it.
 
-- [PROTOCOL.md](PROTOCOL.md): the spec both sides implement (version 1).
-- [STATUS.md](STATUS.md): what is tested, what is not (no hardware yet), the throughput, the risks, how to build.
+- [PROTOCOL.md](PROTOCOL.md): the spec both sides implement (version 2: version 1 and a USB speaker the page can play into).
+- [STATUS.md](STATUS.md): what is tested, what is not (the speaker has not run on a unit), the throughput, the risks, how to build.
 - `firmware/src/tether.c`: the app. The rest is Dinghy's platform, with three small changes (below).
 
 ## Licence
@@ -30,9 +30,13 @@ and SPDX line of the copied files is kept as it was.
   the updater as before, so installers and the Firmware Hub still reach the unit.
 - `usb.c`: with `APP_SYSEX`, a SysEx that arrives while the last one waits is held in the USB endpoint (NAK) and
   resumed later, instead of being dropped. Without `APP_SYSEX` (the update loader) nothing changes.
+- `usb.c` and `hal/fm1_usb.h` (`fm1_usb_ep4_rxbuf`): with `TETHER_UAC_OUT` (tether.c's default; 0 in the update loader
+  and anything else) the unit is also a USB Audio 1.0 speaker, EP4 OUT, 44.1 kHz 16-bit stereo, into a ring that
+  `app_audio` plays (`uo_play`), with one frame made up or merged per render to follow the host's clock (PROTOCOL.md 6).
+  `DINGHY_DEFS=-DTETHER_UAC_OUT=0 ./build.sh`: the audio input only, as before.
 - `tests/host.c` (host mode): `T master V`, `T leds`, `T sysex FILE`; SysEx out is printed.
 - Names: the build makes `build/tether.fwsc`, package identity `FM-1_96N` (Dinghy is `99N`), loader screen "TETHER".
-- New tests: `tests/tether_test.js` (needs node), `tests/sx_hold_test.c`; both run in `tests/run_tests.sh`, which now
+- New tests: `tests/tether_test.js` (needs node), `tests/sx_hold_test.c`, `tests/uac_out_test.c` (the speaker); all run in `tests/run_tests.sh`, which now
   runs the host tests even without a JieLi build.
 
 Not copied from Dinghy (fetch them from the commit above if you want them): its README and `docs/MAKE-IT-YOURS.md`,

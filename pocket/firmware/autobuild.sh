@@ -39,7 +39,9 @@ PATH="$(dirname "$PYTHON"):$PATH"; export PATH   # (some tests call plain python
 
 echo "autobuild: building"
 rm -rf build
-./build.sh
+V="$(tr -d ' \n' < VERSION)"   # the release: VERSION (X.Y), one digit each; it becomes the identity FM-1_96Y and the name "Tether X.Y"
+./build.sh --release "$V"
+cp "build/tether-$V.fwsc" build/tether.fwsc
 [ -s build/tether.fwsc ] || { echo "autobuild: no build/tether.fwsc"; exit 1; }
 [ "$TESTS" = 1 ] && { echo "autobuild: tests (the update-path ones use the package just built)"; sh tests/run_tests.sh; }  # a failing test stops here, before the package is copied
 cp build/tether.fwsc ../vendor/tether.fwsc

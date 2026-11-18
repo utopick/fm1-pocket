@@ -8,13 +8,19 @@
  *   SysEx in            F0 7D "FPT" 01 ...: HELLO? (answered with HELLO), LEDS, SCREEN (tiles of the emulator's frame,
  *                       drawn into a copy of the screen, put on the panel at PRESENT; ACK, or NEED KEY when lost)
  *
- * The unit makes no sound (the page does). Integers only, no float, no 64-bit division (docs/RULES.md). */
+ *   USB audio out       with TETHER_UAC_OUT (the default) the unit is also a USB speaker (usb.c): the page may play its
+ *                       sound into it, and the unit plays it (MASTER, its output). HELLO says so (CA bit 0, protocol 2)
+ *
+ * The page makes the sound. Integers only, no float, no 64-bit division (docs/RULES.md). */
 #include <stdint.h>
 static void panel(void);
 #define LCD_IDLE panel                          /* while the screen's DMA runs: the panel still goes out */
 static void tether_sysex(const uint8_t *p, uint32_t n);
 #define APP_SYSEX tether_sysex                  /* platform.c (ota.c): our SysEx, from platform_poll */
 #define APP_NAME "TETHER"
+#ifndef TETHER_UAC_OUT
+#define TETHER_UAC_OUT 1                        /* the USB speaker (usb.c); 0: the USB audio input only, as protocol 1 */
+#endif
 #include "platform.c"
 
 #if BOARD_SMK37
@@ -26,9 +32,15 @@ static void tether_sysex(const uint8_t *p, uint32_t n);
 #endif
 #define NENC 7u                                 /* from ENC_SELECT (FM-1 0..6; SMK-37 1..7, 0 is MASTER) */
 #define KEY0 53u                                /* key 0 = F3 */
-#define PROTO 1u
+#define PROTO 1u                                /* VV, every message's framing: unchanged */
+#define PV 2u                                   /* HELLO's protocol version: 2 adds CA */
+#define CAPS (TETHER_UAC_OUT ? 1u : 0u)         /* CA bit 0: the unit is a USB speaker (usb.c may turn it off: no UAC) */
 
-static void app_audio(int32_t *out, uint32_t n) { (void)out; (void)n; }   /* silent: the page makes the sound */
+#if TETHER_UAC_OUT && !defined(DINGHY_HOST)
+static void app_audio(int32_t *out, uint32_t n) { uo_play(out, n); }   /* what the page plays into the USB speaker */
+#else
+static void app_audio(int32_t *out, uint32_t n) { (void)out; (void)n; }   /* silent: the page's sound stays on the computer */
+#endif
 
 /* ---- SysEx out: F0 7D 46 50 54 01 cmd data sum F7 */
 static void reply(uint32_t cmd, const uint8_t *d, uint32_t n)
@@ -161,7 +173,7 @@ static void present(void)
 
 static void hello(void)
 {
-    static const uint8_t H[] = {PROTO, BOARD_ID, 27, NBTN, NENC, 'T', 'E', 'T', 'H', 'E', 'R', ' '};
+    static const uint8_t H[] = {PV, BOARD_ID, 27, NBTN, NENC, CAPS, 'T', 'E', 'T', 'H', 'E', 'R', ' '};
     static const char V[] = APP_VER;
     uint8_t d[sizeof H + 16u];
     uint32_t i, n = sizeof H;

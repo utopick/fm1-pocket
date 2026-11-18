@@ -1,5 +1,6 @@
 // TETHER: a real FM-1 running the Tether firmware as the panel of the emulator. Pure protocol, no page code, so Node can
-// test it (tests/tether.test.js). Written from pocket/firmware/PROTOCOL.md (version 1); none of the firmware's code is in it.
+// test it (tests/tether.test.js). Written from pocket/firmware/PROTOCOL.md (version 2); none of the firmware's code is in it.
+// Version 2 only adds CA to HELLO (bit 0: the unit is a USB speaker); every message still carries VV = 1, so units of either version work.
 // What it does: the HELLO query, the LEDS message, the unit's MIDI read as {type, id, value}, and the screen as SysEx
 // (tiles of 16 x 16, each as one colour, runs, a small palette or raw; only the tiles that changed since the last frame).
 const Tether = (() => {
@@ -117,8 +118,10 @@ const Tether = (() => {
       const d = Array.from(m.slice(5, -2));
       if (d.reduce((a, x) => a + x, 0) % 128 !== m[m.length - 2]) return null;
       const [ver, cmd] = d, a = d.slice(2);
-      if (cmd === CMD.HELLO_REPLY && a.length >= 5)
-        return { type: "hello", proto: a[0], board: a[1] ? "SMK-37" : "FM-1", keys: a[2], buttons: a[3], encoders: a[4], name: String.fromCharCode(...a.slice(5)), version: ver };
+      if (cmd === CMD.HELLO_REPLY && a.length >= 5) {
+        const ca = a[0] >= 2 ? a[5] | 0 : 0; // protocol 2: CA before the name
+        return { type: "hello", proto: a[0], board: a[1] ? "SMK-37" : "FM-1", keys: a[2], buttons: a[3], encoders: a[4], audioOut: !!(ca & 1), name: String.fromCharCode(...a.slice(a[0] >= 2 ? 6 : 5)), version: ver };
+      }
       if (ver !== VER) return null;
       if (cmd === CMD.ACK) return { type: "ack", id: a[0], value: a[0] };
       if (cmd === CMD.NEED_KEY) return { type: "needkey", id: a[0], value: a[0] };

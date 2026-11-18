@@ -27,7 +27,8 @@ function makeUnit() {
     if (b[0] === 0xf0 && b[1] === 0x7d) { // Tether (the page asks HELLO, sends screens and LEDs); only when the test says the unit runs it
       (window.__tx = window.__tx || []).push(Array.from(b));
       if (!window.__tether) return;
-      if (b[6] === 1) tell(fwIn, Tether.message(0x41, [1, 0, 27, 14, 7, ...Array.from('Tether').map(c => c.charCodeAt(0))]));
+      const name = Array.from('Tether').map(c => c.charCodeAt(0)); // __tetherCa set: a protocol 2 unit with that CA (1 = USB speaker)
+      if (b[6] === 1) tell(fwIn, Tether.message(0x41, window.__tetherCa === undefined ? [1, 0, 27, 14, 7, ...name] : [2, 0, 27, 14, 7, window.__tetherCa, ...name]));
       if (b[6] === 3 && (b[10] & 1)) tell(fwIn, Tether.message(0x42, [b[7]]));
       return;
     }
@@ -156,7 +157,7 @@ class Real(unittest.TestCase):
         self.js("window.__fwIn.onmidimessage({ data: [0x80, 55, 0] }); window.__fwIn.onmidimessage({ data: [0x8f, 12, 0] })")
         self.assertEqual((down(16), down(12)), (0, 0))
         self.js("window.__fwIn.onmidimessage({ data: [0xbf, 22, 66] }); window.__fwIn.onmidimessage({ data: [0xbf, 27, 127] })")
-        self.assertEqual(self.js("return [clicks[2], pot]"), [2, 1023], "KNOB1 +2 clicks, MASTER full")
+        self.assertEqual(self.js("return [clicks[3], pot]"), [2, 1023], "KNOB1 +2 clicks, MASTER full")
         self.js("window.__tx.length = 0; tetherHook.frame(new Uint16Array(57600).fill(0x1234))")
         self.wait("__tx.length > 0", 5); time.sleep(0.5)
         first = self.js("return __tx.filter(m => m[6] === 3).length")
@@ -164,9 +165,50 @@ class Real(unittest.TestCase):
         self.assertEqual(self.js("return REAL.tether.inflight"), False, "its ACK came back")
         self.js("__tx.length = 0; tetherHook.frame(new Uint16Array(57600).fill(0x1234))"); time.sleep(0.4)
         self.assertEqual(self.js("return __tx.filter(m => m[6] === 3).length"), 0, "the same frame again sends nothing")
+        self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "a protocol 1 unit: no question about the sound")
         self.js("ledNow[8] = 1; tetherHook.leds()"); time.sleep(0.2)
         self.assertEqual(self.js("return __tx.filter(m => m[6] === 2).length"), 1, "HOME's LED goes out as one LEDS message")
         self.click('#realSync'); self.assertNotIn("TETHER", self.text("#realSync"))
+        self.assertEqual(self.js("return window.__errs"), [])
+
+    # the browser's outputs, nameless until a microphone is asked for (as Chrome does), and setSinkId recorded
+    OUTPUTS = """window.__sinks = []; window.__mic = 0; window.__named = false;
+      window.__outs = arguments[0];
+      Object.defineProperty(navigator, 'mediaDevices', {configurable: true, value: {
+        enumerateDevices: () => Promise.resolve(__outs.map(d => ({...d, label: __named ? d.label : ''}))),
+        getUserMedia: () => (__mic++, __named = true, Promise.resolve({getTracks: () => [{stop() {}}]})) }});
+      AudioContext.prototype.setSinkId = function (id) { __sinks.push(id); return Promise.resolve(); };
+      ac = { setSinkId: AudioContext.prototype.setSinkId };"""
+
+    def test_tether_with_a_speaker_offers_the_sound_and_gives_it_back(self):
+        self.js("window.__tether = true; window.__tetherCa = 1")
+        self.js(self.OUTPUTS, [{"kind": "audiooutput", "deviceId": "default", "label": "Default - Felucca"}, {"kind": "audiooutput", "deviceId": "spk", "label": "MacBook Speakers"},
+                               {"kind": "audiooutput", "deviceId": "fm1", "label": "Felucca (1209:0001)"}, {"kind": "audioinput", "deviceId": "m", "label": "Felucca"}])
+        self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
+        self.assertIn("TETHER", self.text("#realSync"))
+        self.assertFalse(self.js("return document.querySelector('#sure').hidden"), "a unit with a speaker: the page offers the sound")
+        self.assertIn("SOUND ON THE FM-1", self.text("#sureOpt"))
+        self.slide(); self.wait("__sinks.length", 5)
+        self.assertEqual(self.js("return [__sinks, sink, __mic]"), [["fm1"], "fm1", 1], "names came after the microphone was asked once; the FM-1's output, not the default alias")
+        self.assertIn("Felucca", self.text("#toast"))
+        self.click('#realSync')  # Tether off: the page offers the sound back
+        self.assertFalse(self.js("return document.querySelector('#sure').hidden"))
+        self.assertIn("Tether is off", self.text("#sureText"))
+        self.slide(); self.wait("__sinks.length === 2", 5)
+        self.assertEqual(self.js("return [__sinks[1], sink]"), ["", ""], "back on the default output")
+        self.assertEqual(self.js("return window.__errs"), [])
+
+    def test_tether_sound_picker_and_no_setsinkid(self):
+        self.js(self.OUTPUTS, [{"kind": "audiooutput", "deviceId": "a", "label": "Speakers"}, {"kind": "audiooutput", "deviceId": "b", "label": "USB Audio Device"}])
+        self.js("window.__named = true; tetherSound()"); time.sleep(0.4)
+        self.assertEqual(self.js("return [...document.querySelectorAll('#sureOpt button')].map(b => b.textContent)"), ["Speakers", "USB Audio Device"], "no output named like the FM-1: a list to pick from")
+        self.js("document.querySelectorAll('#sureOpt button')[1].click()"); self.slide(); self.wait("__sinks.length", 5)
+        self.assertEqual(self.js("return [__sinks, sink, __mic]"), [["b"], "b", 0], "names were there: no microphone asked")
+        self.js("ac = null; delete AudioContext.prototype.setSinkId; tetherSound()"); time.sleep(0.4)
+        self.assertIn("cannot send the sound", self.text("#toast"))
+        self.js("window.__outs = []; AudioContext.prototype.setSinkId = () => Promise.reject(Error('NotFoundError')); ac = { setSinkId: AudioContext.prototype.setSinkId }; soundTo('gone', 'X')"); time.sleep(0.3)
+        self.assertIn("Could not move the sound", self.text("#toast"))
+        self.assertEqual(self.js("return sink"), "b", "a failed move keeps the output it had")
         self.assertEqual(self.js("return window.__errs"), [])
 
     def test_in_midi_mode_the_play_button_installs_tether_after_the_checks(self):
