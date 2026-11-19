@@ -7,9 +7,9 @@ keeps working without internet once you've installed it.
 
 | | |
 |---|---|
-| ![The whole FM-1, running Tether](docs/whole.png) | ![Only the top part, in the white and blue colours](docs/upper.png) |
-| ![The keys as a piano](docs/keys.png) | ![The menu](docs/menu.png) |
-| ![LOOK: pick the colours](docs/look.png) | ![OPTIONS, REAL FM-1: four steps to put a firmware on your FM-1](docs/real.png) |
+| ![The whole FM-1, running Tether](docs/tether-screen.png) | ![Only the top part, in the white and blue colours](docs/top-white-blue.png) |
+| ![The keys as a piano](docs/piano-keys.png) | ![The menu](docs/menu-language.png) |
+| ![LOOK: pick the colours](docs/colours.png) | ![OPTIONS, REAL FM-1: four steps to put a firmware on your FM-1](docs/real-fm1-steps.png) |
 
 ## What it is
 
