@@ -77,11 +77,11 @@ def tearDownModule(): SRV.shutdown()
 class Real(unittest.TestCase):
     def setUp(self):
         o = webdriver.ChromeOptions()
-        for a in ("--headless=new", "--mute-audio", "--window-size=844,390", "--autoplay-policy=no-user-gesture-required"): o.add_argument(a)
+        for a in ("--headless=new", "--mute-audio", "--window-size=844,390", "--autoplay-policy=no-user-gesture-required", "--lang=en-US"): o.add_argument(a)
         dl = tempfile.mkdtemp(prefix="fm1-test-dl-")  # the backups the page saves go here, not into the user's Downloads
         self.dl = dl
         self.addCleanup(shutil.rmtree, dl, True)
-        o.add_experimental_option("prefs", {"download.default_directory": dl, "download.prompt_for_download": False})
+        o.add_experimental_option("prefs", {"download.default_directory": dl, "download.prompt_for_download": False, "intl.accept_languages": "en-US"})  # (English: the page speaks the browser's language, and these tests read its English)
         self.d = webdriver.Chrome(options=o)
         self.addCleanup(self.d.quit)
         self.d.execute_cdp_cmd("Network.enable", {})

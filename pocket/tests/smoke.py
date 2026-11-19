@@ -14,7 +14,8 @@ fwsc = os.path.abspath(sys.argv[1])
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(type("Q", (http.server.SimpleHTTPRequestHandler,), {"log_message": lambda *a: None}), directory=ROOT))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 o = webdriver.ChromeOptions()
-for a in ("--headless=new", "--autoplay-policy=no-user-gesture-required"): o.add_argument(a)
+for a in ("--headless=new", "--autoplay-policy=no-user-gesture-required", "--lang=en-US"): o.add_argument(a)
+o.add_experimental_option("prefs", {"intl.accept_languages": "en-US"})  # the page speaks the browser's language: these tests read its English
 d = webdriver.Chrome(options=o)
 d.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {"source": "window.__errs = []; addEventListener('error', e => __errs.push(String(e.message))); addEventListener('unhandledrejection', e => __errs.push('promise: ' + (e.reason && e.reason.message || e.reason)));"})
 js = d.execute_script

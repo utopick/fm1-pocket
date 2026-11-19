@@ -44,6 +44,36 @@ try:
         until(lambda: js("const e = document.querySelector('#manBody [data-p*=\"REC\"]'), b = document.querySelector('#manBody'); return Math.abs(e.getBoundingClientRect().top - b.getBoundingClientRect().top) < 40"), "REC did not scroll to its entry")
     # the manual of this app has no miniature
     js("document.querySelector('#manApp').click()"); assert not js("return document.querySelector('#manFig').offsetParent !== null")
+    # the app in Spanish: no text or title outside the FM-1, the manuals, the licences and the MIDI panel is still an English text of ES;
+    # ENGLISH puts every one back; the FM-1's own control names stay English in both
+    LEFT = """const key = arguments[0] ? new Set(Object.keys(ES)) : new Set(Object.entries(ES).filter(([k, v]) => !(v in ES)).map(([k, v]) => v)), out = [];
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      for (let n; (n = w.nextNode()); ) if (!trOut(n.parentElement) && key.has(n.data.trim())) out.push(n.data.trim());
+      for (const e of document.querySelectorAll('*')) if (!trOut(e)) for (const a of TR_ATTRS) if (key.has(e.getAttribute(a))) out.push(a + ': ' + e.getAttribute(a));
+      return out;"""
+    fmNames = "return [...document.querySelectorAll('#fm .pb, #fm .kn label')].map((e) => e.textContent).join(' ')"
+    FM = "MASTER SELECT PRESETS ALGORITHM KNOB1 KNOB2 KNOB3 KNOB4 OCT- OCT+ FX SEL ENV LFO EDIT GLO HOME SAVE ARP SEQ PLAYSTOP REC"
+    def tour():  # every tab and pane, so what is built on the way is there to check too
+        for t in ("fw", "look", "conn", "man", "info"):
+            js("document.querySelector('#menu .tabs [data-tab=%s]').click()" % t)
+            for sub in {"look": ("keys", "fx", "skin"), "conn": ("real", "inst", "midi")}.get(t, ()):
+                js("document.querySelector('section[data-tab=%s] button[data-sub=%s]').click()" % (t, sub))
+                if sub == "real": js("document.querySelector('#sureNo').click()")
+        js("document.querySelector('#realHow').click()"); time.sleep(0.2)
+    for lang in ("es", "en"):
+        js("document.querySelector('#jobOk').click(); document.querySelector('#menuBack').click()")
+        if (lang == "es") != js("return document.querySelector('#langBtn').textContent.includes('ESPAÑOL')"): js("document.querySelector('#langBtn').click()")
+        tour()
+        left = js(LEFT, lang == "es")
+        assert left == [], "%s: still in the other language: %s" % (lang, left[:20])
+        assert sorted(js(fmNames).split()) == sorted(FM.split()), (lang, js(fmNames))
+        assert js("return document.documentElement.lang") == lang
+    assert "SEARCH FIRMWARE" in js("return document.querySelector('#fwFind').textContent") and "Plug in" in js("return document.querySelector('#midiAbout').textContent")
+    # what the code writes later is Spanish too: a toast
+    js("document.querySelector('#jobOk').click(); document.querySelector('#menuClose').click(); document.querySelector('#langBtn').click()")
+    js("document.querySelector('#flip').click()"); time.sleep(0.1)
+    assert js("return document.querySelector('#toast').textContent") in ("Las teclas", "Potes, pantalla y botones", "El FM-1 entero"), js("return document.querySelector('#toast').textContent")
+    js("document.querySelector('#flip').click(); document.querySelector('#flip').click(); document.querySelector('#logo').click(); document.querySelector('#langBtn').click()")
     assert js("return window.__errs || []") == []
     print("manual: ok")
 finally:

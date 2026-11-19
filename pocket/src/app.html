@@ -491,6 +491,7 @@
       #sure.alarm .box { width: 90vw; border: 3px solid #ff3b57; background: linear-gradient(#3a0610, #1d0309); box-shadow: 0 0 40px #ff3b5755; font-size: clamp(16px, 4.4vmin, 38px); }
       #sure.alarm #sureText { font-weight: 800; color: #ffd9de; line-height: 1.35; }
       #sure.alarm #sureText::before { content: "⚠ UNOFFICIAL TOOL"; display: block; font: 800 0.75em ui-monospace, Menlo, monospace; letter-spacing: 3px; color: #ff6b82; margin-bottom: 0.5em; }
+      html[lang="es"] #sure.alarm #sureText::before { content: "⚠ HERRAMIENTA NO OFICIAL"; }
       #sure #sureWarn { font-size: 0.85em; color: #ffb3bd; border: 1px solid #ff7a8c88; border-radius: 10px; padding: 8px 10px; }
       /* a job on the real unit (backup, protector, install...): a dialog that stays until it is read, so there is always an answer and nowhere else to go meanwhile */
       #job { position: fixed; inset: 0; z-index: 8; background: #000c; display: grid; place-items: center; touch-action: auto; font: 14px/1.4 system-ui, sans-serif; }
@@ -785,6 +786,11 @@
         } catch {}
       };
       const status = (t) => ($("#status").textContent = t);
+      // text written by others (firmware authors' descriptions and manuals) is marked so the Spanish pass (i18n) leaves it alone
+      function notr(e, yes = true) {
+        if (yes) e.dataset.notr = "";
+        return e;
+      }
       const el = (tag, cls, text) => {
         const e = document.createElement(tag);
         if (cls) e.className = cls;
@@ -1164,7 +1170,7 @@
         try {
           const m = await manualOf(f), link = el("a", "", "Open its page: " + f.repo);
           link.href = f.repo; link.target = "_blank"; link.rel = "noopener";
-          sheet(f.name + " · " + (m.kind === "manual" ? "MANUAL" : "README"), [...mdNodes(m.text), el("hr"), el("p", "", m.kind === "manual" ? "Its manual (" + (m.path || "from its repository") + ", " + m.date + "), written by its author." : "No manual was found: this is the README of its repository (" + m.date + "), written by its author."), link]);
+          sheet(f.name + " · " + (m.kind === "manual" ? "MANUAL" : "README"), [...mdNodes(m.text).map((n) => notr(n)), el("hr"), el("p", "", m.kind === "manual" ? "Its manual (" + (m.path || "from its repository") + ", " + m.date + "), written by its author." : "No manual was found: this is the README of its repository (" + m.date + "), written by its author."), link]);
         } catch (e) {
           const link = el("a", "", f.repo);
           link.href = f.repo; link.target = "_blank"; link.rel = "noopener";
@@ -1398,7 +1404,7 @@
           img.onerror = own;
           if (f === local || f === backup || !navigator.onLine) own();
           else img.src = HUB_IMG + f.id + ".webp";
-          t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. Kept on this device. Nothing is uploaded." : f === local ? "Kept on this device. Nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")));
+          t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), notr(el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. Kept on this device. Nothing is uploaded." : f === local ? "Kept on this device. Nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")), f !== backup && f !== local));
           if (f.chip) { // the chip tag sits to the right of the title, where there is room
             const b = t.querySelector("b"), tag = el("em", "chip " + f.chip, CHIP_TAG[f.chip][0]);
             tag.title = CHIP_TAG[f.chip][1];
@@ -1821,10 +1827,11 @@
       const REAL_DISCLAIMER = "CAUTION. Unofficial tool, not affiliated with M-VAVE, JieLi or the makers of m-bootloader. Writing to a unit can stop it from starting (usually recoverable: see WARNINGS), and you use it at your own risk, with no warranty. Back up first and never unplug or switch off while it works.";
       const realSure = (text, go) => (sure(text, go), ($("#sureWarn").textContent = REAL_DISCLAIMER), ($("#sureWarn").hidden = false));
       // a job that says nothing for 45 s is stuck (the unit left, or failed on its own screen): the dialog gets a way out
-      let jobSeen = 0, jobDog = 0;
+      let jobSeen = 0, jobDog = 0, jobDone = false;
       const jobOpen = (title) => {
         $("#job").className = "";
         $("#jobTitle").textContent = title;
+        jobDone = false;
         $("#jobText").textContent = "";
         $("#jobBar").hidden = true;
         $("#jobOk").hidden = true;
@@ -1843,7 +1850,7 @@
         }, 2000);
       };
       const jobEnd = (ok) => { clearInterval(jobDog); $("#job").className = ok ? "ok" : "bad"; $("#jobBar").hidden = true; $("#jobOk").hidden = false; $("#jobOk").focus(); };
-      $("#jobOk").onclick = () => { $("#job").hidden = true; clearInterval(jobDog); if (REAL.busy && !$("#jobTitle").textContent.includes("DONE")) { REAL.busy = false; realFace(); realScan(); } };
+      $("#jobOk").onclick = () => { $("#job").hidden = true; clearInterval(jobDog); if (REAL.busy && !jobDone) { REAL.busy = false; realFace(); realScan(); } };
       // a message the user has to see (a check that is not met, a failure): never only a toast
       const realNotice = (title, text, ok = false) => (jobOpen(title), text instanceof Node ? $("#jobText").replaceChildren(text.cloneNode(true)) : ($("#jobText").textContent = text), jobEnd(ok));
       const realSay = (t) => {
@@ -1944,11 +1951,12 @@
             REAL.stored = r ? { uid: REAL.info.uid, jedec: r.jedec, crc32: r.crc32, protector: r.protector, date: r.date } : null;
             // the kept backup is the last look at this flash: draw its map until a new read replaces it
             if (r?.bytes && !REAL.map) { try {
-              REAL.map = RealFM1.flashMap(r.bytes); realMapDraw(REAL.map);
-              const hint = $("#realMapHint"), from = " · from the backup of " + String(r.date).slice(0, 10);
-              hint.textContent += from + " · checking it against the unit…";
-              // the unit's own checksum of its whole flash against the backup's: same device and same contents, or not
-              RealFM1.sameFlash(REAL.upLink, REAL.info, r.crc32).then((same) => { if (REAL.map && hint.textContent.includes("checking")) hint.textContent = hint.textContent.replace(" · checking it against the unit…", same ? " · ✓ the unit holds exactly this" : " · ✗ the unit's flash is NOT this: BACKUP again"); }, () => { hint.textContent = hint.textContent.replace(" · checking it against the unit…", " · could not check it against the unit"); });
+              const map = (REAL.map = RealFM1.flashMap(r.bytes)), hint = $("#realMapHint");
+              realMapDraw(map);
+              const head = hint.textContent + " · from the backup of " + String(r.date).slice(0, 10);
+              hint.textContent = head + " · checking it against the unit…";
+              // the unit's own checksum of its whole flash against the backup's: same device and same contents, or not (unless a new read replaced the map meanwhile)
+              RealFM1.sameFlash(REAL.upLink, REAL.info, r.crc32).then((same) => { if (REAL.map === map) hint.textContent = head + (same ? " · ✓ the unit holds exactly this" : " · ✗ the unit's flash is NOT this: BACKUP again"); }, () => { if (REAL.map === map) hint.textContent = head + " · could not check it against the unit"; });
             } catch {} }
           }
           REAL.probing = false;
@@ -2142,7 +2150,7 @@
         if (modal) $("#jobText").textContent = lock ? "Keep this page open until it says DONE." : "Keep this page open and the screen on until it says DONE.";
         try {
           await job();
-          if (modal) { $("#jobTitle").textContent = what.toUpperCase() + " · DONE"; jobEnd(true); }
+          if (modal) { $("#jobTitle").textContent = what.toUpperCase() + " · DONE"; jobDone = true; jobEnd(true); }
         } catch (e) {
           realSay(what + ": " + e.message);
           if (modal) { $("#jobTitle").textContent = what.toUpperCase() + " · FAILED"; $("#jobText").textContent = e.message + "\n\nNothing else was sent. If the unit looks stuck, switch it off, unplug its cable for a few seconds and CONNECT again. Holding PLAY at power-on opens the recovery menu if the protector is installed."; jobEnd(false); }
@@ -2491,7 +2499,7 @@
           "- M-VAVE publishes its manual as a PDF, in English and Chinese, with the FM-1 downloads (https://manualf.oss-cn-hongkong.aliyuncs.com/manual/MIDI-KEYBOARD/FM-1-manual.pdf). This part follows it in our own words. If they differ, the PDF is right for the firmware it describes.",
         ],
         es: [
-          "Esta parte sigue el manual de usuario de M-VAVE para el firmware con el que se vende el FM-1. Para usar ese firmware aquí, descarga **FM-1.fwsc** de M-VAVE y usa **OPEN FILE**. Los firmwares de la comunidad usan los mismos potes y botones a su manera: lee la página de cada autor. Las versiones nuevas del firmware original pueden ser distintas.",
+          "Esta parte sigue el manual de usuario de M-VAVE para el firmware con el que se vende el FM-1. Para usar ese firmware aquí, descarga **FM-1.fwsc** de M-VAVE y usa **ABRIR FIRMWARE**. Los firmwares de la comunidad usan los mismos potes y botones a su manera: lee la página de cada autor. Las versiones nuevas del firmware original pueden ser distintas.",
           "## La pantalla",
           "- **Barra superior**: el número y el nombre del preset en uso. **Centro**: lo que muestra el modo actual (el osciloscopio en inicio, parámetros, la rejilla de efectos, el diagrama del algoritmo). **Barra inferior**: el modo y su página, como 1/2 LFO, y lo que cambia cada pote.",
           "- Arriba a la derecha hay un símbolo de batería, y una pantalla LOW BATTERY lo tapa todo hasta que cargas el aparato o lo apagas (solo FM-1 real). Salen ventanitas durante un segundo: la lista de presets (número y nombre, el actual iluminado), el dibujo del algoritmo, Octave, Transpose, Volume y Preset Saved.",
@@ -2576,31 +2584,31 @@
           "- **ON** enciende el FM-1 con el firmware elegido. **OFF** lo apaga.",
           "- Pulsa las teclas y los botones. Funcionan varios dedos a la vez. Desliza sobre las teclas.",
           "- Arrastra un pote hacia arriba o hacia abajo para girarlo. MASTER es el volumen.",
-          "- **KEYS / TOP / ALL** recorre tres vistas: el FM-1 entero, las teclas (con la parte de arriba pequeña encima), solo los potes, la pantalla y los botones.",
+          "- **TECLAS / ARRIBA / TODO** recorre tres vistas: el FM-1 entero, las teclas (con la parte de arriba pequeña encima), solo los potes, la pantalla y los botones.",
           "- En el móvil siempre se toca en horizontal. En vertical, el FM-1 se dibuja girado: gira el móvil.",
           "## Menú (el botón FM1.)",
-          "- **FIRMWARE**: una tarjeta por firmware. **USE** lo ejecuta. **DOWNLOAD** lo guarda en este dispositivo, para usarlo sin conexión (marcado con ●). **OPEN FILE** ejecuta tu propio archivo .fwsc. **LOAD BANK** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE.",
+          "- **FIRMWARE**: una tarjeta por firmware. **USAR** lo ejecuta. **DESCARGAR** lo guarda en este dispositivo, para usarlo sin conexión (marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc. **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE.",
           "- Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento.",
-          "- **RESTART** reinicia el firmware. **ERASE** borra lo que ha guardado el firmware en uso. **CLEAR** borra los firmwares descargados. Los dos últimos piden deslizar para confirmar.",
+          "- **BORRAR**, en una tarjeta, borra lo que ha guardado ese firmware. **BORRAR DATOS** borra los firmwares descargados. Los dos piden deslizar para confirmar.",
           "- Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, para cada versión exacta.",
-          "- **LOOK**: las teclas (las del FM-1 o un piano), el aspecto (los colores en que se vende el FM-1 y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpio).",
-          "- **OPTIONS**: MIDI, un FM-1 real por USB e instalar la app.",
+          "- **ASPECTO**: las teclas (las del FM-1 o un piano), los colores (los del FM-1 a la venta y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpia).",
+          "- **OPCIONES**: MIDI, un FM-1 real por USB e instalar la app.",
           "- **ENGLISH / ESPAÑOL** (arriba a la izquierda del menú): el idioma de la app y de sus manuales.",
           "## FM-1 real por USB",
-          "- Un FM-1 real por USB, en OPTIONS, REAL FM-1. Chrome o Edge en un ordenador o un móvil Android; no iPhone. El navegador pide usar SysEx: permítelo. Los botones que aún no se pueden pulsar salen apagados y una línea dice qué toca ahora; HOW IT GOES lista los pasos y WARNINGS lo que puede salir mal. Es una herramienta no oficial: escribir en un aparato puede dejarlo muerto, bajo tu riesgo.",
-          "- **PLAY WITH THE REAL FM-1** toca a la vez: lo que tocas aquí va también al FM-1 real, y sus notas, pitch bend, reloj y start/stop llegan a este. No es un ajuste de teclado MIDI y no instala nada. Este no puede enviar sus propias notas.",
-          "- **BACKUP** guarda toda la flash del FM-1 real en un archivo (la primera vez) y la conserva en este navegador, comprobada con el checksum del propio chip. Envía un pequeño ayudante que corre en la RAM y solo escribe el almacén de actualizaciones del firmware. **RESTART UNIT** saca al aparato del ayudante. **SAVE BACKUP** da la copia guardada como archivo. **INSPECT · COPY** copia un informe de lo que dice el aparato (no escribe nada).",
+          "- Un FM-1 real por USB, en OPCIONES, FM-1 REAL. Chrome o Edge en un ordenador o un móvil Android; no iPhone. El navegador pide usar SysEx: permítelo. Los botones que aún no se pueden pulsar salen apagados y una línea dice qué toca ahora; CÓMO SE HACE lista los pasos y AVISOS lo que puede salir mal. Es una herramienta no oficial: escribir en un aparato puede dejarlo muerto, bajo tu riesgo.",
+          "- **TOCAR CON EL FM-1 REAL** toca a la vez: lo que tocas aquí va también al FM-1 real, y sus notas, pitch bend, reloj y start/stop llegan a este. No es un ajuste de teclado MIDI y no instala nada. Este no puede enviar sus propias notas.",
+          "- **COPIA** guarda toda la flash del FM-1 real en un archivo (la primera vez) y la conserva en este navegador, comprobada con el checksum del propio chip. Envía un pequeño ayudante que corre en la RAM y solo escribe el almacén de actualizaciones del firmware. **REINICIAR APARATO** saca al aparato del ayudante. **GUARDAR COPIA** da la copia guardada como archivo. **INSPECCIONAR · COPIAR** copia un informe de lo que dice el aparato (no escribe nada).",
           "- **PROTECTOR** instala m-bootloader (MIT, de jvitkauskas) en el área de arranque: un arranque comprobado, un menú de recuperación (mantén PLAY al encender) y un modo MIDI que reinstala firmware por USB. Escribe el área de arranque: hazlo con el aparato en un USB estable. Con el chip de flash nuevo usa M-Flasher.",
-          "- **INSTALL ON MY FM-1** aparece en cada tarjeta de firmware solo cuando el aparato está en el modo MIDI del protector y una copia suya muestra el protector (sin protector, sin firmware propio). El aparato comprueba el paquete antes de borrar nada. Para volver, usa M-Flasher con tu copia.",
+          "- **INSTALAR EN MI FM-1** aparece en cada tarjeta de firmware solo cuando el aparato está en el modo MIDI del protector y una copia suya muestra el protector (sin protector, sin firmware propio). El aparato comprueba el paquete antes de borrar nada. Para volver, usa M-Flasher con tu copia.",
           "## Firmwares",
           "- Escribe en la caja de arriba de FIRMWARE para buscar por nombre, autor o texto. **MANUAL** en una tarjeta muestra el README del repositorio del firmware (se guarda en este dispositivo al leerlo); **?** en la columna de la izquierda abre el manual del firmware que corre.",
           "## MIDI",
-          "- **CONNECT MIDI** busca tus teclados y controladores. Sus teclas tocan el FM-1 por su MIDI IN.",
+          "- **CONECTAR MIDI** busca tus teclados y controladores. Sus teclas tocan el FM-1 por su MIDI IN.",
           "- En los controladores conocidos (Akai MPK mini, Launchkey) los potes y los pads empiezan en los controles del FM-1: los potes 1 a 4 son KNOB1 a 4, los potes 5 a 8 son MASTER, SELECT, PRESETS y ALGORITHM. Los pads 1 a 4 son HOME, SAVE, PLAY y REC, los pads 5 a 8 son FX, SEL, ENV y LFO.",
-          "- **DEVICE** muestra un dibujo de tu controlador. Toca un control, elige qué hace y pulsa LEARN para enlazar el real.",
+          "- **DISPOSITIVO** muestra un dibujo de tu controlador. Toca un control, elige qué hace y pulsa LEARN para enlazar el real.",
           "- El pote de un controlador tiene topes y los del FM-1 no: gíralo adelante y atrás para seguir.",
           "## Instalar",
-          "- **INSTALL** (en OPTIONS) pone la app en tu pantalla de inicio: pantalla completa, en horizontal, y funciona sin conexión con los firmwares marcados con ●.",
+          "- **INSTALAR** (en OPCIONES) pone la app en tu pantalla de inicio: pantalla completa, en horizontal, y funciona sin conexión con los firmwares marcados con ●.",
           "## Teclas del ordenador",
           "- A W S E D F T G Y H U J K O L P tocan. Z y X: octava. Espacio: PLAY. R: REC. 1 a 0: los diez botones de FX a SEQ. Las flechas y , . giran SELECT, PRESETS y ALGORITHM.",
         ],
@@ -2642,7 +2650,7 @@
           (c.length ? p.push(...c) : z.push(zone));
           const chip = el("b", "ctl" + (/^(KNOB\d|MASTER|SELECT|PRESETS|ALGORITHM)$/.test(name) ? " round" : ""), part);
           chip.dataset.c = name;
-          chip.title = "Show it on the FM-1";
+          chip.title = lang === "es" ? "Muéstralo en el FM-1" : "Show it on the FM-1"; // (the manual is not translated by i18n: it has its own Spanish)
           into.append(chip);
         });
         into.dataset.p = p.join(",");
@@ -2716,9 +2724,593 @@
       $("#manApp").onclick = () => ((manPart = "app"), manual());
       $("#manFm").onclick = () => ((manPart = "fm"), manual());
       const langFace = () => ($("#langBtn").textContent = lang === "es" ? "ESPAÑOL" : "ENGLISH");
-      $("#langBtn").onclick = () => (store("fm1.lang", (lang = lang === "es" ? "en" : "es")), langFace(), manual(), toast(lang === "es" ? "Idioma: español" : "Language: English"));
+      $("#langBtn").onclick = () => (store("fm1.lang", (lang = lang === "es" ? "en" : "es")), langFace(), manual(), i18n(), toast(lang === "es" ? "Idioma: español" : "Language: English"));
       langFace();
       manual();
+      // ======================================================================
+      // the app in Spanish (the language button). ES: whole texts; ES_RE: texts with a name or a number in them; ES_HTML: our
+      // paragraphs with links or bold, by their text. Applied to the page itself: text nodes and title / aria-label / placeholder,
+      // outside the FM-1 (its control names stay), the manuals (they have their own Spanish), the licences, the shared MIDI panel and
+      // what firmware authors wrote (data-notr). A MutationObserver translates what the code writes later (toasts, dialogs, faces);
+      // the English is kept, so ENGLISH puts it back. Names of the FM-1's controls stay English in the Spanish too.
+      // ======================================================================
+      const ES = {
+        // the rail, the menu, its tabs
+        "Menu: firmware, look, options, about": "Menú: firmware, aspecto, opciones, créditos",
+        Menu: "Menú",
+        "Power: turn the FM-1 on with the chosen firmware, or off": "Encendido: enciende el FM-1 con el firmware elegido, o lo apaga",
+        Power: "Encendido",
+        "Next view: the whole FM-1, the keys with the upper part shrunk above them, or only the upper part (knobs, screen, buttons), full screen": "Siguiente vista: el FM-1 entero, las teclas con la parte de arriba pequeña encima, o solo la parte de arriba (potes, pantalla, botones), a pantalla completa",
+        KEYS: "TECLAS",
+        TOP: "ARRIBA",
+        ALL: "TODO",
+        "Manual of the firmware that is running (its own, from its repository), or this app's manual": "El manual del firmware en marcha (el suyo, de su repositorio), o el manual de esta app",
+        "Tether: show this screen on the real FM-1, or only use it as a controller (a lighter link)": "Tether: muestra esta pantalla en el FM-1 real, o úsalo solo como controlador (un enlace más ligero)",
+        "Tether: this page's sound on the real FM-1's own output, or here": "Tether: el sonido de esta página por la salida del FM-1 real, o aquí",
+        SCREEN: "PANTALLA",
+        SOUND: "SONIDO",
+        "Choose the firmware, restart it, open a file, erase saves": "Elige el firmware, reinícialo, abre un archivo, borra lo guardado",
+        "View, keys, skin and screen filter": "Vista, teclas, colores y filtro de pantalla",
+        "MIDI and installing the app": "MIDI e instalar la app",
+        "The manual: this app, and how the FM-1 works. English and Spanish": "El manual: esta app y cómo funciona el FM-1. En inglés y en español",
+        "Close the app (it runs full screen, with no window buttons)": "Cierra la app (va a pantalla completa, sin botones de ventana)",
+        "Thanks, credits and licences": "Gracias, créditos y licencias",
+        LOOK: "ASPECTO",
+        OPTIONS: "OPCIONES",
+        ABOUT: "CRÉDITOS",
+        EXIT: "SALIR",
+        "The storage this app uses on this device, and what is free": "El espacio que usa esta app en este dispositivo, y lo que queda libre",
+        "Back to the menu's icons": "Vuelve a los iconos del menú",
+        BACK: "ATRÁS",
+        "Close the menu": "Cierra el menú",
+        CLOSE: "CERRAR",
+        Close: "Cerrar",
+        "Close this message": "Cierra este mensaje",
+        // FIRMWARE
+        "Search the firmwares by name, author or what they do": "Busca los firmwares por nombre, autor o lo que hacen",
+        "Open a firmware package (.fwsc) from this device: your own build, or M-VAVE's FM-1.fwsc": "Abre un paquete de firmware (.fwsc) de este dispositivo: tu propia compilación, o el FM-1.fwsc de M-VAVE",
+        "OPEN FIRMWARE FILE": "ABRIR FIRMWARE",
+        "Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it.": "Carga un banco DX7 de 32 voces (.syx) en el firmware en marcha (el de M-VAVE y los hechos sobre sus voces DX7). El firmware vuelve a arrancar con él.",
+        "LOAD DX7 BANK": "CARGAR BANCO DX7",
+        "Delete every downloaded firmware from this device (their saves stay). Asks first.": "Borra de este dispositivo todos los firmwares descargados (lo que guardaron se queda). Pregunta antes.",
+        DOWNLOADS: "DESCARGAS",
+        "CLEAR DATA": "BORRAR DATOS",
+        "The firmware the FM-1 runs": "El firmware que ejecuta el FM-1",
+        "NAME · AUTHOR": "NOMBRE · AUTOR",
+        "NEWER CHIP ONLY": "SOLO CHIP NUEVO",
+        "SEARCH FIRMWARE": "BUSCAR FIRMWARE",
+        DOWNLOAD: "DESCARGAR",
+        DOWNLOADING: "DESCARGANDO",
+        "IN USE": "EN USO",
+        USE: "USAR",
+        "INSTALL ON MY FM-1": "INSTALAR EN MI FM-1",
+        ERASE: "BORRAR",
+        "your FM-1": "tu FM-1",
+        "your file": "tu archivo",
+        "MY FM-1": "MI FM-1",
+        "The flash of your real FM-1, saved by REAL FM-1. Kept on this device. Nothing is uploaded.": "La flash de tu FM-1 real, guardada desde FM-1 REAL. Se guarda en este dispositivo. No se sube nada.",
+        "Kept on this device. Nothing is uploaded.": "Se guarda en este dispositivo. No se sube nada.",
+        "NEWER CHIP ✓": "CHIP NUEVO ✓",
+        "Saves on every FM-1, the newer chip (0xB36014) too": "Guarda en todos los FM-1, también en el chip nuevo (0xB36014)",
+        "ANY CHIP": "CUALQUIER CHIP",
+        "Does not check the chip: it works on every FM-1, not tried on the newer chip (0xB36014) by the hub": "No mira el chip: funciona en todos los FM-1, el hub no lo ha probado en el chip nuevo (0xB36014)",
+        "FIRST FM-1s ONLY": "SOLO PRIMEROS FM-1",
+        "Knows only the first FM-1s' flash chip: on a newer FM-1 (0xB36014) it keeps saves in RAM only, and updates from it may fail": "Solo conoce el chip de flash de los primeros FM-1: en un FM-1 nuevo (0xB36014) guarda solo en la RAM, y las actualizaciones desde él pueden fallar",
+        "Download it first: what a firmware saves is kept for its exact package": "Descárgalo antes: lo que guarda un firmware va con su paquete exacto",
+        "SAVES ONLY": "SOLO LO GUARDADO",
+        "SAVES + FIRMWARE": "GUARDADO + FIRMWARE",
+        "Saves erased: starting fresh": "Lo guardado, borrado: arranca de cero",
+        "Saves and firmware erased": "Lo guardado y el firmware, borrados",
+        "Saves and firmware erased. It keeps running until you switch it off": "Lo guardado y el firmware, borrados. Sigue en marcha hasta que lo apagues",
+        "Search firmwares": "Buscar firmwares",
+        "SEARCH FIRMWARES": "BUSCAR FIRMWARES",
+        "Name, author, what it does": "Nombre, autor, lo que hace",
+        "Show only the firmwares that save on FM-1s with the newer flash chip (the Firmware Hub's own check, read from each package)": "Muestra solo los firmwares que guardan en los FM-1 con el chip de flash nuevo (la comprobación del propio Firmware Hub, leída de cada paquete)",
+        "SAVES ON NEWER FM-1s": "GUARDA EN LOS FM-1 NUEVOS",
+        "Clear the search: show every firmware": "Borra la búsqueda: muestra todos los firmwares",
+        CLEAR: "BORRAR",
+        "Close the search and show what matches": "Cierra la búsqueda y muestra lo que coincide",
+        SHOW: "MOSTRAR",
+        "This firmware has no manual to show.": "Este firmware no tiene manual que mostrar.",
+        "you are offline and its manual is not kept on this device yet": "no tienes conexión y su manual aún no está guardado en este dispositivo",
+        "no manual or README was found at its repository": "no se encontró manual ni README en su repositorio",
+        "not a firmware package": "no es un paquete de firmware",
+        "you are offline and this firmware is not kept on this device yet": "no tienes conexión y este firmware aún no está guardado en este dispositivo",
+        "Choose a firmware first": "Elige antes un firmware",
+        "That is not a DX7 bank of 32 voices (.syx, 4104 bytes)": "Eso no es un banco DX7 de 32 voces (.syx, 4104 bytes)",
+        "That file is not a firmware package": "Ese archivo no es un paquete de firmware",
+        "No room to keep the file: it runs until the page closes": "No hay sitio para guardar el archivo: funciona hasta que cierres la página",
+        "No room on this device to keep what the firmware saved": "No hay sitio en este dispositivo para guardar lo que guardó el firmware",
+        "Delete every downloaded firmware and your opened file from this device? Their saves stay, and so does the backup of your FM-1. They can be downloaded again when online.": "¿Borrar de este dispositivo todos los firmwares descargados y tu archivo abierto? Lo que guardaron se queda, y también la copia de tu FM-1. Se pueden volver a descargar con conexión.",
+        "Downloads deleted. A running firmware keeps running.": "Descargas borradas. Un firmware en marcha sigue funcionando.",
+        // power, sound, status
+        "The FM-1 is off: tap ON": "El FM-1 está apagado: pulsa ON",
+        off: "apagado",
+        "off: tap ON": "apagado: pulsa ON",
+        "FM-1 off": "FM-1 apagado",
+        "saves loaded": "lo guardado, cargado",
+        "Larger audio buffer": "Búfer de audio mayor",
+        "The FM-1's sound output is gone: the sound plays here": "La salida de sonido del FM-1 ya no está: el sonido suena aquí",
+        // LOOK
+        "Choose the keys: the FM-1's own, or a piano": "Elige las teclas: las del FM-1 o un piano",
+        "Choose the skin: the colours the FM-1 is sold in, then ours": "Elige los colores: los del FM-1 a la venta y luego los nuestros",
+        "Choose the screen filter: LCD (pixel grid and glass), CRT (scan lines and glow) or clean": "Elige el filtro de pantalla: LCD (rejilla de píxeles y cristal), CRT (líneas de barrido y brillo) o limpia",
+        "FM-1 COLOUR": "COLOR FM-1",
+        OURS: "NUESTROS",
+        SKIN: "COLOR",
+        Skin: "Color",
+        Screen: "Pantalla",
+        "SCREEN FILTER": "FILTRO DE PANTALLA",
+        CLEAN: "LIMPIA",
+        "FM-1 KEYS": "TECLAS FM-1",
+        "PIANO KEYS": "TECLAS DE PIANO",
+        "FM-1 BLACK": "FM-1 NEGRO",
+        "FM-1 GREY": "FM-1 GRIS",
+        "FM-1 PURPLE": "FM-1 MORADO",
+        "FM-1 ORANGE": "FM-1 NARANJA",
+        "FM-1 NAVY": "FM-1 AZUL MARINO",
+        "FM-1 GREEN": "FM-1 VERDE",
+        "FM-1 WHITE & GREY": "FM-1 BLANCO Y GRIS",
+        "FM-1 WHITE & GREEN": "FM-1 BLANCO Y VERDE",
+        "FM-1 WHITE & BLUE": "FM-1 BLANCO Y AZUL",
+        "FM-1 BLACK & TEAL": "FM-1 NEGRO Y TURQUESA",
+        "FM-1 PINK & PURPLE": "FM-1 ROSA Y MORADO",
+        "FM-1 CREAM & CHARCOAL": "FM-1 CREMA Y CARBÓN",
+        "FM-1 ORANGE & RED": "FM-1 NARANJA Y ROJO",
+        "The FM-1's own keys": "Las teclas del propio FM-1",
+        "Piano keys": "Teclas de piano",
+        "The whole FM-1": "El FM-1 entero",
+        "The keys": "Las teclas",
+        "Knobs, screen and buttons": "Potes, pantalla y botones",
+        // OPTIONS: MIDI
+        "MIDI CONTROLLER": "CONTROLADOR MIDI",
+        "Not connected yet.": "Aún sin conectar.",
+        "Connect your MIDI keyboards and controllers": "Conecta tus teclados y controladores MIDI",
+        CONTROLLER: "CONTROLADOR",
+        "CONNECT MIDI": "CONECTAR MIDI",
+        "A drawing of your controller: see what each key, pad and knob does, and assign them": "Un dibujo de tu controlador: mira qué hace cada tecla, pad y pote, y asígnalos",
+        "DRAWING · LEARN": "DIBUJO · APRENDER",
+        DEVICE: "DISPOSITIVO",
+        "Map your controller step by step: keys, pads, knobs, sustain, bend, transport. Saved, exported, imported.": "Mapea tu controlador paso a paso: teclas, pads, potes, sustain, bend, transporte. Se guarda, se exporta y se importa.",
+        "STEP BY STEP": "PASO A PASO",
+        MAP: "MAPEAR",
+        "MOD: while the sustain pedal (or the key MAP found) is held, the pads and knobs become a second set. Tap to turn it on or off.": "MOD: mientras mantienes el pedal de sustain (o la tecla que encontró MAPEAR), los pads y los potes pasan a un segundo juego. Toca para activarlo o desactivarlo.",
+        "SUSTAIN PEDAL": "PEDAL SUSTAIN",
+        "MOD ON": "MOD SÍ",
+        "MOD OFF": "MOD NO",
+        "LIGHTS: the pads of a controller that takes lights (Novation Launchkey) show the lights of the FM-1 buttons they work. Tap to turn it on or off.": "LUCES: los pads de un controlador que admite luces (Novation Launchkey) muestran las luces de los botones del FM-1 que manejan. Toca para activarlo o desactivarlo.",
+        "PAD LIGHTS": "LUCES DE PADS",
+        "LIGHTS ON": "LUCES SÍ",
+        "LIGHTS OFF": "LUCES NO",
+        "Pad lights on: the pads show the FM-1's lights": "Luces de pads activadas: los pads muestran las luces del FM-1",
+        "Pad lights off": "Luces de pads desactivadas",
+        Connected: "Conectado",
+        "No MIDI device found: plug one in.": "No se encontró ningún dispositivo MIDI: conecta uno.",
+        "No MIDI device found: plug one in": "No se encontró ningún dispositivo MIDI: conecta uno",
+        "This browser has no MIDI (use Chrome, Edge or Firefox)": "Este navegador no tiene MIDI (usa Chrome, Edge o Firefox)",
+        "MIDI was not allowed": "No se permitió el MIDI",
+        "Connect a MIDI device first": "Conecta antes un dispositivo MIDI",
+        "MOD on: hold the sustain pedal and the pads and knobs become a second set": "MOD activado: mantén el pedal de sustain y los pads y los potes pasan a un segundo juego",
+        "MOD off: the pads and knobs stay the first set": "MOD desactivado: los pads y los potes se quedan en el primer juego",
+        "Press a key, a pad or turn a knob: it lights up on the drawing": "Pulsa una tecla o un pad, o gira un pote: se ilumina en el dibujo",
+        "MIDI: connect a controller and map its knobs, pads and keys": "MIDI: conecta un controlador y asigna sus potes, pads y teclas",
+        "A real FM-1 on USB: play together, back up, install firmwares": "Un FM-1 real por USB: tocar juntos, hacer copias, instalar firmwares",
+        "REAL FM-1": "FM-1 REAL",
+        "Install the app on this device": "Instala la app en este dispositivo",
+        "INSTALL THE APP": "INSTALAR LA APP",
+        // OPTIONS: the app
+        "THE APP": "LA APP",
+        "Install: open it in the browser, install it, then it is on your home screen and works offline": "Instalar: ábrela en el navegador, instálala y ya está en tu pantalla de inicio y funciona sin conexión",
+        "OPEN IT": "ÁBRELA",
+        "2 · INSTALL": "2 · INSTÁLALA",
+        "in the browser": "en el navegador",
+        INSTALL: "INSTALAR",
+        "one tap": "un toque",
+        "YOUR APP": "TU APP",
+        "works offline": "sin conexión",
+        "Install the app: its own window on your home screen or computer, and it works offline": "Instala la app: su propia ventana en tu pantalla de inicio o en el ordenador, y funciona sin conexión",
+        "INSTALLED ✓": "INSTALADA ✓",
+        "HOW TO INSTALL": "CÓMO INSTALAR",
+        "Installed: it opens in its own window and works offline with the firmwares marked ●.": "Instalada: se abre en su propia ventana y funciona sin conexión con los firmwares marcados con ●.",
+        "Adds it to your home screen or apps: its own window, full screen, and it works offline.": "La añade a tu pantalla de inicio o a tus apps: su propia ventana, a pantalla completa, y funciona sin conexión.",
+        "Install cancelled": "Instalación cancelada",
+        "iPhone and iPad: in Safari tap Share, then Add to Home Screen.": "iPhone y iPad: en Safari toca Compartir y luego Añadir a pantalla de inicio.",
+        "Safari ▸ Share ▸ Add to Home Screen": "Safari ▸ Compartir ▸ Añadir a pantalla de inicio",
+        "Use your browser's menu: Install app (Chrome, Edge, Android) or Add to Home Screen.": "Usa el menú de tu navegador: Instalar app (Chrome, Edge, Android) o Añadir a pantalla de inicio.",
+        "Use your browser's menu: Install app / Add to Home Screen": "Usa el menú de tu navegador: Instalar app / Añadir a pantalla de inicio",
+        "This browser would not close the app: use the back gesture or the recent apps": "Este navegador no quiso cerrar la app: usa el gesto de volver o las apps recientes",
+        "Installed: open it from your home screen or apps": "Instalada: ábrela desde tu pantalla de inicio o tus apps",
+        // OPTIONS: REAL FM-1
+        "Step 1: connect a real FM-1 over USB MIDI (asks to use SysEx)": "Paso 1: conecta un FM-1 real por USB MIDI (pide usar SysEx)",
+        "Step 2: save a copy of the whole flash of the real FM-1. Nothing is written to the unit except a small helper in RAM": "Paso 2: guarda una copia de toda la flash del FM-1 real. No se escribe nada en el aparato salvo un pequeño ayudante en la RAM",
+        "Step 3: install the protected bootloader (m-bootloader), so a bad firmware can always be replaced over USB. WRITES to the unit": "Paso 3: instala el arranque protegido (m-bootloader), para que un firmware malo siempre se pueda cambiar por USB. ESCRIBE en el aparato",
+        "Step 4: choose a firmware: its card has the INSTALL button once every check is in place": "Paso 4: elige un firmware: su tarjeta tiene el botón INSTALAR cuando todas las comprobaciones están hechas",
+        "Play with the real FM-1: what you play on this screen goes to the real unit too, and what the real unit plays (notes and clock) comes here. Not a MIDI keyboard, not a firmware installer.": "Toca con el FM-1 real: lo que tocas en esta pantalla va también al aparato real, y lo que toca el aparato real (notas y reloj) llega aquí. No es un teclado MIDI ni un instalador de firmware.",
+        "Restart the unit, inspect it, save the backup file, the steps and the warnings": "Reinicia el aparato, inspecciónalo, guarda el archivo de la copia, los pasos y los avisos",
+        MORE: "MÁS",
+        More: "Más",
+        "FLASH MAP": "MAPA DE LA FLASH",
+        "back up to see what is in the flash": "haz una copia para ver qué hay en la flash",
+        "Map of the flash: used and blank sectors": "Mapa de la flash: sectores usados y vacíos",
+        "How it goes": "Cómo se hace",
+        "Before anything is written to the unit": "Antes de escribir nada en el aparato",
+        "BACKUP first, and copy the file off this computer.": "Primero haz COPIA, y lleva el archivo fuera de este ordenador.",
+        "After the protector, BACKUP again here: a custom firmware is only offered when that backup shows the protector.": "Después del protector, haz COPIA otra vez aquí: solo se ofrece un firmware propio cuando esa copia muestra el protector.",
+        "Do not unplug or switch off during a write.": "No desenchufes ni apagues durante una escritura.",
+        "✓ FOUND": "✓ ENCONTRADO",
+        "STEP 1": "PASO 1",
+        CONNECT: "CONECTAR",
+        "✓ SAVED": "✓ GUARDADA",
+        "STEP 2 · SAFE": "PASO 2 · SEGURO",
+        BACKUP: "COPIA",
+        "✓ IN THE UNIT": "✓ EN EL APARATO",
+        "USE M-FLASHER": "USA M-FLASHER",
+        "STEP 3 · WRITES": "PASO 3 · ESCRIBE",
+        "STEP 4 · READY": "PASO 4 · LISTO",
+        "STEP 4 · LOCKED": "PASO 4 · BLOQUEADO",
+        "THE UNIT IS IN MIDI MODE": "EL APARATO ESTÁ EN MODO MIDI",
+        "NEEDS THE UNIT RUNNING ITS FIRMWARE": "EL APARATO DEBE TENER SU FIRMWARE EN MARCHA",
+        "THIS FM-1 ⇄ THE REAL ONE · NOT A KEYBOARD": "ESTE FM-1 ⇄ EL REAL · NO ES UN TECLADO",
+        "INSTALL TETHER ON THIS FM-1": "INSTALAR TETHER EN ESTE FM-1",
+        "TETHER · THE REAL PANEL · ON": "TETHER · EL PANEL REAL · SÍ",
+        "PLAYING TOGETHER · ON": "TOCANDO JUNTOS · SÍ",
+        "PLAY WITH THE REAL FM-1 · OFF": "TOCAR CON EL FM-1 REAL · NO",
+        "answers, but is not m-bootloader": "responde, pero no es m-bootloader",
+        "protector: back up to find out": "protector: haz una copia para saberlo",
+        "protector: NOT installed": "protector: NO instalado",
+        "Next: press CONNECT, with the unit on and its USB cable in.": "Ahora: pulsa CONECTAR, con el aparato encendido y su cable USB puesto.",
+        "No FM-1 found. Check the cable and that the unit is on, then CONNECT again.": "No se encontró ningún FM-1. Revisa el cable y que el aparato esté encendido, y vuelve a CONECTAR.",
+        "Working: keep this page open.": "Trabajando: deja esta página abierta.",
+        "Ready: choose a firmware in FIRMWARE and press INSTALL on its card.": "Listo: elige un firmware en FIRMWARE y pulsa INSTALAR en su tarjeta.",
+        "Next: BACKUP (it reads straight from the unit).": "Ahora: COPIA (lee directamente del aparato).",
+        "Protector found. Nothing else to do here: RESTART UNIT, or switch the unit off and on.": "Protector encontrado. Aquí no hay nada más que hacer: REINICIAR APARATO, o apaga y enciende el aparato.",
+        "The unit is in the helper. Next: BACKUP if you have not, then RESTART UNIT.": "El aparato está en el ayudante. Ahora: COPIA si aún no la has hecho, y luego REINICIAR APARATO.",
+        "Next: BACKUP (safe: it only reads). Then the protector, then firmwares.": "Ahora: COPIA (segura: solo lee). Luego el protector, luego los firmwares.",
+        "The protector is in. Switch the unit off, hold PLAY while switching it on, choose MIDI mode, then CONNECT.": "El protector está dentro. Apaga el aparato, mantén PLAY al encenderlo, elige el modo MIDI y luego CONECTAR.",
+        "Newer flash chip: install the protector with M-Flasher (see WARNINGS), then BACKUP again here.": "Chip de flash nuevo: instala el protector con M-Flasher (mira AVISOS) y luego haz COPIA otra vez aquí.",
+        "Next: PROTECTOR (it writes the boot area: read WARNINGS first), then BACKUP again.": "Ahora: PROTECTOR (escribe el área de arranque: lee antes AVISOS), y luego COPIA otra vez.",
+        "This browser has no MIDI (use Chrome or Edge)": "Este navegador no tiene MIDI (usa Chrome o Edge)",
+        "Real FM-1 found": "FM-1 real encontrado",
+        "No FM-1 on USB MIDI": "Ningún FM-1 por USB MIDI",
+        "MIDI with SysEx was not allowed": "No se permitió el MIDI con SysEx",
+        "USE THE REAL FM-1": "USAR EL FM-1 REAL",
+        "NOT NOW": "AHORA NO",
+        "CAUTION. Unofficial tool, not affiliated with M-VAVE, JieLi or the makers of m-bootloader. Writing to a unit can stop it from starting (usually recoverable: see WARNINGS), and you use it at your own risk, with no warranty. Back up first and never unplug or switch off while it works.": "PRECAUCIÓN. Herramienta no oficial, sin relación con M-VAVE, JieLi ni los autores de m-bootloader. Escribir en un aparato puede hacer que no arranque (casi siempre tiene arreglo: mira AVISOS), y lo usas bajo tu propio riesgo, sin garantía. Haz antes una copia y nunca lo desenchufes ni lo apagues mientras trabaja.",
+        "NO ANSWER": "SIN RESPUESTA",
+        DONE: "HECHO",
+        FAILED: "FALLÓ",
+        "No news from the unit for 45 seconds. If it shows UPDATE FAILED or looks stuck, switch it off, unplug its cable for a few seconds and CONNECT again.": "El aparato no da señales desde hace 45 segundos. Si muestra UPDATE FAILED o parece colgado, apágalo, desenchufa su cable unos segundos y vuelve a CONECTAR.",
+        "Tether is off, but the sound still goes to the FM-1's output. Play it on this device again?": "Tether está apagado, pero el sonido sigue saliendo por el FM-1. ¿Volver a sonar en este dispositivo?",
+        "SOUND HERE": "SONIDO AQUÍ",
+        "LEAVE IT ON THE FM-1": "DEJARLO EN EL FM-1",
+        "The sound plays on this device again": "El sonido vuelve a sonar en este dispositivo",
+        "This browser cannot send the sound to another output (Chrome or Edge 110 or newer can): it stays here": "Este navegador no puede enviar el sonido a otra salida (Chrome o Edge 110 o posterior sí pueden): se queda aquí",
+        "No sound output found: the sound stays on this device": "No se encontró ninguna salida de sonido: el sonido se queda en este dispositivo",
+        "Which output is the FM-1? Its USB speaker is called Tether.": "¿Qué salida es el FM-1? Su altavoz USB se llama Tether.",
+        ON: "SÍ",
+        OFF: "NO",
+        "Tether shows this screen on the FM-1": "Tether muestra esta pantalla en el FM-1",
+        "Tether: the FM-1 only sends its keys, pads and knobs": "Tether: el FM-1 solo envía sus teclas, pads y potes",
+        "Tether offers the sound on the FM-1": "Tether ofrece el sonido en el FM-1",
+        "The sound stays on this device": "El sonido se queda en este dispositivo",
+        "Connect a real FM-1 first (it must be running its firmware)": "Conecta antes un FM-1 real (con su firmware en marcha)",
+        "Sync off": "Sincronía desactivada",
+        "The firmware on this unit is not Tether, so it can only play together with this page: what you play goes to both, and its notes and clock come here.\n\nTether is a firmware that makes the real FM-1 the panel of this one: all its keys, buttons and knobs play here, and this screen shows on the unit.": "El firmware de este aparato no es Tether, así que solo puede tocar junto con esta página: lo que tocas va a los dos, y sus notas y su reloj llegan aquí.\n\nTether es un firmware que convierte el FM-1 real en el panel de este: todas sus teclas, botones y potes tocan aquí, y esta pantalla se ve en el aparato.",
+        "INSTALL TETHER": "INSTALAR TETHER",
+        "Put the unit in the protector's MIDI mode (switch it off, hold PLAY while switching it on, choose MIDI mode), press CONNECT here, then press this same button: it says INSTALL TETHER ON THIS FM-1.\n\nThe checks come first: a backup of the unit, with the protector in it.": "Pon el aparato en el modo MIDI del protector (apágalo, mantén PLAY al encenderlo, elige el modo MIDI), pulsa CONECTAR aquí y luego este mismo botón: dirá INSTALAR TETHER EN ESTE FM-1.\n\nAntes van las comprobaciones: una copia del aparato, con el protector dentro.",
+        "JUST PLAY TOGETHER": "SOLO TOCAR JUNTOS",
+        "SET UP TETHER": "PREPARAR TETHER",
+        "Sync on: what you play goes to both, and the real FM-1's notes and clock come here": "Sincronía activada: lo que tocas va a los dos, y las notas y el reloj del FM-1 real llegan aquí",
+        "Tether found: the real FM-1 is the panel of this one (keys, buttons, knobs), and its screen shows this screen": "Tether encontrado: el FM-1 real es el panel de este (teclas, botones, potes), y su pantalla muestra esta pantalla",
+        "This unit can also play the sound, on its own output and headphones (its MASTER knob sets the level). Send this page's sound to the FM-1?": "Este aparato también puede sonar, por su salida y sus auriculares (su pote MASTER fija el nivel). ¿Enviar el sonido de esta página al FM-1?",
+        "SOUND ON THE FM-1": "SONIDO EN EL FM-1",
+        "KEEP IT HERE": "DEJARLO AQUÍ",
+        "The unit is busy with another job. Wait for it to finish.": "El aparato está ocupado con otra tarea. Espera a que termine.",
+        "Keep this page open until it says DONE.": "Deja esta página abierta hasta que diga HECHO.",
+        "Keep this page open and the screen on until it says DONE.": "Deja esta página abierta y la pantalla encendida hasta que diga HECHO.",
+        "Nothing else was sent. If the unit looks stuck, switch it off, unplug its cable for a few seconds and CONNECT again. Holding PLAY at power-on opens the recovery menu if the protector is installed.": "No se envió nada más. Si el aparato parece colgado, apágalo, desenchufa su cable unos segundos y vuelve a CONECTAR. Mantener PLAY al encender abre el menú de recuperación si el protector está instalado.",
+        Backup: "Copia",
+        Inspect: "Inspección",
+        Restart: "Reinicio",
+        Install: "Instalación",
+        INSPECT: "INSPECCIÓN",
+        RESTART: "REINICIO",
+        "the firmware does not answer (is it running, with its USB cable in?)": "el firmware no responde (¿está en marcha, con su cable USB puesto?)",
+        "the bundled Tether package is damaged": "el paquete de Tether incluido está dañado",
+        "the bundled package is damaged": "el paquete incluido está dañado",
+        "Sending the helper": "Enviando el ayudante",
+        "Installing the protector": "Instalando el protector",
+        "Writing firmware": "Escribiendo el firmware",
+        "Checking package": "Comprobando el paquete",
+        "✓ Keep the file somewhere safe": "✓ Guarda el archivo en un sitio seguro",
+        "✓ This unit's first backup was saved as a file before: SAVE BACKUP gives this one": "✓ La primera copia de este aparato ya se guardó como archivo: GUARDAR COPIA da esta",
+        "✗ The protector is NOT in this flash: no custom firmware can be installed yet": "✗ El protector NO está en esta flash: aún no se puede instalar ningún firmware propio",
+        "→ To install: hold PLAY at power-on, choose MIDI mode, CONNECT": "→ Para instalar: mantén PLAY al encender, elige el modo MIDI, CONECTAR",
+        "Backup kept in this browser": "Copia guardada en este navegador",
+        "No room to keep the backup in the list: use the file just saved": "No hay sitio para guardar la copia en la lista: usa el archivo recién guardado",
+        "✓ It runs here: its screen drew": "✓ Funciona aquí: dibujó su pantalla",
+        "✗ It did not draw a screen here in 25 s: the file is saved, but check it before trusting it": "✗ No dibujó ninguna pantalla aquí en 25 s: el archivo está guardado, pero compruébalo antes de fiarte de él",
+        "Your backup runs in the emulator ✓": "Tu copia funciona en el emulador ✓",
+        "NOT A HELPER": "NO ES EL AYUDANTE",
+        "This unit answers, but it is not m-bootloader or its helper: nothing was sent.": "Este aparato responde, pero no es m-bootloader ni su ayudante: no se envió nada.",
+        "CONNECT FIRST": "CONECTA ANTES",
+        "Connect a real FM-1 first (CONNECT), with its firmware running.": "Conecta antes un FM-1 real (CONECTAR), con su firmware en marcha.",
+        "BACK UP IN MIDI MODE": "COPIA EN MODO MIDI",
+        "Tether is running, and its updater cannot send the helper for a backup. Switch the unit off, hold PLAY while switching it on, choose the protector's MIDI mode, press CONNECT here and then BACKUP.": "Tether está en marcha y su actualizador no puede enviar el ayudante para una copia. Apaga el aparato, mantén PLAY al encenderlo, elige el modo MIDI del protector, pulsa CONECTAR aquí y luego COPIA.",
+        "To read the whole flash, a small helper is sent to the unit and runs from RAM. It restarts the unit into the helper (no keys needed) and writes only the firmware's updater storage area, never the boot area or keys. When the backup is done, switch the unit off and on.": "Para leer toda la flash se envía al aparato un pequeño ayudante que corre en la RAM. Reinicia el aparato en el ayudante (sin pulsar teclas) y solo escribe el área de almacenamiento del actualizador del firmware, nunca el área de arranque ni las claves. Cuando termine la copia, apaga y enciende el aparato.",
+        "Waiting for the unit to restart into the helper…": "Esperando a que el aparato se reinicie en el ayudante…",
+        "the helper did not appear. Switch the unit off and on, and try again": "el ayudante no apareció. Apaga y enciende el aparato y vuelve a intentarlo",
+        BOOT: "ARRANQUE",
+        SETTINGS: "AJUSTES",
+        PAIRINGS: "VINCULACIONES",
+        SOUNDS: "SONIDOS",
+        FREE: "LIBRE",
+        data: "datos",
+        blank: "vacío",
+        "stock bootloader, no protector": "bootloader de serie, sin protector",
+        "checking it against the unit…": "comprobándola con el aparato…",
+        "✓ the unit holds exactly this": "✓ el aparato tiene exactamente esto",
+        "✗ the unit's flash is NOT this: BACKUP again": "✗ la flash del aparato NO es esta: haz COPIA otra vez",
+        "could not check it against the unit": "no se pudo comprobar con el aparato",
+        "Reading what the unit says…": "Leyendo lo que dice el aparato…",
+        "Report copied: paste it in a message.": "Informe copiado: pégalo en un mensaje.",
+        "Report copied": "Informe copiado",
+        "The browser would not copy: the report was saved as a .txt file instead.": "El navegador no quiso copiar: el informe se guardó como archivo .txt.",
+        "NOTHING TO RESTART": "NADA QUE REINICIAR",
+        "The unit is not in the helper. If it seems stuck, switch it off and unplug its USB cable for a few seconds.": "El aparato no está en el ayudante. Si parece colgado, apágalo y desenchufa su cable USB unos segundos.",
+        "Restart the unit out of the helper mode? Nothing is written.": "¿Reiniciar el aparato fuera del modo ayudante? No se escribe nada.",
+        "Restart asked. Waiting for the unit to come back…": "Reinicio pedido. Esperando a que vuelva el aparato…",
+        "The unit is back on its firmware.": "El aparato ha vuelto a su firmware.",
+        "It did not come back by itself. Switch it off and unplug its USB cable for a few seconds, then plug it in and press CONNECT.": "No volvió solo. Apágalo y desenchufa su cable USB unos segundos, luego enchúfalo y pulsa CONECTAR.",
+        "CONNECT THE FIRMWARE FIRST": "CONECTA ANTES EL FIRMWARE",
+        "Switch the unit on with its firmware running (not the helper; RESTART UNIT if it is in the helper) and press CONNECT.": "Enciende el aparato con su firmware en marcha (no el ayudante; REINICIAR APARATO si está en el ayudante) y pulsa CONECTAR.",
+        "BACKUP FIRST": "ANTES, LA COPIA",
+        "Step 1 first: BACKUP this unit. The protector is only offered after a backup made in this session.": "Primero lo primero: haz COPIA de este aparato. El protector solo se ofrece tras una copia hecha en esta sesión.",
+        "ALREADY THERE": "YA ESTÁ",
+        "NEWER FLASH CHIP: USE M-FLASHER": "CHIP DE FLASH NUEVO: USA M-FLASHER",
+        "This unit has the newer flash chip (UC25HQ80, JEDEC B36014), which has had little testing with the protector: one unit did not start after it.\n\nInstall the protector with M-Flasher (github.com/jvitkauskas/m-flasher), then BACKUP here again. This page will not write the protector on this chip.": "Este aparato tiene el chip de flash nuevo (UC25HQ80, JEDEC B36014), poco probado con el protector: un aparato no arrancó después.\n\nInstala el protector con M-Flasher (github.com/jvitkauskas/m-flasher) y luego haz COPIA aquí otra vez. Esta página no escribirá el protector en este chip.",
+        "Install the protector (m-bootloader v2.4, MIT) on this FM-1? It replaces the boot area. Do not unplug the cable or switch the unit off until it restarts: a power cut can leave the unit not starting (usually recoverable with a USB cable, through the chip's own boot mode: see WARNINGS). Have your backup file copied off this computer first. M-Flasher is the maker's tested way; this page does the same as M-VAVE's updater would, with its own code.": "¿Instalar el protector (m-bootloader v2.4, MIT) en este FM-1? Sustituye el área de arranque. No desenchufes el cable ni apagues el aparato hasta que se reinicie: un corte de corriente puede dejarlo sin arrancar (casi siempre tiene arreglo con un cable USB, por el modo de arranque del propio chip: mira AVISOS). Antes, copia tu archivo de la copia fuera de este ordenador. M-Flasher es la vía probada de su autor; esta página hace lo mismo que haría el actualizador de M-VAVE, con su propio código.",
+        "Sent. The unit restarts by itself. Then BACKUP here again: the protector is only counted when that new backup shows it. (To look at it first: switch the unit off, hold PLAY, switch it on: the m-bootloader menu opens.)": "Enviado. El aparato se reinicia solo. Luego haz COPIA aquí otra vez: el protector solo cuenta cuando esa copia nueva lo muestra. (Para verlo antes: apaga el aparato, mantén PLAY y enciéndelo: se abre el menú de m-bootloader.)",
+        "Protector sent: back up again to check it": "Protector enviado: haz otra copia para comprobarlo",
+        "No backup kept in this browser yet for a connected unit: BACKUP first": "Aún no hay ninguna copia de un aparato conectado guardada en este navegador: haz COPIA antes",
+        "Backup file saved": "Archivo de la copia guardado",
+        "Choose a firmware in FIRMWARE first": "Elige antes un firmware en FIRMWARE",
+        "INSTALL LOCKED": "INSTALAR, BLOQUEADO",
+        "Back this unit up first (BACKUP). A custom firmware is only offered when a backup of the unit shows the protector in it. In the protector's MIDI mode BACKUP reads straight from the unit.": "Haz antes una copia de este aparato (COPIA). Solo se ofrece un firmware propio cuando una copia del aparato muestra el protector dentro. En el modo MIDI del protector, COPIA lee directamente del aparato.",
+        "NO PROTECTOR, NO CUSTOM FIRMWARE": "SIN PROTECTOR NO HAY FIRMWARE PROPIO",
+        "The backup of this unit does not show the protector. Install it first (PROTECTOR, or M-Flasher on the newer flash chip), then BACKUP again.": "La copia de este aparato no muestra el protector. Instálalo antes (PROTECTOR, o M-Flasher en el chip de flash nuevo) y luego haz COPIA otra vez.",
+        "NOT HERE": "AQUÍ NO",
+        "Putting a backup back is not built into this page: use M-Flasher for that.": "Esta página no restaura copias: usa M-Flasher para eso.",
+        "PUT THE UNIT IN MIDI MODE": "PON EL APARATO EN MODO MIDI",
+        "The protector is in the unit, but it is not in its MIDI mode now.\n\n1. Switch the unit off.\n2. Hold PLAY while switching it on.\n3. Choose MIDI mode on its screen.\n4. Press CONNECT here, then INSTALL again.": "El protector está en el aparato, pero ahora no está en su modo MIDI.\n\n1. Apaga el aparato.\n2. Mantén PLAY al encenderlo.\n3. Elige el modo MIDI en su pantalla.\n4. Pulsa CONECTAR aquí y luego INSTALAR otra vez.",
+        "BACK THE UNIT UP AGAIN": "HAZ OTRA COPIA DEL APARATO",
+        "Checking the package against this unit's chip key…": "Comprobando el paquete con la clave de chip de este aparato…",
+        "HOW IT GOES": "CÓMO SE HACE",
+        "BEFORE ANYTHING IS WRITTEN": "ANTES DE ESCRIBIR NADA",
+        // REAL FM-1 · MORE
+        "REAL FM-1 · MORE": "FM-1 REAL · MÁS",
+        "If the unit stays in the helper after a backup: ask the helper to restart it. (Switching it off and unplugging the USB cable does the same.)": "Si el aparato se queda en el ayudante tras una copia: pide al ayudante que lo reinicie. (Apagarlo y desenchufar el cable USB hace lo mismo.)",
+        "HELPER MODE": "MODO AYUDANTE",
+        "RESTART UNIT": "REINICIAR APARATO",
+        "Read what the unit says about itself (nothing is written) and copy a text report: ports, identity, chip, flash, backup, and what happened. Paste it in a message.": "Lee lo que el aparato dice de sí mismo (no se escribe nada) y copia un informe de texto: puertos, identidad, chip, flash, copia y lo que ha pasado. Pégalo en un mensaje.",
+        "NO WRITES": "SIN ESCRIBIR",
+        "INSPECT · COPY": "INSPECCIONAR · COPIAR",
+        "Save the last backup kept in this browser for the connected unit as a file": "Guarda como archivo la última copia del aparato conectado guardada en este navegador",
+        "KEPT IN THIS BROWSER": "EN ESTE NAVEGADOR",
+        "SAVE BACKUP": "GUARDAR COPIA",
+        "Tether: show this screen on the real FM-1. Off, the unit only sends its keys, pads and knobs (a lighter link: for a bigger screen, or to try firmwares quickly). Takes effect now.": "Tether: muestra esta pantalla en el FM-1 real. Apagado, el aparato solo envía sus teclas, pads y potes (un enlace más ligero: para una pantalla más grande, o para probar firmwares rápido). Se aplica al momento.",
+        "SCREEN ON THE FM-1": "PANTALLA EN EL FM-1",
+        "Tether: offer this page's sound on the FM-1's own output when it connects. Off, the sound always stays here.": "Tether: ofrece el sonido de esta página por la salida del FM-1 al conectar. Apagado, el sonido siempre se queda aquí.",
+        "SOUND OFFER": "OFRECER SONIDO",
+        "The steps, in order": "Los pasos, en orden",
+        READ: "LEER",
+        "What can go wrong, and what to do first": "Lo que puede salir mal y qué hacer antes",
+        WARNINGS: "AVISOS",
+        // the slider dialog
+        "Slide all the way to the right to confirm": "Desliza del todo a la derecha para confirmar",
+        "SLIDE TO THE END TO CONFIRM →": "DESLIZA HASTA EL FINAL PARA CONFIRMAR →",
+        "Cancel: nothing happens": "Cancelar: no pasa nada",
+        CANCEL: "CANCELAR",
+        "Slide all the way to confirm": "Desliza del todo para confirmar",
+        Cancelled: "Cancelado",
+        // MANUAL, ABOUT
+        "The manual of this app": "El manual de esta app",
+        "THIS APP": "ESTA APP",
+        "How the FM-1 itself works, with its own firmware": "Cómo funciona el propio FM-1, con su firmware de serie",
+        "THE FM-1": "EL FM-1",
+        "THANK YOU, JOAKIM": "GRACIAS, JOAKIM",
+        "ALSO THANKS": "Y GRACIAS A",
+        "The whole emulated FM-1 inside (its CPU, flash, screen, keys, knobs and sound) is his work, used unchanged. This app adds a phone-first front to it, a mapper for MIDI controllers and installation as an app.": "Todo el FM-1 emulado de dentro (su CPU, flash, pantalla, teclas, potes y sonido) es obra suya, usada sin cambios. Esta app le añade un frente pensado para el móvil, un mapeador para controladores MIDI y la instalación como app.",
+        "Unofficial: not affiliated with M-VAVE, JieLi or any of them.": "No oficial: sin relación con M-VAVE, JieLi ni ninguno de ellos.",
+        // vendor/real-fm1.js (its errors reach the job dialog)
+        "This unit did not say what its flash is": "Este aparato no dijo qué flash tiene",
+        Stopped: "Parado",
+        "The unit did not give its checksum": "El aparato no dio su checksum",
+        "The copy does not match the chip's checksum. Try again.": "La copia no coincide con el checksum del chip. Vuelve a intentarlo.",
+        "this package holds no flash image: it is an installer for the firmware route (such as the protector's own), not a firmware to install here": "este paquete no tiene imagen de flash: es un instalador para la vía del firmware (como el del propio protector), no un firmware para instalar aquí",
+        "the package is damaged: its checksum does not match": "el paquete está dañado: su checksum no coincide",
+        "This is not a firmware package": "Esto no es un paquete de firmware",
+        "This package's header is damaged": "La cabecera de este paquete está dañada",
+        "This package's file list is damaged": "La lista de archivos de este paquete está dañada",
+        "A flash copy is whole 4 KiB sectors": "Una copia de la flash son sectores enteros de 4 KiB",
+        "The copy cannot be wrapped (a byte after the prefix reads as a sentinel)": "La copia no se puede empaquetar (un byte tras el prefijo se lee como centinela)",
+        "The unit stopped asking for the package": "El aparato dejó de pedir el paquete",
+      };
+      // texts with a name or a number: [whole-text pattern, its Spanish] (the parts that are texts of their own go through tr again)
+      const ES_RE = [
+        // (the first is the only one tried on a text with parts: lines, or " · "; the others would take a part for the whole)
+        [/^No FM-1 found on USB MIDI\. Plug it in, switched on\. Ports this browser sees: (.*)\. INSPECT · COPY lists them all\.$/, (m, a) => "No se encontró ningún FM-1 por USB MIDI. Conéctalo, encendido. Puertos que ve este navegador: " + (a === "none" ? "ninguno" : a.replace(/ \(gone\)/g, " (desconectado)")) + ". INSPECCIONAR · COPIAR los lista todos."],
+        [/^Getting the manual of (.+)…$/, "Buscando el manual de $1…"],
+        [/^Open its page: (.+)$/, "Abre su página: $1"],
+        [/^Its manual \((.+), (\d{4}-\d\d-\d\d)\), written by its author\.$/, (m, a, b) => "Su manual (" + (a === "from its repository" ? "de su repositorio" : a) + ", " + b + "), escrito por su autor."],
+        [/^No manual was found: this is the README of its repository \((.+)\), written by its author\.$/, "No se encontró manual: este es el README de su repositorio ($1), escrito por su autor."],
+        [/^No manual to show: (.+)\.$/, (m, a) => "No hay manual que mostrar: " + tr(a) + "."],
+        [/^downloading (.+)…$/, "descargando $1…"],
+        [/^booting (.+)…$/, "arrancando $1…"],
+        [/^no sound: (.+)$/, "sin sonido: $1"],
+        [/^the package did not download \((.+)\)\. Get it from its author and use OPEN FILE$/, (m, a) => "el paquete no se descargó (" + a.replace(/^status /, "estado ").replace(/^not a firmware package$/, tr) + "). Consíguelo de su autor y usa ABRIR FIRMWARE"],
+        [/^No room to keep (.+) on this device$/, "No hay sitio para guardar $1 en este dispositivo"],
+        [/^The sound of (.+) drops out although this device has time to spare: its audio buffer is too small\. Slide to restart with a larger one: the keys answer a little later\. What it has not saved is lost\.$/, "El sonido de $1 se corta aunque a este dispositivo le sobra tiempo: su búfer de audio es demasiado pequeño. Desliza para reiniciar con uno mayor: las teclas responderán un poco más tarde. Lo que no haya guardado se pierde."],
+        [/^This device cannot run (.+) in real time: the sound breaks up$/, "Este dispositivo no puede ejecutar $1 en tiempo real: el sonido se corta"],
+        [/^This device cannot keep up with (.+) at (\d+) MHz, so the sound breaks up\. Slide to restart it at (\d+) MHz\. What it has not saved is lost\.$/, "Este dispositivo no da abasto con $1 a $2 MHz y el sonido se corta. Desliza para reiniciarlo a $3 MHz. Lo que no haya guardado se pierde."],
+        [/^The clock was lowered to (\d+) MHz\. Slide to restart (.+) at 100 MHz\. What it has not saved is lost\.$/, "El reloj se bajó a $1 MHz. Desliza para reiniciar $2 a 100 MHz. Lo que no haya guardado se pierde."],
+        [/^(.+) at (\d+) MHz$/, "$1 a $2 MHz"],
+        [/^(.+) is made for the SMK-37, another device: not all its controls are here$/, "$1 está hecho para el SMK-37, otro aparato: aquí no están todos sus controles"],
+        [/^(.+) is on$/, "$1 está en marcha"],
+        [/^Could not start the sound: (.+)$/, "No se pudo arrancar el sonido: $1"],
+        [/^Run (.+) on the FM-1$/, "Ejecuta $1 en el FM-1"],
+        [/^Download (.+) and keep it on this device: it then runs offline$/, "Descarga $1 y guárdalo en este dispositivo: luego funciona sin conexión"],
+        [/^Downloading (.+)…$/, "Descargando $1…"],
+        [/^(.+) is kept on this device$/, "$1 queda guardado en este dispositivo"],
+        [/^Install (.+) on the real FM-1 \(through the protector's MIDI mode\)\. Asks first\.$/, "Instala $1 en el FM-1 real (por el modo MIDI del protector). Pregunta antes."],
+        [/^The manual of (.+): found in its repository, or its README when there is none \(kept on this device once read\)$/, "El manual de $1: buscado en su repositorio, o su README si no hay (se guarda en este dispositivo al leerlo)"],
+        [/^Erase what (.+) saved \(patches, settings, songs\), or that and the downloaded firmware too\. Asks first\.$/, "Borra lo que guardó $1 (sonidos, ajustes, canciones), o eso y también el firmware descargado. Pregunta antes."],
+        [/^Erase what (.+) has saved \(patches, settings, songs\)\? This cannot be undone\.$/, "¿Borrar lo que ha guardado $1 (sonidos, ajustes, canciones)? No se puede deshacer."],
+        [/^Saves of (.+) erased$/, "Lo guardado de $1, borrado"],
+        [/^No firmware matches “(.*)”\.$/, "Ningún firmware coincide con “$1”."],
+        [/^(\d+) KEPT$/, "$1 GUARDADOS"],
+        [/^(.+) MB USED$/, "$1 MB USADOS"],
+        [/^(.+) MB FREE$/, "$1 MB LIBRES"],
+        [/^Starting again with (.+)\. A firmware with no DX7 voices ignores it$/, "Arrancando de nuevo con $1. Un firmware sin voces DX7 lo ignora"],
+        [/^(.+) loads when the FM-1 is turned on$/, "$1 se carga al encender el FM-1"],
+        [/^(.+) ready: tap ON$/, "$1 listo: pulsa ON"],
+        [/^Use ((?:FM-1|PIANO|POCKET|TERMINAL|DMG|DUNGEON|LCD|CRT|CLEAN).*)$/, (m, a) => "Usar " + tr(a)],
+        [/^firmware port: (.+)$/, (m, a) => "puerto del firmware: " + tr(a)],
+        [/^update port: (.+)$/, "puerto de actualización: $1"],
+        [/^protector: installed (\S+)(?: \(from the backup kept here, (\S+)\))?$/, (m, v, d) => "protector: instalado " + v + (d ? " (de la copia guardada aquí, " + d + ")" : "")],
+        [/^A real FM-1 is connected \((.+)\)\. Use it as the panel of this one\?$/, "Hay un FM-1 real conectado ($1). ¿Usarlo como panel de este?"],
+        [/^The sound plays on (.+)$/, "El sonido suena en $1"],
+        [/^Could not move the sound(?: to (.+?))?: (.+)$/, (m, a, b) => "No se pudo mover el sonido" + (a ? " a " + a : "") + ": " + b],
+        [/^OUTPUT (\d+)$/, "SALIDA $1"],
+        [/^(\w+) failed: (.+)$/, (m, a, b) => "Falló " + ({ Backup: "la copia", Inspect: "la inspección", Restart: "el reinicio", Protector: "el protector", Install: "la instalación" }[a] || a) + ": " + tr(b)],
+        [/^this does not say it is an FM-1 \(it says: (.*)\)$/, "no dice que sea un FM-1 (dice: $1)"],
+        [/^Installing ([^:]+)$/, "Instalando $1"],
+        [/^✓ Backup saved as (\S+) \((\d+) KiB, checked against the chip's own checksum\)$/, "✓ Copia guardada como $1 ($2 KiB, comprobada con el checksum del propio chip)"],
+        [/^✓ Backup kept in this browser \((\d+) KiB, checked against the chip's own checksum\)$/, "✓ Copia guardada en este navegador ($1 KiB, comprobada con el checksum del propio chip)"],
+        [/^✓ The protector \(m-bootloader (\S+)\) is in this flash: custom firmwares can be installed$/, "✓ El protector (m-bootloader $1) está en esta flash: se pueden instalar firmwares propios"],
+        [/^Backup saved: (.+)$/, "Copia guardada: $1"],
+        [/^The backup did not start in the emulator: (.*)$/, (m, a) => "La copia no arrancó en el emulador: " + tr(a)],
+        [/^(BOOT|SETTINGS|PAIRINGS|SOUNDS|FREE) (.+)$/, (m, a, b) => tr(a) + " " + b],
+        [/^(\d+) of (\d+) sectors hold data$/, "$1 de $2 sectores con datos"],
+        [/^from the backup of (.+)$/, "de la copia del $1"],
+        [/^The protector is already in this unit \((.+)\)\.$/, "El protector ya está en este aparato ($1)."],
+        [/^The backup shows another protector than the one running now \((.+)\)\. BACKUP once more so the page can check this one\.$/, "La copia muestra otro protector que el que corre ahora ($1). Haz COPIA una vez más para que la página compruebe este."],
+        [/^Install (.+) on the real FM-1\? Its present firmware is replaced \(and its saved patches with it, unless you restore your backup\)\.( This unit has the newer flash chip, which has had little testing\.)? The unit checks the package before it erases anything and only writes the firmware area, never the boot area\.$/, (m, a, b) => "¿Instalar " + a + " en el FM-1 real? Su firmware actual se sustituye (y sus sonidos guardados con él, salvo que restaures tu copia)." + (b ? " Este aparato tiene el chip de flash nuevo, poco probado." : "") + " El aparato comprueba el paquete antes de borrar nada y solo escribe el área del firmware, nunca el área de arranque."],
+        [/^this package says it is for (.+)$/, "este paquete dice que es para $1"],
+        [/^(.+)\. Look at the unit's screen: it says why it refused or stopped \(a package for another chip key, a damaged one, a flash error\)\. Nothing is erased before the unit has checked the whole package\.$/, (m, a) => tr(a) + ". Mira la pantalla del aparato: dice por qué lo rechazó o se paró (un paquete para otra clave de chip, uno dañado, un error de flash). No se borra nada antes de que el aparato haya comprobado el paquete entero."],
+        [/^Done: the unit restarts into (.+)\. If its screen stays dark, switch it off and on; hold PLAY at power-on for the recovery menu\.$/, "Hecho: el aparato se reinicia en $1. Si su pantalla sigue a oscuras, apágalo y enciéndelo; mantén PLAY al encender para el menú de recuperación."],
+        [/^(.+) installed$/, "$1 instalado"],
+        [/^The unit stopped answering at (\w+)$/, "El aparato dejó de responder en $1"],
+        [/^its flash image has a size the unit refuses \((\d+) bytes\) or the package is cut short$/, "su imagen de flash tiene un tamaño que el aparato rechaza ($1 bytes) o el paquete está cortado"],
+        [/^this firmware was built for another chip key than this unit's \((.+)\): the unit would refuse it$/, "este firmware se hizo para otra clave de chip que la de este aparato ($1): el aparato lo rechazaría"],
+        [/^(.+): where it is, and its entry$/, "$1: dónde está y su entrada"],
+        [/^(Top bar|Centre|Bottom bar) of the screen$/, (m, a) => ({ "Top bar": "Barra superior", Centre: "Centro", "Bottom bar": "Barra inferior" })[a] + " de la pantalla"],
+      ];
+      // our own paragraphs with links or bold (static markup, never anything read from outside), by their text
+      const ES_HTML = {
+        "Plug in a keyboard or pad controller. Its keys play the FM-1. Its knobs and pads start on the FM-1's knobs and buttons, and DEVICE shows a drawing of it where you can change any of them, and MAP learns your controller step by step (keys, pads, knobs, sustain, bend, transport). Knobs 1 to 4 are the FM-1's left knobs and 5 to 8 its right ones; the pads are its buttons. The sustain pedal is a MOD key: while it is held, the pads and knobs become a second set (pad 9 up). The MOD button turns that on or off.":
+          "Conecta un teclado o un controlador de pads. Sus teclas tocan el FM-1. Sus potes y pads empiezan en los potes y botones del FM-1, y <b>DISPOSITIVO</b> muestra un dibujo suyo donde puedes cambiar cualquiera de ellos, y <b>MAPEAR</b> aprende tu controlador paso a paso (teclas, pads, potes, sustain, bend, transporte). Los potes 1 a 4 son los de la izquierda del FM-1 y del 5 al 8 los de la derecha; los pads son sus botones. El pedal de sustain es una tecla MOD: mientras lo mantienes, los pads y los potes pasan a un segundo juego (del pad 9 en adelante). El botón MOD lo activa o lo desactiva.",
+        "FM1.Pocket is a fork of fm1-emu by Joakim Eriksson.": 'FM1.Pocket es un fork de <a href="https://github.com/joakimeriksson/fm1-emu" target="_blank" rel="noopener">fm1-emu</a>, de <b>Joakim Eriksson</b>.',
+        "Licence: MIT. © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (this page). Each firmware belongs to its author, under its own licence, and comes from the FM-1 Firmware Hub, whose pictures the cards show. Not affiliated with M-VAVE.":
+          '<b>Licencia: MIT.</b> © 2026 Joakim Eriksson (fm1-emu) · © 2026 utopick (esta página). Cada firmware pertenece a su autor, con su propia licencia, y viene de <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">el FM-1 Firmware Hub</a>, cuyas imágenes muestran las tarjetas. Sin relación con M-VAVE.',
+        "Tether (GPL-3.0), the firmware this page can install so a real FM-1 becomes the panel of this one, is built on Dinghy (zvenson), which is built on Felucca (hugelton) and SLOOP (isod89), all GPL-3.0. Its source is in pocket/firmware of this page's repository; the package inside this page is built from it by autobuild.sh. With it the unit is also a USB speaker: the page can play its sound there (Chrome or Edge 110 or newer), and offers to bring it back when Tether stops.":
+          '<b>Tether</b> (GPL-3.0), el firmware que esta página puede instalar para que un FM-1 real sea el panel de este, está hecho sobre <b>Dinghy</b> (zvenson), que está hecho sobre <b>Felucca</b> (hugelton) y SLOOP (isod89), todos GPL-3.0. Su código está en <a href="https://github.com/utopick/fm1-pocket/tree/pocket/pocket/firmware" target="_blank" rel="noopener">pocket/firmware</a> del repositorio de esta página; el paquete que lleva dentro se compila a partir de él con <code>autobuild.sh</code>. Con él el aparato es también un altavoz USB: la página puede hacer sonar ahí su sonido (Chrome o Edge 110 o posterior), y ofrece traerlo de vuelta cuando Tether se para.',
+        "jvitkauskas (MIT): m-bootloader, the protector and its USB MIDI updater (v2.4 is bundled; its specification is how this page talks to the unit), M-Flasher (the flash map's regions and colours; the way to install the protector on the newer chip) and M-Unbricker.":
+          '<b>jvitkauskas</b> (MIT): <a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>, el protector y su actualizador por USB MIDI (incluye la v2.4; su especificación es cómo esta página habla con el aparato), <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a> (las regiones y los colores del mapa de la flash; la manera de instalar el protector en el chip nuevo) y <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>.',
+        "M-VAVE made the FM-1; the manual here follows its user manual, in our own words. The firmware authors and the Firmware Hub made everything you can run.":
+          '<b>M-VAVE</b> hizo el FM-1; el manual de aquí sigue su manual de usuario, con nuestras palabras. <b>Los autores de los firmwares</b> y <a href="https://thefirmwarehub.com/" target="_blank" rel="noopener">el Firmware Hub</a> hicieron todo lo que puedes ejecutar.',
+        "Menu icons from Open Game Icons, under CC BY 3.0: Circuitry and Book cover by Lorc; Palette, Settings knobs and Info by Delapouite. Colour changed.":
+          '<b>Iconos del menú</b> de <a href="https://open-game-icons.net/" target="_blank" rel="noopener">Open Game Icons</a>, bajo <a href="https://creativecommons.org/licenses/by/3.0/" target="_blank" rel="noopener">CC BY 3.0</a>: Circuitry y Book cover de <a href="https://lorcblog.blogspot.com/" target="_blank" rel="noopener">Lorc</a>; Palette, Settings knobs e Info de <a href="https://delapouite.com/" target="_blank" rel="noopener">Delapouite</a>. Color cambiado.',
+        // HOW IT GOES
+        "CONNECT with the unit on, running its firmware, and its USB cable in.": "<b>CONECTAR</b> con el aparato encendido, con su firmware en marcha y su cable USB puesto.",
+        "BACKUP. A small helper restarts the unit; wait until the message says the backup is done. The first backup of a unit is saved as a file (keep it off this computer: it holds the original boot area) and every one is kept in this browser. Then RESTART UNIT, or switch it off and unplug the cable for a few seconds.":
+          "<b>COPIA.</b> Un pequeño ayudante reinicia el aparato; espera hasta que el mensaje diga que la copia está hecha. La primera copia de un aparato se guarda como archivo (guárdalo fuera de este ordenador: tiene el área de arranque original) y todas se guardan en este navegador. Luego <b>REINICIAR APARATO</b>, o apágalo y desenchufa el cable unos segundos.",
+        "PROTECTOR (not on the newer chip: use M-Flasher). Do not touch the unit until it restarts by itself.": "<b>PROTECTOR</b> (no en el chip nuevo: usa M-Flasher). No toques el aparato hasta que se reinicie solo.",
+        "BACKUP again. It has to show the protector. It is kept, so this is done once per unit.": "<b>COPIA otra vez.</b> Tiene que mostrar el protector. Se guarda, así que se hace una vez por aparato.",
+        "Protector's MIDI mode: switch the unit off, hold PLAY while switching it on, choose MIDI mode on its screen, then CONNECT here. (Holding PLAY at power-on always opens the m-bootloader menu: it is the way back if a firmware does not start.)":
+          "<b>Modo MIDI del protector:</b> apaga el aparato, mantén <b>PLAY</b> al encenderlo, elige el modo MIDI en su pantalla y luego CONECTAR aquí. (Mantener PLAY al encender siempre abre el menú de m-bootloader: es el camino de vuelta si un firmware no arranca.)",
+        "In FIRMWARE, an INSTALL button appears on each card once all of this is in place. M-VAVE's own FM-1.fwsc (OPEN FILE) puts the original firmware back the same way.":
+          "En <b>FIRMWARE</b>, cada tarjeta muestra un botón <b>INSTALAR</b> cuando todo esto está hecho. El FM-1.fwsc de M-VAVE (ABRIR FIRMWARE) devuelve el firmware original de la misma manera.",
+        "If a unit stops starting: see WARNINGS for the way back (the chip's own boot mode and the unbricker).": "Si un aparato deja de arrancar: mira <b>AVISOS</b> para volver (el modo de arranque del propio chip y el unbricker).",
+        // WARNINGS
+        "The protector (m-bootloader) goes in before any custom firmware. Without it a bad firmware can leave the unit not starting.":
+          'El protector (<a href="https://github.com/jvitkauskas/m-bootloader" target="_blank" rel="noopener">m-bootloader</a>) va antes que cualquier firmware propio. Sin él, un firmware malo puede dejar el aparato sin arrancar.',
+        "If a unit does not start, it can usually be brought back. The chip has its own boot mode that no update can erase: switch the unit off, hold OCT-, OCT+ and HOME for 5 seconds while switching it on (or hold OCT- as you switch on). If the computer then sees a USB disk called WL82 UBOOT1.00, MvaveFM1Unbricker ( illustrated guide) writes the firmware back from your backup or an official package, with only a USB cable; the Hub's rescue page has more. Official firmware backups: FM1Backups. If nothing shows on USB at all, it takes a small board (FM-1 Transporter) or a second working unit running M-Unbricker. This page cannot do that part: the computer has to talk to the unit as a USB disk.":
+          '<b>Si un aparato no arranca, casi siempre tiene arreglo.</b> El chip tiene su propio modo de arranque, que ninguna actualización puede borrar: apaga el aparato y mantén OCT-, OCT+ y HOME 5 segundos al encenderlo (o mantén OCT- al encender). Si entonces el ordenador ve un disco USB llamado <b>WL82 UBOOT1.00</b>, <a href="https://github.com/Quixotic7/MvaveFM1Unbricker" target="_blank" rel="noopener">MvaveFM1Unbricker</a> ( <a href="https://quixotic7.github.io/MvaveFM1Unbricker/" target="_blank" rel="noopener">guía ilustrada</a>) vuelve a escribir el firmware desde tu copia o desde un paquete oficial, solo con un cable USB; <a href="https://thefirmwarehub.com/tools/rescue/" target="_blank" rel="noopener">la página de rescate del Hub</a> tiene más. Copias oficiales del firmware: <a href="https://github.com/Quixotic7/FM1Backups" target="_blank" rel="noopener">FM1Backups</a>. Si no aparece nada por USB, hace falta una placa pequeña (<a href="https://github.com/kurogedelic/FM-1-transporter" target="_blank" rel="noopener">FM-1 Transporter</a>) o un segundo aparato que funcione con <a href="https://jvitkauskas.github.io/m-apps/unbricker/" target="_blank" rel="noopener">M-Unbricker</a>. Esta página no puede hacer esa parte: el ordenador tiene que hablar con el aparato como un disco USB.',
+        "A unit with the newer flash chip (UC25HQ80, JEDEC B36014) has had little testing: install the protector with M-Flasher first, not here.":
+          'Un aparato con el chip de flash nuevo (UC25HQ80, JEDEC B36014) está poco probado: instala antes el protector con <a href="https://github.com/jvitkauskas/m-flasher" target="_blank" rel="noopener">M-Flasher</a>, no aquí.',
+      };
+      // the English text to Spanish: whole, then by pattern, then line by line and part by part (" · "), then "name: text" and "text…"
+      function tr(s) {
+        if (ES[s]) return ES[s];
+        for (const [re, to] of /\n|^· | · /.test(s) ? ES_RE.slice(0, 1) : ES_RE) if (re.test(s)) return s.replace(re, to);
+        if (s.includes("\n")) return s.split("\n").map(tr).join("\n");
+        if (s.startsWith("· ")) return "· " + tr(s.slice(2));
+        if (s.includes(" · ")) return s.split(" · ").map(tr).join(" · ");
+        let m;
+        if ((m = /^(.+)…( \d+%)?$/.exec(s))) return tr(m[1]) + "…" + (m[2] || "");
+        if ((m = /^([^:]+): (.+)$/.exec(s))) return tr(m[1]) + ": " + tr(m[2]);
+        return s;
+      }
+      const NOTR = "#fm, #manBody, #licBody, #mdPanel, #midiLive, #langBtn, [data-notr], script, style, pre, template, canvas",
+        TR_ATTRS = ["title", "aria-label", "placeholder"],
+        trWas = new WeakMap(); // a node: [English, Spanish] of its text; an element: { attribute or "html": [English, Spanish] }
+      const trOut = (e) => !e || (!!e.closest(NOTR) && !e.closest("#rail")); // the rail is drawn inside #fm, and is ours
+      function trText(n) {
+        const t = n.data, was = trWas.get(n), core = t.trim();
+        if ((was && was[1] === t) || !/[a-z]/i.test(core)) return;
+        const es = tr(core), at = t.indexOf(core);
+        if (es === core) return;
+        trWas.set(n, [t, (n.data = t.slice(0, at) + es + t.slice(at + core.length))]);
+      }
+      function trAttr(e, a) {
+        const v = e.getAttribute(a), was = trWas.get(e) || {};
+        if (!v || (was[a] && was[a][1] === v)) return;
+        const es = tr(v);
+        if (es === v) return;
+        e.setAttribute(a, es);
+        trWas.set(e, Object.assign(was, { [a]: [v, es] }));
+      }
+      function trTree(n) {
+        if (n.nodeType === 3) return trText(n);
+        if (n.nodeType !== 1 || n.matches(NOTR)) return;
+        for (const a of TR_ATTRS) if (n.hasAttribute(a)) trAttr(n, a);
+        const html = n.firstElementChild && (n.tagName === "P" || n.tagName === "LI") && ES_HTML[n.textContent.replace(/\s+/g, " ").trim()];
+        if (html) {
+          const was = n.innerHTML;
+          n.innerHTML = html;
+          return trWas.set(n, Object.assign(trWas.get(n) || {}, { html: [was, n.innerHTML] }));
+        }
+        for (const c of n.childNodes) trTree(c);
+      }
+      function unTr(n) { // back to English: whatever still holds the Spanish put there
+        const was = trWas.get(n);
+        if (n.nodeType === 3) return was && n.data === was[1] && (n.data = was[0]);
+        if (n.nodeType !== 1) return;
+        if (was) for (const a of TR_ATTRS) if (was[a] && n.getAttribute(a) === was[a][1]) n.setAttribute(a, was[a][0]);
+        if (was?.html && n.innerHTML === was.html[1]) return (n.innerHTML = was.html[0]);
+        for (const c of n.childNodes) unTr(c);
+      }
+      // what the code writes later. Not the style attribute: the LEDs change it many times a second
+      const trWatch = new MutationObserver((list) => {
+        for (const r of list) {
+          const t = r.target;
+          if (trOut(t.nodeType === 1 ? t : t.parentElement)) continue;
+          if (r.type === "attributes") trAttr(t, r.attributeName);
+          else if (r.type === "characterData") trText(t);
+          else r.addedNodes.forEach(trTree);
+        }
+      });
+      function i18n() {
+        document.documentElement.lang = lang;
+        trWatch.disconnect();
+        if (lang === "es") {
+          trTree(document.body);
+          trTree($("#rail"));
+          trWatch.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: TR_ATTRS });
+        } else unTr(document.body);
+        menuTab($("#menu").dataset.tab); // its heading is the tab's own text
+      }
       $("#licBody").replaceChildren(
         el("h3", "", "LICENCES"),
           el("h3", "", "fm1-emu, the emulator inside"),
@@ -2755,6 +3347,7 @@
       status("off: tap ON");
       listFace();
       realFace(); // the steps of REAL FM-1 show their state from the start
+      i18n();
       refreshCatalog();
       navigator.storage?.persist?.(); // ask the browser not to clear the kept firmwares and saves
     </script>
