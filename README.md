@@ -4,7 +4,7 @@
 > put firmwares on a real FM-1.
 > **Open it: https://utopick.github.io/fm1-pocket/pocket/**
 >
-> [![FM1.Pocket running Tether](pocket/docs/whole.png)](https://utopick.github.io/fm1-pocket/pocket/)
+> [![FM1.Pocket running Tether](pocket/docs/tether-screen.png)](https://utopick.github.io/fm1-pocket/pocket/)
 >
 > His emulator is used unchanged, and everything below is his own README.
 
