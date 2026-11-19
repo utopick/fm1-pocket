@@ -81,6 +81,8 @@ the protector, because it runs before the firmware. WARNINGS (under MORE) explai
 
 Tether is a firmware we wrote for the real FM-1. It's free and open source, and it does two jobs.
 
+![Tether as a MIDI controller: turning knobs, the clock running with a pad lit on each beat, and a chord named on the screen](docs/tether.gif)
+
 The first is to connect your real FM-1 to FM1.Pocket. With the app open, the FM-1's keys, knobs and buttons play the
 app, and the app sends its screen and lights back to the FM-1. That means you can try any firmware from the list on
 real keys and a real screen without installing it on the unit, and the sound can come out of the FM-1's own output

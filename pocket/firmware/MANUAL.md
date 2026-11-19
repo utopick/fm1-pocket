@@ -46,6 +46,8 @@ Each click of a knob moves its value by 2, from 0 to 127, and every knob starts 
 
 From top to bottom, the screen shows:
 
+<img src="docs/screens/knob.png" width="160" alt="A knob turned"> <img src="docs/screens/name.png" width="160" alt="An app's name for the knob"> <img src="docs/screens/clock.png" width="160" alt="The tempo and bar from MIDI clock"> <img src="docs/screens/chord.png" width="160" alt="The chord you hold"> <img src="docs/screens/scale.png" width="160" alt="A scale a program lit">
+
 1. The name of the control you touched last, what it sends, and its value as a bar. A Pocket app can replace the name
    with what that control does in the app, such as SWING.
 2. The tempo and the bar and beat, when a program sends MIDI clock, along with whether it is playing or stopped.
@@ -129,6 +131,8 @@ MASTER envía el CC 7.
 ### Qué muestra la pantalla
 
 De arriba abajo, la pantalla muestra:
+
+<img src="docs/screens/knob.png" width="160" alt="Un pote girado"> <img src="docs/screens/name.png" width="160" alt="El nombre que una app da al pote"> <img src="docs/screens/clock.png" width="160" alt="El tempo y el compás del reloj MIDI"> <img src="docs/screens/chord.png" width="160" alt="El acorde que pulsas"> <img src="docs/screens/scale.png" width="160" alt="Una escala que un programa ha encendido">
 
 1. El nombre del último control que has tocado, lo que envía y su valor como una barra. Una app Pocket puede cambiar
    ese nombre por lo que hace ese control en la app, por ejemplo SWING.
