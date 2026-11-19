@@ -31,39 +31,40 @@ static void descriptors(void)
 {
     const uint8_t *d = CFG_DESC;
     uint32_t n = sizeof CFG_DESC, i, ifs = 0, links = 1, ac_len = 0, ac_sum = 0, in_ac = 0, ep04 = 0, ep84 = 0, cur_if = 99;
-    uint32_t it3 = 0, ot4 = 0, as3 = 0;
+    uint32_t it3 = 0, ot4 = 0, as3 = 0, midi_if = 99;
     for (i = 0; i < n && d[i] >= 2u; i += d[i]) {
         const uint8_t *x = d + i;
         if (x[1] == 4) {                                /* interface */
             in_ac = x[5] == 1 && x[6] == 1;
             cur_if = x[2];
+            if (x[5] == 1 && x[6] == 3) midi_if = x[2];
             if (x[3] == 0) ifs++;
         } else if (x[1] == 0x24 && in_ac) {             /* AC class-specific */
             if (x[2] == 1) ac_len = x[5] | x[6] << 8;
             ac_sum += x[0];
             if (x[2] == 2 && x[3] == 3) it3 = x[4] == 0x01 && x[5] == 0x01 && x[7] == 2;   /* USB streaming in, 2 ch */
             if (x[2] == 3 && x[3] == 4) ot4 = x[4] == 0x01 && x[5] == 0x03 && x[7] == 6;   /* speaker, from feature unit 6 (from 3) */
-        } else if (x[1] == 0x24 && cur_if == 3u && x[2] == 1) {
+        } else if (x[1] == 0x24 && cur_if == 2u && x[2] == 1) {
             as3 = x[3] == 3;                            /* AS general links terminal 3 */
         } else if (x[1] == 5) {
-            if (x[2] == 0x04) ep04 = cur_if == 3u && x[3] == 0x09 && (x[4] | x[5] << 8) == UO_MAXP_T && x[6] == 1;
-            if (x[2] == 0x84) ep84 = cur_if == 2u && x[3] == 0x05;
+            if (x[2] == 0x04) ep04 = cur_if == 2u && x[3] == 0x09 && (x[4] | x[5] << 8) == UO_MAXP_T && x[6] == 1;
+            if (x[2] == 0x84) ep84 = cur_if == 2u - TETHER_UAC_OUT && x[3] == 0x05;
         }
         links++;
     }
     ok(i == n && n == CFG_LEN && (d[2] | d[3] << 8) == n, "the configuration: descriptors chain to wTotalLength");
     ok(ifs == d[4], "bNumInterfaces = the interfaces described");
     ok(ac_len == ac_sum, "the AC header's wTotalLength = its class-specific descriptors");
-    ok(ep84, "the audio input is still EP4 IN, isochronous async, interface 2");
+    ok(ep84, "the audio input is still EP4 IN, isochronous async (interface 1, 2 without the speaker)");
     (void)links;
 #if TETHER_UAC_OUT
     {
         const uint8_t *h = d + 18;                      /* config 9, AC interface 9: the header */
-        ok(h[1] == 0x24 && h[2] == 1 && h[7] == 3 && h[8] == 1 && h[9] == 2 && h[10] == 3, "AC header: MIDI, audio in, speaker (interfaces 1 2 3)");
+        ok(h[1] == 0x24 && h[2] == 1 && h[7] == 3 && h[8] == 1 && h[9] == 2 && h[10] == 3 && midi_if == 3u, "AC header: audio in, speaker, MIDI (interfaces 1 2 3): MIDI last, or macOS makes no sound device");
     }
     ok(it3 && ot4 && as3, "speaker: input terminal 3 (USB streaming) -> output terminal 4 (speaker), linked by IF3");
     ok(ep04, "speaker: EP4 OUT isochronous adaptive, 192 bytes, 1 ms, interface 3");
-    ok(DEV_DESC[12] == 0x61 && DEV_DESC[13] == 0x03, "bcdDevice 3.61 (hosts read the descriptors again)");
+    ok(DEV_DESC[12] == 0x62 && DEV_DESC[13] == 0x03, "bcdDevice 3.62 (hosts read the descriptors again)");
     ok(UO_MAXP * 1000u / 4u >= 45000u, "a packet holds 45 frames (44.1 kHz)");
 #else
     (void)it3; (void)ot4; (void)as3;

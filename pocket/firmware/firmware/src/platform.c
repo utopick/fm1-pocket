@@ -351,6 +351,8 @@ void fm1_timer5_irq(void)
     }
     if (owed & 1u)
         usb_poll();
+    else if (usb.rx_burst && usb.config)        /* a burst from the host (Tether's screen: 15 KB a frame): 48 KB/s -> up to 480 */
+        ep1_rx();
 #if FELUCCA_UART
     if (owed & 2u)
         uart_midi_poll();

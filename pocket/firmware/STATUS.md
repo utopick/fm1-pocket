@@ -76,7 +76,9 @@ Measured (encoded sizes, `node --test pocket/tests/tether.test.js`; encoding tak
 | keyframe, black | 225 | 1,056 | 2 |
 | keyframe, full noise (worst case) | 225 | 135,225 | 225 |
 
-Estimated, not measured: the unit reads one 64-byte USB packet (48 SysEx bytes) per 0.5 ms, so **at most 96,000
+Since 0.8 the panel runs at 20 MHz (`LCD_BAUD 2u` in tether.c; ~46 ms for 15 bands), clean on the owner's FM-1. Since 0.7 the unit takes a packet on every 10 kHz tick while a burst arrives (up to ~480,000 SysEx bytes a second), so
+frames that redraw most of the screen (the 386DX firmware: ~15 KB each) are bound by the panel's SPI (~77 ms for 15 bands), not
+by USB. The figures below are 0.6's. Estimated, not measured: the unit read one 64-byte USB packet (48 SysEx bytes) per 0.5 ms, so **at most 96,000
 SysEx bytes a second**; the low figures assume half (48,000) because computers do not always send full packets. The panel's SPI
 at 12 MHz puts a 240 x 16 band on the screen in ~5.1 ms. A frame takes the longer of the two:
 

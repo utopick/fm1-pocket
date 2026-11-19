@@ -153,7 +153,7 @@ static struct {
 #define UO_HI 400u               /* above, merge two */
 #define UO_MAXF 48u              /* frames in the largest packet we take (44.1: 44 / 45) */
 #define UO_MAXP (UO_MAXF * 4u)
-#define UO_AS_IF 3u
+#define UO_AS_IF 2u
 _Static_assert(UO_HI + 2u * UO_MAXF < UO_N && UO_LO > 256u && UO_START > UO_LO && UO_START < UO_HI, "the speaker's band");
 static uint32_t uo_ring[UO_N];
 static volatile uint32_t uo_w, uo_r;
@@ -248,6 +248,7 @@ static struct {
     volatile uint8_t uboot_req;
     volatile uint8_t ota_req;    /* F0 22 24 35 7F F7: M-UPGRADE upgrade command (FELUCCA_OTA) */
     uint8_t rx_pend;             /* EP1 OUT packet seen, not yet taken (the MIDI ring was too full) */
+    uint8_t rx_burst;            /* the last look took a packet: look again on every 10 kHz tick, not only at 2 kHz (Tether's screen) */
     uint32_t rx_held, rx_bad;    /* packets held back (NAK) for room, malformed events ignored */
 } usb;
 
@@ -280,9 +281,12 @@ static void midi_out_event(uint32_t pkt)            /* from the audio ISR */
 /* ------------------------------------------------------- descriptors --- */
 /* interfaces: 0 audio control, 1 MIDI streaming, 2 audio streaming (FELUCCA_UAC), then CDC's two.
  * bcdDevice: 3.00 MIDI, +0.01 CDC, +0.10 the audio input, +0.20 more with 48 kHz (2.5), +0.40 Tether's speaker
- * (hosts cache descriptors per version); Tether's speaker is interface 3 (UO_AS_IF) */
+ * (hosts cache descriptors per version); +0.01 more its interface order; Tether's speaker is interface 2 (UO_AS_IF) */
 #define CDC_IF (2 + FELUCCA_UAC)
-#define UAC_AS_IF 2u
+#define UAC_AS_IF (2u - TETHER_UAC_OUT)
+/* Tether: MIDI comes after the audio streams (interfaces 0 control, 1 audio in, 2 speaker, 3 MIDI): macOS's usbaudiod takes a MIDI
+ * interface between the control and the streams for "no audio functions" and makes no sound device at all */
+#define MIDI_IF (TETHER_UAC_OUT ? 3 : 1)
 #define JACK_STR (TETHER_UAC_OUT ? 3 : 0)   /* string 3 = string 2 (the product): "Tether X.Y" */
 #define CFG_LEN (101 + 74 * FELUCCA_CDC + 74 * FELUCCA_UAC + 3 * FELUCCA_UAC_48K + 94 * TETHER_UAC_OUT)
 #define USB_NIF (2 + FELUCCA_UAC + 2 * FELUCCA_CDC + TETHER_UAC_OUT)
@@ -297,14 +301,14 @@ static const uint8_t CFG_DESC[] = {
 #define FELUCCA_USB_PID 0x0001   /* the update loader is 0x0002 */
 #endif
 static const uint8_t DEV_DESC[18] = {18, 1, 0x10, 0x01, 0, 0, 0, 64, 0x09, 0x12, FELUCCA_USB_PID & 0xFF,
-                                     FELUCCA_USB_PID >> 8, 0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K + 4 * TETHER_UAC_OUT) + TETHER_UAC_OUT, 0x03,
+                                     FELUCCA_USB_PID >> 8, 0x00 + 0x10 * (FELUCCA_UAC + FELUCCA_UAC_48K + 4 * TETHER_UAC_OUT) + 2 * TETHER_UAC_OUT, 0x03,
                                      1, 2, 0, 1};
 static const uint8_t CFG_DESC[] = {
     9, 2, CFG_LEN & 0xFF, CFG_LEN >> 8, USB_NIF, 1, 0, 0x80, 50,
 #endif
     9, 4, 0, 0, 0, 1, 1, 0, 0,
 #if TETHER_UAC_OUT
-    11, 0x24, 1, 0x00, 0x01, 73, 0, 3, 1, UAC_AS_IF, UO_AS_IF,   /* AC header 1.00: MIDI + audio in + speaker */
+    11, 0x24, 1, 0x00, 0x01, 73, 0, 3, UAC_AS_IF, UO_AS_IF, MIDI_IF,   /* AC header 1.00: audio in + speaker + MIDI */
 #elif FELUCCA_UAC
     10, 0x24, 1, 0x00, 0x01, 31, 0, 2, 1, UAC_AS_IF,    /* AC header 1.00: MIDI + audio streaming */
 #endif
@@ -322,18 +326,22 @@ static const uint8_t CFG_DESC[] = {
 #else
     9, 0x24, 1, 0x00, 0x01, 9, 0, 1, 1,
 #endif
-    9, 4, 1, 0, 2, 1, 3, 0, 0,
-    7, 0x24, 1, 0x00, 0x01, 0x41, 0x00,
-    6, 0x24, 2, 1, 1, JACK_STR,                         /* the jacks carry a name only in Tether: macOS keeps a device's first name */
-    6, 0x24, 2, 2, 2, JACK_STR,                         /* but names the ports after their jacks */
-    9, 0x24, 3, 1, 3, 1, 2, 1, JACK_STR,
-    9, 0x24, 3, 2, 4, 1, 1, 1, JACK_STR,
-    9, 5, 0x01, 2, 64, 0, 0, 0, 0,
-    5, 0x25, 1, 1, 1,
-    9, 5, 0x81, 2, 64, 0, 0, 0, 0,
+#define MIDI_DESC                                                                                                              \
+    9, 4, MIDI_IF, 0, 2, 1, 3, 0, 0,                                                                                           \
+    7, 0x24, 1, 0x00, 0x01, 0x41, 0x00,                                                                                        \
+    6, 0x24, 2, 1, 1, JACK_STR,     /* the jacks carry a name only in Tether: macOS keeps a device's first name */            \
+    6, 0x24, 2, 2, 2, JACK_STR,     /* but names the ports after their jacks */                                                \
+    9, 0x24, 3, 1, 3, 1, 2, 1, JACK_STR,                                                                                       \
+    9, 0x24, 3, 2, 4, 1, 1, 1, JACK_STR,                                                                                       \
+    9, 5, 0x01, 2, 64, 0, 0, 0, 0,                                                                                             \
+    5, 0x25, 1, 1, 1,                                                                                                          \
+    9, 5, 0x81, 2, 64, 0, 0, 0, 0,                                                                                             \
     5, 0x25, 1, 1, 3,
+#if !TETHER_UAC_OUT
+    MIDI_DESC
+#endif
 #if FELUCCA_UAC
-    9, 4, UAC_AS_IF, 0, 0, 1, 2, 0, 0,                  /* IF2 audio streaming, alt 0: no bandwidth */
+    9, 4, UAC_AS_IF, 0, 0, 1, 2, 0, 0,                  /* audio streaming, alt 0: no bandwidth */
     9, 4, UAC_AS_IF, 1, 1, 1, 2, 0, 0,                  /* alt 1: the stream */
     7, 0x24, 1, 2, 1, 0x01, 0x00,                       /* AS general: terminal 2, delay 1, PCM */
 #if FELUCCA_UAC_48K
@@ -346,12 +354,13 @@ static const uint8_t CFG_DESC[] = {
     7, 0x25, 1, 0x01, 0, 0, 0,                          /* CS endpoint: sampling frequency control */
 #endif
 #if TETHER_UAC_OUT
-    9, 4, UO_AS_IF, 0, 0, 1, 2, 0, 0,                   /* IF3 the speaker, alt 0: no bandwidth */
+    9, 4, UO_AS_IF, 0, 0, 1, 2, 0, 0,                   /* the speaker, alt 0: no bandwidth */
     9, 4, UO_AS_IF, 1, 1, 1, 2, 0, 0,                   /* alt 1: the stream */
     7, 0x24, 1, 3, 1, 0x01, 0x00,                       /* AS general: terminal 3, delay 1, PCM */
     11, 0x24, 2, 1, 2, 2, 16, 1, UAC_RATE & 0xFF, (UAC_RATE >> 8) & 0xFF, UAC_RATE >> 16,   /* type I: 2 ch, 16 bit, 44.1 */
     9, 5, 0x04, 0x09, UO_MAXP & 0xFF, UO_MAXP >> 8, 1, 0, 0,     /* EP4 OUT isochronous adaptive, 1 ms */
     7, 0x25, 1, 0x00, 0, 0, 0,                          /* CS endpoint: no controls */
+    MIDI_DESC
 #endif
 #if FELUCCA_CDC
     8, 0x0B, CDC_IF, 2, 2, 2, 1, 0,                     /* IAD: CDC ACM (IF 2-3, 3-4) */
@@ -1013,6 +1022,7 @@ static void ep1_rx(void)                                /* leaves the packet (NA
     csr = sie_rd(S_RXCSR1) | (sie_rd(S_RXCSR2) << 8);
     if (!(csr & 1u)) {
         usb.rx_pend = 0;
+        usb.rx_burst = 0;
         return;
     }
     n = sie_rd(S_RXCOUNT1) | (sie_rd(S_RXCOUNT2) << 8);
@@ -1024,6 +1034,7 @@ static void ep1_rx(void)                                /* leaves the packet (NA
         return;                                         /* rx_pend stays: taken on a later poll */
     }
     usb.rx_pend = 0;
+    usb.rx_burst = 1;
     usb.rx_pkts++;
     csr = (csr & ~0x164u) | 0x10u;
     sie_wr(S_RXCSR1, csr & 0xFFu);
@@ -1457,6 +1468,7 @@ static void usb_poll(void)                              /* TIMER5 ISR, 2 kHz */
         usb.e0_tx = 0;
         usb.has_pend_addr = 0;
         usb.rx_pend = 0;
+        usb.rx_burst = 0;
         ep1_at = 0;
 #if FELUCCA_CDC
         cdc.dtr = 0;
