@@ -81,6 +81,15 @@ test("a plain controller takes lights from USB notes: pads on channel 10, keys o
     "160 ms LEDS 00000200000 00000000000"]);
 });
 
+test("the controller's screen: NAME from an app names the control without linking; clock, chord and screen drawn", () => {
+  const name = (txt) => T.message(0x05, [...Buffer.from(txt)]);
+  const out = run("ctl-screen", ["10 enc 2 3", "100 midi 0xFA 0 0", "100 clock 120 200", "80 shot", "200 keys 0x91", "1300 shot", "1400 keys 0",
+    "1410 midi 0x90 60 100", "1420 midi 0x90 64 30", "1430 midi 0x90 67 30", "1440 midi 0x90 71 30", "1500 shot", "1600 enc 3 1", "1700 end"],
+    { 30: [name("SWING|54%")] });
+  assert.deepStrictEqual(midi(out).filter((l) => / B[0F] /.test(l)), ["1 ms MIDI out B0 7 64", "10 ms MIDI out B0 70 70", "1600 ms MIDI out B0 71 66"]); // still a controller after NAME
+  for (const t of [80, 1300, 1500]) assert.ok(fs.statSync(path.join(OUT, `ctl-screen-${t}.ppm`)).size > 57600);
+});
+
 test("LEDS sets the lit and dim LEDs by id", () => {
   const out = midi(run("leds", ["100 leds", "200 leds", "300 end"], { 0: [T.ping()], 50: [T.leds([0, 12, 14, 40])], 150: [T.leds([1], [2, 1])] }));
   assert.deepStrictEqual(out.slice(1), ["100 ms LEDS 10000005001 00000000000", "200 ms LEDS 00000000002 00000000004"]);

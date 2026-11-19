@@ -21,6 +21,8 @@ run "SMK-37 app on the host: the default script" env BOARD=smk37 sh tests/run_ho
 run "FM-1 MIDI: USB, the TRS jack, a clock, the channel" sh tests/run_host.sh tests/scripts/midi.txt
 run "SMK-37: velocity, a pad, an outer key, the pitch wheel" env BOARD=smk37 sh tests/run_host.sh tests/scripts/smk37.txt
 run "Tether: the panel -> MIDI bytes, LEDS, SCREEN frames from the page's encoder, a dropped message" node --test tests/tether_test.js
+$CC -o "$OUT/ctl_info_test" tests/ctl_info_test.c
+run "Tether's controller screen: chord and scale names, the transport from MIDI clock" "$OUT/ctl_info_test"
 $CC -Wno-int-to-pointer-cast -o "$OUT/sx_hold_test" tests/sx_hold_test.c
 run "Tether's SysEx path (usb.c, ota.c): held while one waits (NAK), resumed, 7D to the app, M-UPGRADE to the updater" "$OUT/sx_hold_test"
 $CC -Wno-int-to-pointer-cast -o "$OUT/uac_out_test" tests/uac_out_test.c

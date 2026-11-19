@@ -72,8 +72,13 @@ off). After `3000 ms` of silence the unit is a **plain MIDI controller**, and ba
 | encoders | absolute CC on channel 1, 2 steps a detent, from 64: K1..K4 = 70..73, SELECT 74, ALGORITHM 75, PRESETS 76 (SMK-37: SELECT 74, ALGORITHM 75, PRESETS 76, K1..K4 70..73) |
 | MASTER | CC 7, channel 1 |
 
-Held keys and pads are let go in the mapping they were pressed in when the mode changes. The unit's screen shows the octave,
-the channels, the last control touched and the incoming MIDI clock (F8, transport). The LEDs follow the buttons and keys held.
+Held keys and pads are let go in the mapping they were pressed in when the mode changes. The LEDs follow the buttons and keys held.
+
+The unit's screen (0.9), top to bottom: the control last touched, by its name on the unit (K1, SELECT, PLAY, a note) or the
+name an app gave it (NAME, `05`), with what it sends and its value as a bar; the transport from the MIDI clock (BPM over 4
+quarter notes, PLAY / STOP from FA FB FC, bar.beat in 4/4, F2 song position); the chord held on the keys, or else the chord
+or scale the computer lit (a single bright pitch class among dim ones is taken as the root); the octave and channels; a meter
+of the sound the computer plays into the unit (USB speaker).
 
 Lights (0.9, FM-1 only), like a Launchkey's pads: a note-on from USB lights a pad (channel 10, its note `36 + pad`) or a key
 (channel 1, by note: a lit note follows OCT- / OCT+, a note off the 27 keys shows nothing). Velocity 64..127 bright, 1..63
@@ -91,6 +96,7 @@ Page to unit:
 | `02` | LEDS | 6 bytes: lit mask, then optionally 6 bytes: dim mask |
 | `03` | SCREEN | `FF SL SH FL` then a packed payload (section 4) |
 | `04` | PING | none; no reply |
+| `05` | NAME | ASCII `label` or `label|value` (up to 20 and 14 characters): the unit's screen names the control just touched with it (an app's function, e.g. `SWING|54%`). Standalone only, and it does **not** link (0.9) |
 
 Unit to page:
 
