@@ -15,6 +15,7 @@
 #include <stdint.h>
 static void panel(void);
 #define LCD_IDLE panel                          /* while the screen's DMA runs: the panel still goes out */
+#define LCD_BAUD 2u                             /* the panel at 20 MHz, not Dinghy's 12 (60 MHz / (BAUD + 1)): a full repaint ~46 ms, not 77. Clean on the owner's FM-1 (0.8) */
 static void tether_sysex(const uint8_t *p, uint32_t n);
 #define APP_SYSEX tether_sysex                  /* platform.c (ota.c): our SysEx, from platform_poll */
 #define APP_NAME "TETHER"

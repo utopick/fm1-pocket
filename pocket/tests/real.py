@@ -267,6 +267,15 @@ class Real(unittest.TestCase):
         if self.js("return !!document.fullscreenElement"):
             self.assertFalse(self.js("return document.querySelector('#appExit').hidden"), "full screen: EXIT shows")
 
+    def test_sound_that_drops_out_with_time_to_spare_offers_a_larger_buffer(self):
+        late = "soundLate = () => true; run = { f: { name: 'X' } }; Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: 0, secs: 9, bad: 2, asked: false }); keepUp({ busy: 9, quanta: 10, frames: 128, emulated: 29, idle: 0 })"
+        self.js(late)   # load 0.31, the sound late for the third second
+        self.assertIn("larger one", self.text("#sureText")); self.assertFalse(self.js("return document.querySelector('#sure').hidden"))
+        self.click('#sureNo'); self.assertEqual(self.js("return latency"), "interactive")
+        self.js("latency = 'playback'; " + late)
+        self.assertTrue(self.js("return document.querySelector('#sure').hidden"), "already the larger buffer: nothing more to offer")
+        self.js("run = null")
+
     def test_backup_while_tether_runs_points_to_midi_mode(self):
         self.js("window.__tether = true")
         self.open_real(); self.click('#realConn'); self.click('#realSync'); time.sleep(1.2)
