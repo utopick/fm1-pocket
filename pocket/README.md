@@ -53,9 +53,29 @@ needs Chrome or Edge on a computer, or an Android phone; it doesn't work on iPho
 2. **BACKUP** saves a copy of everything on your FM-1 to a file, without changing anything. Keep that file somewhere safe.
 3. **PROTECTOR** installs [m-bootloader](https://github.com/jvitkauskas/m-bootloader) by jvitkauskas, a safety net that
    means a firmware that goes wrong can always be replaced. It asks you before it writes anything.
-4. **INSTALL** puts the firmware you choose on the FM-1. It stays locked until you've done steps 2 and 3.
+4. **INSTALL** puts the firmware you choose on the FM-1, with the **INSTALL ON MY FM-1** button on its card. It stays
+   locked until you've done steps 2 and 3, and it only works with the FM-1 in the protector's MIDI mode, explained below.
 
-If your FM-1 ever stops starting up, WARNINGS (under MORE) explains how to bring it back.
+### The protector's MIDI mode
+
+An FM-1 can't safely rewrite the firmware it is running, in the same way you can't rebuild a chair while sitting on
+it. The protector you add in step 3 solves this. It is a small program that starts before the firmware, and if you
+ask it to, it stays in charge instead of starting the firmware. In that state, called its MIDI mode, the FM-1 shows up
+on USB as a MIDI device that only receives new firmware. The protector checks the whole package before it erases
+anything, and then writes it while nothing else is running.
+
+So, once the protector is in, every firmware install goes like this:
+
+1. Switch the FM-1 off.
+2. Hold **PLAY** while you switch it on. The protector's menu appears on the FM-1's screen.
+3. Choose **MIDI mode** on that screen.
+4. Press **CONNECT** in the app, then **INSTALL ON MY FM-1** on the firmware you want.
+
+When the install finishes, the FM-1 starts the new firmware on its own. If the app asks for the MIDI mode at any point,
+it means the FM-1 is running its normal firmware, and you only need to repeat steps 1 to 4.
+
+The same menu is also your way out of trouble: if a firmware ever doesn't start, holding PLAY at power-on still opens
+the protector, because it runs before the firmware. WARNINGS (under MORE) explains what to do from there.
 
 ## Tether, our own firmware
 
@@ -89,8 +109,10 @@ the FM-1's screen shows what each knob and pad does in that app.
 
 The [Tether manual](firmware/MANUAL.md), in English and Spanish, explains all of this step by step.
 
-To install Tether, open OPTIONS, then REAL FM-1, and press **PLAY WITH THE REAL FM-1**. It takes the same safe steps
-as any other firmware, with a backup and the protector first. If you want M-VAVE's original firmware back, download
+To install Tether, put the FM-1 in the protector's MIDI mode (switch it off, hold PLAY while switching it on, and
+choose MIDI mode), then open OPTIONS, go to REAL FM-1, press CONNECT, and press **PLAY WITH THE REAL FM-1**, which now
+says INSTALL TETHER ON THIS FM-1. It takes the same safe steps as any other firmware, with a backup and the protector
+first. If you want M-VAVE's original firmware back, download
 FM-1.fwsc from M-VAVE, open it with OPEN FIRMWARE FILE and install it the same way.
 
 Tether works on Mac and Android, both as a controller and as a sound output. The screen and lights described above
