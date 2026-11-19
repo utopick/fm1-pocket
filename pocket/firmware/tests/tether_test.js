@@ -68,6 +68,19 @@ test("without a page the unit is a plain MIDI controller; a page takes it over, 
     "3151 ms MIDI out 80 53 0", "3151 ms MIDI out 90 53 100", "3151 ms MIDI out B0 7 87"]);  // 3 s without the page: a controller again; the held key is let go and pressed again (OCT- at 70 ms put the octave back to 0)
 });
 
+test("a plain controller takes lights from USB notes: pads on channel 10, keys on channel 1 by note, held ones bright", () => {
+  const out = midi(run("ctl-lights", ["10 midi 0x99 46 127", "20 midi 0x99 36 30", "30 midi 0x90 60 100", "40 leds",
+    "50 btn 1", "60 leds", "70 btn 0", "80 leds", "90 midi 0x89 46 0", "100 midi 0x99 36 0", "110 trs 0x90 62 127", "120 leds",
+    "130 btndown 12", "140 leds", "150 btnup 12", "160 leds", "170 end"])).filter((l) => / LEDS /.test(l));
+  assert.deepStrictEqual(out, [
+    "40 ms LEDS 00000201000 00000000004",   // PLAY (button 12 = pad note 46) bright, FX (button 2 = note 36) dim, C4 (60 = key 7, id 21) bright
+    "60 ms LEDS 00000001000 00000000004",   // OCT+: C4 is off the keys now
+    "80 ms LEDS 00000201000 00000000004",   // OCT-: back
+    "120 ms LEDS 00000200000 00000000000",  // note-off and velocity 0 turn them off; the TRS jack's notes are not lights
+    "140 ms LEDS 00000201000 00000000000",  // a held pad lights
+    "160 ms LEDS 00000200000 00000000000"]);
+});
+
 test("LEDS sets the lit and dim LEDs by id", () => {
   const out = midi(run("leds", ["100 leds", "200 leds", "300 end"], { 0: [T.ping()], 50: [T.leds([0, 12, 14, 40])], 150: [T.leds([1], [2, 1])] }));
   assert.deepStrictEqual(out.slice(1), ["100 ms LEDS 10000005001 00000000000", "200 ms LEDS 00000000002 00000000004"]);

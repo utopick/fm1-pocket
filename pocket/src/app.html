@@ -1743,7 +1743,7 @@
       const midiPanel = createMidiPanel(MI, miRun, midiMsg);
       // pad lights: a pad that works an FM-1 button shows that button's LED on the controller's own output (a note-on whose velocity picks the colour).
       // [dim, bright] palette indexes of the Novation pads (off 0): amber for the buttons, green for PLAY, red for REC. Not checked against the device's chart.
-      const LIGHT_COLOURS = { novation: { 12: [23, 21], 13: [7, 5], def: [11, 9] } };
+      const LIGHT_COLOURS = { novation: { 12: [23, 21], 13: [7, 5], def: [11, 9] }, tether: { def: [32, 127] } }; // Tether (0.9): velocity 1 to 63 dim, 64 and up bright
       let padSent = {}, lightsOn = stored("fm1.lights") !== "0";
       const lightsFace = () => (label($("#midiLights"), "PAD LIGHTS", "LIGHTS " + (lightsOn ? "ON" : "OFF")), $("#midiLights").classList.toggle("on", lightsOn));
       function padLights(clear) {

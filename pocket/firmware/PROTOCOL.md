@@ -74,6 +74,11 @@ off). After `3000 ms` of silence the unit is a **plain MIDI controller**, and ba
 
 Held keys and pads are let go in the mapping they were pressed in when the mode changes. The unit's screen shows the octave,
 the channels, the last control touched and the incoming MIDI clock (F8, transport). The LEDs follow the buttons and keys held.
+
+Lights (0.9, FM-1 only), like a Launchkey's pads: a note-on from USB lights a pad (channel 10, its note `36 + pad`) or a key
+(channel 1, by note: a lit note follows OCT- / OCT+, a note off the 27 keys shows nothing). Velocity 64..127 bright, 1..63
+dim, 0 or a note-off dark. A held key or pad is bright over them. Notes from the TRS jack are not lights. All lights go dark
+when a page links, and when it lets go.
 A page older than 0.6 sends no PING: the unit then returns to standalone 3 s after its last message.
 
 ## 3. Commands
