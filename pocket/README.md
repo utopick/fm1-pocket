@@ -5,11 +5,7 @@ keeps working without internet once you've installed it.
 
 **Open it: https://utopick.github.io/fm1-pocket/pocket/**
 
-| | |
-|---|---|
-| ![The whole FM-1, running Tether](docs/tether-screen.png) | ![Only the top part, in the white and blue colours](docs/top-white-blue.png) |
-| ![The keys as a piano](docs/piano-keys.png) | ![The menu](docs/menu-language.png) |
-| ![LOOK: pick the colours](docs/colours.png) | ![OPTIONS, REAL FM-1: four steps to put a firmware on your FM-1](docs/real-fm1-steps.png) |
+![The whole FM-1 in FM1.Pocket, running Tether](docs/tether-screen.png)
 
 ## What it is
 
@@ -23,11 +19,17 @@ Hold your phone sideways and play it like the real thing: tap the keys and butto
 turn it. You can use several fingers at once. One button switches between the whole FM-1, bigger keys, or just the
 top part with the knobs and screen.
 
+<img src="docs/piano-keys.png" width="420" alt="The bigger keys, as a piano"> <img src="docs/top-white-blue.png" width="420" alt="Only the top part, in the white and blue colours">
+
 In LOOK you can swap the FM-1's keys for piano keys, pick any of the colours the FM-1 is sold in (or a few of ours),
 and choose how the screen looks.
 
+<img src="docs/colours.png" width="420" alt="LOOK: a card for each colour">
+
 FIRMWARE lists the community's firmwares. Once you download one, it works offline, and each one comes with its
 author's manual. You can also open a firmware file you already have, or load a bank of DX7 sounds.
+
+<img src="docs/firmware-list.png" width="420" alt="FIRMWARE: the list, with DOWNLOAD, MANUAL and ERASE on each one">
 
 If you have a MIDI keyboard, plug it in and its keys will play the FM-1, while its knobs and pads work the FM-1's
 knobs and buttons. In OPTIONS, DEVICE shows a drawing of your keyboard, and MAP helps you set it up step by step.
@@ -36,12 +38,16 @@ MANUAL explains both this app and the FM-1 itself. The button at the top left of
 between English and Spanish. You can also install FM1.Pocket as an app from OPTIONS, so it gets its own icon and
 opens full screen.
 
+<img src="docs/menu-language.png" width="420" alt="The menu, with the language button at the top left">
+
 If your phone can't keep up and the sound stutters, the app will offer to run the firmware a little slower.
 
 ## Using a real FM-1
 
 If you own an FM-1, you can connect it with a USB cable and put a firmware on it from OPTIONS, under REAL FM-1. This
-needs Chrome or Edge on a computer, or an Android phone; it doesn't work on iPhone or iPad. There are four steps:
+needs Chrome or Edge on a computer, or an Android phone; it doesn't work on iPhone or iPad. There are four steps, shown along the top of the screen:
+
+<img src="docs/real-fm1-steps.png" width="420" alt="OPTIONS, REAL FM-1: the four steps, CONNECT, BACKUP, PROTECTOR and INSTALL">
 
 1. **CONNECT** the FM-1.
 2. **BACKUP** saves a copy of everything on your FM-1 to a file, without changing anything. Keep that file somewhere safe.
@@ -78,6 +84,8 @@ gives a bright light and a low one a dim light.
 The other Pocket apps know the FM-1 when it runs Tether. Their MIDI drawing shows its layout, its knobs and pads get
 useful jobs straight away (in TRACK.Pocket the MASTER knob is the master volume, for example), and, if you allow it,
 the FM-1's screen shows what each knob and pad does in that app.
+
+<img src="docs/midi-device.png" width="420" alt="The DEVICE drawing of an FM-1 running Tether: 8 knobs, 12 pads and 27 keys">
 
 The [Tether manual](firmware/MANUAL.md), in English and Spanish, explains all of this step by step.
 
