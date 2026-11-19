@@ -61,7 +61,8 @@ static void reply(uint32_t cmd, const uint8_t *d, uint32_t n)
  * Two modes. LINKED: a page (FM1.Pocket) spoke within LINK_MS (any valid SysEx, PING each second): the panel goes out as
  * PROTOCOL.md section 1 says. Otherwise the unit is a plain MIDI CONTROLLER: keys on channel 1 shifted by OCT- / OCT+,
  * the other buttons as pads (notes 36.., channel 10), knobs as absolute CCs (70..76, channel 1, 2 steps a detent),
- * MASTER as CC 7; the screen shows the octave, channels, the last control touched and the incoming MIDI clock. */
+ * MASTER as CC 7; the screen shows the octave, channels, the last control touched and the incoming MIDI clock. Notes from
+ * the computer light the pads and keys (host_light). */
 #define LINK_MS 3000u
 #define PAD0 36u
 #if BOARD_SMK37
@@ -131,10 +132,46 @@ static void leds_clear(void)
     uint32_t i;
     for (i = 0; i < 42u; i++) { fm1_led_key(i, 0); fm1_led_key_glow(i, 0); }
 }
+/* lights from the computer (controller mode, like a Launchkey's pads): a note-on to a pad (channel 10) or a key (channel 1)
+ * lights it, velocity 64..127 bright, 1..63 dim, 0 or a note-off dark. Keys go by note, so they follow OCT- / OCT+.
+ * What is held lights bright over them. */
+static uint32_t pad_lit, pad_dim, note_lit[4], note_dim[4];
+static void led_upd(uint32_t id)                /* FM-1 ids: 0..13 the buttons, 14..40 the keys */
+{
+#if !BOARD_SMK37
+    uint32_t on, dim;
+    if (id < NBTN) {
+        uint32_t pd = id == BTN_OCTD || id == BTN_OCTU ? 32u : pad_of(id);
+        on = (btn_on >> id & 1u) || (pd < 32u && pad_lit >> pd & 1u);
+        dim = pd < 32u && pad_dim >> pd & 1u;
+    } else {
+        int32_t n = (int32_t)(KEY0 + id - 14u) + 12 * oct;
+        uint32_t u = n < 0 || n > 127 ? 0u : (uint32_t)n;
+        on = (keys_sent >> (id - 14u) & 1u) || ((n >= 0 && n <= 127) && note_lit[u >> 5] >> (u & 31u) & 1u);
+        dim = n >= 0 && n <= 127 && note_dim[u >> 5] >> (u & 31u) & 1u;
+    }
+    fm1_led_key(id, (int)on);
+    fm1_led_key_glow(id, (int)(dim && !on));
+#else
+    (void)id;
+#endif
+}
+static void host_light(uint32_t ch, uint32_t note, uint32_t vel)
+{
+    uint32_t b, lit = vel >= 64u, dim = vel && vel < 64u, *L, *D, k;
+    if (ch == 9u && note >= PAD0 && note < PAD0 + NPAD) { b = note - PAD0; L = &pad_lit; D = &pad_dim; }
+    else if (ch == 0u) { b = note & 31u; L = &note_lit[note >> 5]; D = &note_dim[note >> 5]; }
+    else return;
+    *L = (*L & ~(1u << b)) | lit << b;
+    *D = (*D & ~(1u << b)) | dim << b;
+    for (k = 0; k < 41u; k++) led_upd(k);      /* (41 writes to a matrix in RAM: cheap) */
+}
 static void set_link(uint32_t on)
 {
     all_off();
     leds_clear();
+    pad_lit = pad_dim = note_lit[0] = note_lit[1] = note_lit[2] = note_lit[3] = 0;
+    note_dim[0] = note_dim[1] = note_dim[2] = note_dim[3] = 0;
     linked = on;
     master_v = 255u;                            /* MASTER is sent where it is, in the new mode */
     master_sent = -1000;
@@ -144,7 +181,7 @@ static void set_link(uint32_t on)
 
 static void panel(void)
 {
-    uint32_t keys, ch, k, b, rel, v;
+    uint32_t keys, ch, k, b, rel, v, i;
     int32_t d, m;
     if (!idle_ok) return;                       /* (not in the rescue, not before app_main) */
     if (linked && fm1_ms - link_ms > LINK_MS) set_link(0);   /* the page went quiet: a plain controller */
@@ -162,16 +199,10 @@ static void panel(void)
                 int32_t n = (int32_t)(KEY0 + k) + (linked ? 0 : 12 * oct);
                 knote[k] = (uint8_t)(n < 0 ? 0 : n > 127 ? 127 : n);
                 midi_send(0x90u, knote[k], vel);
-                if (!linked) { last_set("KEY", knote[k], vel, 1);
-#if !BOARD_SMK37
-                    fm1_led_key(14u + k, 1);
-#endif
-                }
+                if (!linked) { last_set("KEY", knote[k], vel, 1); led_upd(14u + k); }
             } else {
                 midi_send(0x80u, knote[k], 0);
-#if !BOARD_SMK37
-                if (!linked) fm1_led_key(14u + k, 0);
-#endif
+                if (!linked) led_upd(14u + k);
             }
         }
     b = fm1_input_edges(&rel);
@@ -181,26 +212,22 @@ static void panel(void)
             else if (k == BTN_OCTD || k == BTN_OCTU) {
                 oct += k == BTN_OCTU ? (oct < 3) : -(oct > -3);
                 ui_dirty |= UI_KEYS;
+                for (i = 14u; i < 41u; i++) led_upd(i);   /* the keys' lights go by note */
             } else {
                 midi_send(0x99u, PAD0 + pad_of(k), 100);
                 btn_on |= 1u << k;
                 btn_pad |= 1u << k;
                 last_set("PAD", PAD0 + pad_of(k), 100, 1);
-#if !BOARD_SMK37
-                fm1_led_key(k, 1);
-#endif
+                led_upd(k);
             }
         }
         if (rel >> k & 1u && btn_on >> k & 1u) {
-            if (btn_pad >> k & 1u) {
-                midi_send(0x89u, PAD0 + pad_of(k), 0);
-#if !BOARD_SMK37
-                fm1_led_key(k, 0);
-#endif
-            }
+            uint32_t was_pad = btn_pad >> k & 1u;
+            if (was_pad) midi_send(0x89u, PAD0 + pad_of(k), 0);
             else midi_send(0x8Fu, k, 0);
             btn_on &= ~(1u << k);
             btn_pad &= ~(1u << k);
+            if (was_pad) led_upd(k);            /* back to the computer's light, if it set one */
         }
     }
     for (k = 0; k < NENC; k++)
@@ -271,9 +298,11 @@ static void clock_poll(void)
 {
     static uint32_t t0, ticks;
     uint8_t st, d1, d2;
-    while (midi_get(&st, &d1, &d2)) {
+    int from;
+    while ((from = midi_get(&st, &d1, &d2)) != 0) {
         if (linked) continue;                   /* (the page has no use for them: they are only drained) */
-        if (st == 0xF8u) ticks++;
+        if (from == 1 && (st & 0xE0u) == 0x80u) host_light(st & 15u, d1, (st & 0xF0u) == 0x90u ? d2 : 0u);   /* note on/off from USB: a light */
+        else if (st == 0xF8u) ticks++;
         else if (st == 0xFAu || st == 0xFBu) { clk_run = 1; ui_dirty |= UI_CLOCK; }
         else if (st == 0xFCu) { clk_run = 0; ui_dirty |= UI_CLOCK; }
     }

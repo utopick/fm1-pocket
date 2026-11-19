@@ -21,7 +21,10 @@
     novation61: { title: "Novation Launchkey · 61 keys", shape: "lk", keys: 61, base: 36, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
     novation88: { title: "Novation Launchkey · 88 keys", shape: "lk", keys: 88, base: 21, pads: 16, knobs: 8, cc0: 21, source: "https://novationmusic.com/launchkey" },
     // read from a real unit on the stock firmware: 27 keys F3 to G5 (53 to 79), channel 1, fixed velocity 90, note-off; its knobs and buttons send nothing
-    fm1: { title: "M-VAVE FM-1 · 27 keys", shape: "fm1", keys: 27, base: 53, pads: 0, knobs: 0, source: "" },
+    // with the Tether firmware (0.6 and later) the FM-1 is a full controller: its 12 buttons are pads (channel 10, 36 to 47, FX to REC), its knobs
+    // CCs in the order they sit (MASTER 7, SELECT 74, PRESETS 76, ALGORITHM 75, K1 to K4 70 to 73), and (0.9) notes sent back light its pads and keys:
+    // velocity 64 and up bright, 1 to 63 dim. The stock firmware sends only the keys: the rest stays dark
+    fm1: { title: "M-VAVE FM-1 · 27 keys (Tether: 12 pads, 8 knobs, lights)", shape: "fm1", keys: 27, base: 53, pads: 12, knobs: 8, cc0: 0, ccs: [7, 74, 76, 75, 70, 71, 72, 73], padNotes: [[36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]], lights: "tether", source: "https://github.com/utopick/fm1-pocket" },
     generic: { title: "MIDI keyboard · generic", shape: "mpk", keys: 25, base: 48, pads: 8, knobs: 8, source: "" },
   };
   const css = `#mdPanel{position:fixed;inset:0;z-index:96;background:#000b;display:flex;align-items:center;justify-content:center;padding:12px;color:#eaf0f5;font:12px/1.45 system-ui}
@@ -155,9 +158,10 @@
         h = 230;
         inner = knob("c0", 58, 52, 20, "Knob 1") + screen(112, 28, 130, 50) + btnRow(272, 34, 6, 42, 32, 10) + keys(112, 100);
         break;
-      case "fm1": // the FM-1: a screen over 27 keys (its knobs and buttons send no MIDI on the stock firmware)
-        h = 190;
-        inner = screen(24, 26, 150, 56) + keys(100, 70);
+      case "fm1": // the FM-1: MASTER and three knobs, OCT- OCT+, the square screen, four knobs over 2 x 6 buttons (pads with Tether), 27 keys
+        h = 320;
+        inner = ["MASTER", "SELECT", "PRESETS", "ALGORITHM"].map((t, i) => knob("c" + i, 56 + (i % 2) * 70, 48 + Math.floor(i / 2) * 66, 20, t)).join("") + btnRow(32, 158, 2, 56, 26, 14) +
+          screen(196, 22, 168, 162) + [0, 1, 2, 3].map((i) => knob("c" + (4 + i), 432 + i * 92, 48, 20, "K" + (i + 1))).join("") + padGrid(410, 88, 6, p.pads, 50, 8) + keys(214, 92);
         break;
       case "piano": // 88 keys under a slim panel
         h = 210;
@@ -666,6 +670,7 @@
     // The Play mk3 sends one of two layouts depending on its program (FAVORITE + pad 5 = the standard one). A message that only one layout has says which one it is.
     const GB_NOTES = new Set([37, 39, 40, 41, 43, 44, 47, 50]), INT_NOTES = new Set([60, 62, 63, 64, 58, 75, 56, 77]);
     function sniffLayout(from, d) {
+      if (guess(from) === "fm1") return /fm1-pocket/.test(location.pathname) ? undefined : layoutTip("fm1"); // once: what Tether is and what it does for the FM-1 (FM1.Pocket says it itself)
       if (guess(from) !== "akai") return;
       const st = d[0], a = d[1], cmd = st & 0xf0;
       const l = cmd === 0xb0 ? ([70, 75, 76, 77].includes(a) ? "akaigb" : [91, 93, 6].includes(a) ? "akai" : "") : cmd === 0x90 && (st & 15) === 9 && d[2] > 0 ? (GB_NOTES.has(a) ? "akaigb" : INT_NOTES.has(a) ? "akai" : "") : "";
@@ -675,19 +680,29 @@
         r.profile = l; persist();
         if (el && from === device) { draw(); hint(`This MPK is sending its ${l === "akai" ? "internal-sounds" : "standard"} layout.`); }
       }
-      if (l === "akai" && !hw[from]) layoutTip();
+      if (l === "akai" && !hw[from]) layoutTip("akai");
     }
-    // a dialog, once: how to get the standard layout (the apps work with the internal one too, but its knobs are fewer and shared)
-    function layoutTip() {
-      let seen = ""; try { seen = sessionStorage.getItem("pocket.midi.tip") || localStorage.getItem("pocket.midi.tip.off") || ""; } catch {}
+    // a dialog, once a visit: how to get the MPK's standard layout (the apps work with the internal one too, but its knobs are fewer and shared),
+    // or what Tether is (an FM-1 on M-VAVE's firmware sends only its keys)
+    const TIPS = {
+      akai: {
+        en: ["Your MPK mini Play is on its internal-sounds layout", "This layout has fewer separate knobs and other notes on the pads. For the standard layout (8 knobs and 16 pads): hold FAVORITE and press pad 5. The screen will read FAV: Garageband."],
+        es: ["Tu MPK mini Play usa su disposición de sonidos internos", "Esta disposición tiene menos potes separados y otras notas en los pads. Para la disposición estándar (8 potes y 16 pads): mantén FAVORITE y pulsa el pad 5. La pantalla dirá «FAV: Garageband»."],
+      },
+      fm1: {
+        en: ["Tether: a custom firmware for the FM‑1", "Tether is a free, open-source (GPL) firmware for the M-VAVE FM-1, made for the Pocket apps. It replaces M-VAVE's own firmware, which only sends the 27 keys. With Tether the FM-1 is a full controller: its 12 buttons are pads, its 8 knobs (MASTER too) are knobs, OCT- and OCT+ shift the keys, the apps can light its keys and pads, and its screen shows what you touch and the MIDI clock. It is also a USB speaker: an app's sound can play out of the FM-1. With FM1.Pocket open it becomes the panel of the emulated FM-1, screen included. To install it: open FM1.Pocket, CONNECT, then PLAY WITH THE REAL FM-1. It makes a backup first, and M-VAVE's firmware can always be put back."],
+        es: ["Tether: un firmware alternativo para el FM‑1", "Tether es un firmware libre y de código abierto (GPL) para el M-VAVE FM-1, hecho para las apps Pocket. Sustituye al firmware de M-VAVE, que solo envía las 27 teclas. Con Tether el FM-1 es un controlador completo: sus 12 botones son pads, sus 8 potes (MASTER también) son potes, OCT- y OCT+ mueven las teclas de octava, las apps pueden encender sus teclas y pads, y su pantalla muestra lo que tocas y el reloj MIDI. También es un altavoz USB: el sonido de una app puede salir por el FM-1. Con FM1.Pocket abierto se convierte en el panel del FM-1 emulado, pantalla incluida. Para instalarlo: abre FM1.Pocket, CONNECT y luego PLAY WITH THE REAL FM-1. Primero hace una copia de seguridad, y el firmware de M-VAVE siempre se puede volver a poner."],
+      },
+    };
+    function layoutTip(kind) {
+      const sk = "pocket.midi.tip" + (kind === "akai" ? "" : "." + kind), off = sk + ".off"; // (the MPK's keys are the old ones: a choice already made stays)
+      let seen = ""; try { seen = sessionStorage.getItem(sk) || localStorage.getItem(kind === "akai" ? "pocket.midi.tip.off" : off) || ""; } catch {}
       if (seen || typeof document === "undefined" || document.getElementById("mdTip")) return;
-      try { sessionStorage.setItem("pocket.midi.tip", "1"); } catch {}
+      try { sessionStorage.setItem(sk, "1"); } catch {}
       const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]'), app = ((meta && meta.content) || "").slice(0, 4).toLowerCase();
       let l = ""; try { l = localStorage.getItem(app + (document.title.startsWith("TEST") ? "-test" : "") + ".lang") || ""; } catch {}
       const es = (l || navigator.language || "en").toLowerCase().startsWith("es");
-      const T = es
-        ? ["Tu MPK mini Play usa su disposición de sonidos internos", "Esta disposición tiene menos potes separados y otras notas en los pads. Para la disposición estándar (8 potes y 16 pads): mantén FAVORITE y pulsa el pad 5. La pantalla dirá «FAV: Garageband».", "ENTENDIDO", "NO MOSTRAR MÁS"]
-        : ["Your MPK mini Play is on its internal-sounds layout", "This layout has fewer separate knobs and other notes on the pads. For the standard layout (8 knobs and 16 pads): hold FAVORITE and press pad 5. The screen will read FAV: Garageband.", "GOT IT", "DON'T SHOW AGAIN"];
+      const T = [...TIPS[kind][es ? "es" : "en"], ...(es ? ["ENTENDIDO", "NO MOSTRAR MÁS"] : ["GOT IT", "DON'T SHOW AGAIN"])];
       const box = document.createElement("div");
       box.id = "mdTip"; box.setAttribute("role", "alertdialog");
       box.style.cssText = "position:fixed;inset:0;z-index:9050;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:12px";
@@ -696,7 +711,7 @@
       box.querySelector('[data-t="ok"]').textContent = T[2]; box.querySelector('[data-t="off"]').textContent = T[3];
       box.onclick = (e) => {
         const t = e.target.closest("[data-t]")?.dataset.t;
-        if (t === "off") { try { localStorage.setItem("pocket.midi.tip.off", "1"); } catch {} }
+        if (t === "off") { try { localStorage.setItem(kind === "akai" ? "pocket.midi.tip.off" : off, "1"); } catch {} }
         if (t || e.target === box) box.remove();
       };
       document.body.appendChild(box);
