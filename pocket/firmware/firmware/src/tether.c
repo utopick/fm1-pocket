@@ -100,7 +100,7 @@ static uint8_t knote[27], cc_v[NENC] = {64, 64, 64, 64, 64, 64, 64};
 /* the screen's top: the control last touched, by its name on the unit (or the app's, NAME), and its value (0..127, a bar) */
 static char ctl_name[24] = "-", ctl_val[16];
 static int32_t ctl_v = -1;
-static uint32_t ctl_ms;
+static uint32_t ctl_ms, ctl_id = 999u, ctl_named = 999u;   /* the control on screen, and the one an app named (it keeps that name) */
 static tp_t tp;
 #if BOARD_SMK37
 static const char *const ENC_NAME[NENC] = {"SELECT", "ALGORITHM", "PRESETS", "K1", "K2", "K3", "K4"};
@@ -126,10 +126,15 @@ static char *note_name(char *p, uint32_t n)
     p = sapp(p, N[n % 12u]);
     return sint(p, (int32_t)(n / 12u) - 1);
 }
-static void last_set(const char *name, uint32_t note, int32_t v, const char *what)   /* "K1" 83 "CC 70"; "F#3" 100 "KEY" */
+static void last_set(uint32_t id, const char *name, uint32_t note, int32_t v, const char *what)   /* "K1" 83 "CC 70"; "F#3" 100 "KEY" */
 {
-    char *p = name ? sapp(ctl_name, name) : note_name(ctl_name, note);
-    *p = 0;
+    char *p;
+    if (id != ctl_named || id != ctl_id) {     /* (the control an app named keeps its name while it is used) */
+        p = name ? sapp(ctl_name, name) : note_name(ctl_name, note);
+        *p = 0;
+        ctl_named = 999u;
+    }
+    ctl_id = id;
     p = sapp(ctl_val, what);
     *p = 0;
     ctl_v = v;
@@ -140,7 +145,7 @@ static void last_cc(const char *name, uint32_t cc, uint32_t v)
 {
     char w[8], *p = sapp(w, "CC ");
     *sint(p, (int32_t)cc) = 0;
-    last_set(name, 0, (int32_t)v, w);
+    last_set(100u + cc, name, 0, (int32_t)v, w);
 }
 
 static void all_off(void)                       /* what is held is let go in the mapping it was pressed in */
@@ -229,7 +234,7 @@ static void panel(void)
                 int32_t n = (int32_t)(KEY0 + k) + (linked ? 0 : 12 * oct);
                 knote[k] = (uint8_t)(n < 0 ? 0 : n > 127 ? 127 : n);
                 midi_send(0x90u, knote[k], vel);
-                if (!linked) { last_set(0, knote[k], (int32_t)vel, "KEY"); led_upd(14u + k); }
+                if (!linked) { last_set(200u, 0, knote[k], (int32_t)vel, "KEY"); led_upd(14u + k); }
             } else {
                 midi_send(0x80u, knote[k], 0);
                 if (!linked) led_upd(14u + k);
@@ -253,9 +258,9 @@ static void panel(void)
                     q = sapp(q, "  ");
                     *note_name(q, PAD0 + pad_of(k)) = 0;
 #if BOARD_SMK37
-                    last_set("PAD", 0, -1, w);
+                    last_set(k, "PAD", 0, -1, w);
 #else
-                    last_set(BTN_NAME[k], 0, -1, w);
+                    last_set(k, BTN_NAME[k], 0, -1, w);
 #endif
                 }
                 led_upd(k);
@@ -520,9 +525,10 @@ static void tether_sysex(const uint8_t *p, uint32_t n)   /* the bytes between F0
         if (!sum || linked) return;
         for (i = 6; i + 1u < n; i++) {
             if (p[i] == '|' && end == ctl_name + 20) { *o = 0; o = ctl_val; end = ctl_val + 14; continue; }
-            if (o < end) *o++ = p[i] >= 0x20u && p[i] < 0x7Fu ? (char)p[i] : '?';
+            if (o < end) *o++ = p[i] >= 'a' && p[i] <= 'z' && end == ctl_name + 20 ? (char)(p[i] - 32) : p[i] >= 0x20u && p[i] < 0x7Fu ? (char)p[i] : '?';
         }
         *o = 0;
+        ctl_named = ctl_id;                     /* (the big font has no lower case: the name is upper case) */
         ui_dirty |= UI_LAST;
         return;
     }
