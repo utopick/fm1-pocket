@@ -23,6 +23,7 @@ static void tether_sysex(const uint8_t *p, uint32_t n);
 #define TETHER_UAC_OUT 1                        /* the USB speaker (usb.c); 0: the USB audio input only, as protocol 1 */
 #endif
 #include "platform.c"
+#include "ctl_info.h"
 
 #if BOARD_SMK37
 #define BOARD_ID 1u
@@ -38,8 +39,20 @@ static void tether_sysex(const uint8_t *p, uint32_t n);
 #define CAPS (TETHER_UAC_OUT ? 1u : 0u)         /* CA bit 0: the unit is a USB speaker (usb.c may turn it off: no UAC) */
 
 #if TETHER_UAC_OUT && !defined(DINGHY_HOST)
-static void app_audio(int32_t *out, uint32_t n) { uo_play(out, n); }   /* what the page plays into the USB speaker */
+static volatile uint32_t pk_l, pk_r;            /* the loudest sample since the screen last looked: the meter */
+static void app_audio(int32_t *out, uint32_t n)  /* what the page plays into the USB speaker */
+{
+    uint32_t i, l = pk_l, r = pk_r, a;
+    uo_play(out, n);
+    for (i = 0; i < n; i++) {
+        a = (uint32_t)(out[2u * i] < 0 ? -out[2u * i] : out[2u * i]); if (a > l) l = a;
+        a = (uint32_t)(out[2u * i + 1u] < 0 ? -out[2u * i + 1u] : out[2u * i + 1u]); if (a > r) r = a;
+    }
+    pk_l = l;
+    pk_r = r;
+}
 #else
+static volatile uint32_t pk_l, pk_r;
 static void app_audio(int32_t *out, uint32_t n) { (void)out; (void)n; }   /* silent: the page's sound stays on the computer */
 #endif
 
@@ -61,7 +74,7 @@ static void reply(uint32_t cmd, const uint8_t *d, uint32_t n)
  * Two modes. LINKED: a page (FM1.Pocket) spoke within LINK_MS (any valid SysEx, PING each second): the panel goes out as
  * PROTOCOL.md section 1 says. Otherwise the unit is a plain MIDI CONTROLLER: keys on channel 1 shifted by OCT- / OCT+,
  * the other buttons as pads (notes 36.., channel 10), knobs as absolute CCs (70..76, channel 1, 2 steps a detent),
- * MASTER as CC 7; the screen shows the octave, channels, the last control touched and the incoming MIDI clock. Notes from
+ * MASTER as CC 7; the screen shows the last control touched (or an app's NAME), the clock, the chord or scale, a meter. Notes from
  * the computer light the pads and keys (host_light). */
 #define LINK_MS 3000u
 #define PAD0 36u
@@ -79,12 +92,22 @@ static uint32_t lost, frame_open, lost_f;   /* (the screen's state, below) */
 #define UI_KEYS 1u
 #define UI_LAST 2u
 #define UI_CLOCK 4u
+#define UI_HARM 8u
 #define UI_ALL 0xFFu
 static uint32_t idle_ok, keys_sent, master_v = 255, linked, link_ms, btn_on, btn_pad, ui_dirty = UI_ALL;
 static int32_t master_sent = -1000, oct;
 static uint8_t knote[27], cc_v[NENC] = {64, 64, 64, 64, 64, 64, 64};
-static char last_txt[24] = "-";
-static uint32_t clk_bpm, clk_run;
+/* the screen's top: the control last touched, by its name on the unit (or the app's, NAME), and its value (0..127, a bar) */
+static char ctl_name[24] = "-", ctl_val[16];
+static int32_t ctl_v = -1;
+static uint32_t ctl_ms;
+static tp_t tp;
+#if BOARD_SMK37
+static const char *const ENC_NAME[NENC] = {"SELECT", "ALGORITHM", "PRESETS", "K1", "K2", "K3", "K4"};
+#else
+static const char *const ENC_NAME[NENC] = {"SELECT", "ALGORITHM", "K1", "K2", "K3", "K4", "PRESETS"};
+static const char *const BTN_NAME[NBTN] = {"OCT-", "OCT+", "FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"};
+#endif
 
 static uint32_t pad_of(uint32_t k) { return k - (k > BTN_OCTD) - (k > BTN_OCTU); }
 static char *sapp(char *p, const char *s) { while (*s) *p++ = *s++; return p; }
@@ -103,16 +126,21 @@ static char *note_name(char *p, uint32_t n)
     p = sapp(p, N[n % 12u]);
     return sint(p, (int32_t)(n / 12u) - 1);
 }
-static void last_set(const char *a, uint32_t id, uint32_t v, int as_note)   /* "KEY F#3 58", "PAD 5 N40", "KNOB CC71 83" */
+static void last_set(const char *name, uint32_t note, int32_t v, const char *what)   /* "K1" 83 "CC 70"; "F#3" 100 "KEY" */
 {
-    char *p = sapp(last_txt, a);
-    *p++ = ' ';
-    if (as_note) p = note_name(p, id);
-    else { p = sapp(p, "CC"); p = sint(p, (int32_t)id); }
-    *p++ = ' ';
-    p = sint(p, (int32_t)v);
+    char *p = name ? sapp(ctl_name, name) : note_name(ctl_name, note);
     *p = 0;
+    p = sapp(ctl_val, what);
+    *p = 0;
+    ctl_v = v;
+    ctl_ms = fm1_ms;
     ui_dirty |= UI_LAST;
+}
+static void last_cc(const char *name, uint32_t cc, uint32_t v)
+{
+    char w[8], *p = sapp(w, "CC ");
+    *sint(p, (int32_t)cc) = 0;
+    last_set(name, 0, (int32_t)v, w);
 }
 
 static void all_off(void)                       /* what is held is let go in the mapping it was pressed in */
@@ -165,6 +193,7 @@ static void host_light(uint32_t ch, uint32_t note, uint32_t vel)
     *L = (*L & ~(1u << b)) | lit << b;
     *D = (*D & ~(1u << b)) | dim << b;
     for (k = 0; k < 41u; k++) led_upd(k);      /* (41 writes to a matrix in RAM: cheap) */
+    ui_dirty |= UI_HARM;                        /* what is lit has a name too */
 }
 static void set_link(uint32_t on)
 {
@@ -188,6 +217,7 @@ static void panel(void)
     keys = fm1_in.notes & 0x7FFFFFFu;
     ch = keys ^ keys_sent;
     keys_sent = keys;
+    if (ch && !linked) ui_dirty |= UI_HARM;     /* the chord held */
     for (k = 0; k < 27u; k++)
         if (ch >> k & 1u) {
 #if BOARD_SMK37
@@ -199,7 +229,7 @@ static void panel(void)
                 int32_t n = (int32_t)(KEY0 + k) + (linked ? 0 : 12 * oct);
                 knote[k] = (uint8_t)(n < 0 ? 0 : n > 127 ? 127 : n);
                 midi_send(0x90u, knote[k], vel);
-                if (!linked) { last_set("KEY", knote[k], vel, 1); led_upd(14u + k); }
+                if (!linked) { last_set(0, knote[k], (int32_t)vel, "KEY"); led_upd(14u + k); }
             } else {
                 midi_send(0x80u, knote[k], 0);
                 if (!linked) led_upd(14u + k);
@@ -217,7 +247,17 @@ static void panel(void)
                 midi_send(0x99u, PAD0 + pad_of(k), 100);
                 btn_on |= 1u << k;
                 btn_pad |= 1u << k;
-                last_set("PAD", PAD0 + pad_of(k), 100, 1);
+                {
+                    char w[16], *q = sapp(w, "PAD ");
+                    q = sint(q, (int32_t)pad_of(k) + 1);
+                    q = sapp(q, "  ");
+                    *note_name(q, PAD0 + pad_of(k)) = 0;
+#if BOARD_SMK37
+                    last_set("PAD", 0, -1, w);
+#else
+                    last_set(BTN_NAME[k], 0, -1, w);
+#endif
+                }
                 led_upd(k);
             }
         }
@@ -235,7 +275,7 @@ static void panel(void)
             if (!linked) {                      /* an absolute CC, 2 steps a detent */
                 int32_t a = (int32_t)cc_v[k] + 2 * d;
                 a = a < 0 ? 0 : a > 127 ? 127 : a;
-                if (a != cc_v[k]) { cc_v[k] = (uint8_t)a; midi_send(0xB0u, CCN[k], (uint32_t)a); last_set("KNOB", CCN[k], (uint32_t)a, 0); }
+                if (a != cc_v[k]) { cc_v[k] = (uint8_t)a; midi_send(0xB0u, CCN[k], (uint32_t)a); last_cc(ENC_NAME[k], CCN[k], (uint32_t)a); }
                 break;
             } else {
                 int32_t s = d > 63 ? 63 : d < -63 ? -63 : d;
@@ -249,68 +289,132 @@ static void panel(void)
         master_sent = m;
         master_v = v;
         if (linked) midi_send(0xBFu, 27u, v);
-        else { midi_send(0xB0u, 7u, v); last_set("MASTER", 7u, v, 0); }
+        else { midi_send(0xB0u, 7u, v); last_cc("MASTER", 7u, v); }
     }
 }
 
-/* ---- the controller's screen (main loop only): the lines that changed are drawn again */
+/* ---- the controller's screen (main loop only): the parts that changed are drawn again
+ *   y 4    TETHER 0.9 · MIDI CONTROLLER
+ *   y 26   the control last touched (its name on the unit, or the app's: NAME), y 62 what it sends and its value, a bar
+ *   y 88   the transport from the MIDI clock: BPM, PLAY / STOP, bar.beat
+ *   y 112  the chord held on the keys, or the chord / scale the computer lit (bright root, dim rest)
+ *   y 150  the keys' octave and channels;  y 178 the meter of the sound the computer plays into the unit (USB speaker)
+ *   y 214  how to link */
+#define C_NAME RGB(255, 255, 255)
+#define C_SUB RGB(140, 220, 200)
+static void harm_text(char *out)
+{
+    uint32_t k, pcs = 0, bass = 128u, lit = 0, dim = 0, prefer = 12u;
+    for (k = 0; k < 27u; k++)
+        if (keys_sent >> k & 1u) { pcs |= 1u << knote[k] % 12u; if (knote[k] < bass) bass = knote[k]; }
+    if (!pcs)                                   /* nothing held: what the computer lit */
+        for (k = 0; k < 128u; k++) {
+            uint32_t b = note_lit[k >> 5] >> (k & 31u) & 1u, d = note_dim[k >> 5] >> (k & 31u) & 1u;
+            if (!b && !d) continue;
+            if (b) lit |= 1u << k % 12u; else dim |= 1u << k % 12u;
+            if (k < bass) bass = k;
+        }
+    if (!pcs) {
+        pcs = lit | dim;
+        for (k = 0; k < 12u; k++) if (lit == 1u << k && dim) prefer = k;   /* one bright pitch among dim ones: the root */
+    }
+    if (!harmony_name(pcs, bass, prefer, out)) *out = 0;
+}
+static uint32_t meter_w[2], meter_ms;
+static uint32_t meter_of(uint32_t v)            /* a peak (Q15) -> 0..224 px, 1.5 dB a step, from -88 dB */
+{
+    uint32_t m = 0, i;
+    if (v > 32767u) v = 32767u;
+    if (v < 4u) return 0;
+    while (v >> (m + 1u)) m++;                  /* the top bit */
+    i = m * 4u + (v >> (m - 2u) & 3u);          /* + the next two bits */
+    return i * 224u / 59u;
+}
 static void ctl_draw(void)
 {
-    char t[32], *p;
+    char t[40], *p;
+    uint32_t w;
     if (ui_dirty == UI_ALL) {
         lcd_fill(0, 0, 240, 240, C_BLACK);
-        draw_text_box(0, 10, 240, &FONT_L, APP_NAME, RGB(180, 140, 255), 1);
-        draw_text_box(0, 52, 240, &FONT_S, "MIDI CONTROLLER", RGB(210, 210, 210), 1);
-        p = sapp(t, "PADS  ch10  ");
-        p = sint(p, PAD0);
-        *p++ = '-';
-        p = sint(p, PAD0 + NPAD - 1u);
-        *p = 0;
-        draw_text_box(8, 120, 224, &FONT_S, t, RGB(230, 230, 230), 0);
-        draw_text_box(0, 198, 240, &FONT_S, "open FM1.Pocket to link", RGB(120, 120, 120), 1);
-        draw_text_box(0, 218, 240, &FONT_S, "v" APP_VER, RGB(90, 90, 90), 1);
+        draw_text_box(0, 4, 240, &FONT_S, APP_NAME " " APP_VER " - MIDI CONTROLLER", RGB(180, 140, 255), 1);
+        draw_text_box(0, 214, 240, &FONT_S, "open FM1.Pocket to link", RGB(110, 110, 110), 1);
+        meter_w[0] = meter_w[1] = 999u;
     }
-    if (ui_dirty & UI_KEYS) {
-        p = sapp(t, "KEYS  ch1  oct ");
-        if (oct > 0) *p++ = '+';
-        p = sint(p, oct);
-        *p = 0;
-        draw_text_box(8, 96, 224, &FONT_S, t, RGB(230, 230, 230), 0);
-    }
-    if (ui_dirty & UI_LAST) {
-        p = sapp(t, "LAST  ");
-        p = sapp(p, last_txt);
-        *p = 0;
-        draw_text_box(8, 144, 224, &FONT_S, t, RGB(140, 220, 200), 0);
+    if (ui_dirty & UI_LAST && fm1_ms - ctl_ms >= 30u) {   /* (30 ms: time for the app's NAME to come back first) */
+        draw_text_box(0, 26, 240, text_w(&FONT_L, ctl_name) > 236 ? &FONT_S : &FONT_L, ctl_name, C_NAME, 1);
+        cv_begin(240, 18, C_BLACK);
+        cv_text(8, 1, &FONT_S, ctl_val, C_SUB);
+        if (ctl_v >= 0) {
+            p = sint(t, ctl_v);
+            *p = 0;
+            cv_text(232 - text_w(&FONT_S, t), 1, &FONT_S, t, C_NAME);
+            w = text_w(&FONT_S, ctl_val) + 16u;
+            cv_rect((int32_t)w, 6, 186 - (int32_t)w, 6, RGB(50, 60, 70));
+            cv_rect((int32_t)w, 6, (int32_t)((186u - w) * (uint32_t)ctl_v / 127u), 6, C_SUB);
+        }
+        cv_blit(0, 62);
+        lcd_sync();
+        ui_dirty &= ~UI_LAST;
     }
     if (ui_dirty & UI_CLOCK) {
-        p = sapp(t, "CLOCK ");
-        if (clk_bpm) { p = sint(p, (int32_t)clk_bpm); p = sapp(p, " BPM "); p = sapp(p, clk_run ? "RUN" : "STOP"); }
-        else p = sapp(p, "none");
-        *p = 0;
-        draw_text_box(8, 168, 224, &FONT_S, t, RGB(230, 200, 120), 0);
+        *tp_text(&tp, t) = 0;
+        draw_text_box(0, 88, 240, &FONT_S, t, RGB(230, 200, 120), 1);
     }
-    ui_dirty = 0;
+    if (ui_dirty & UI_HARM) {
+        int32_t x;
+        harm_text(t);                           /* the root big, the rest small (FONT_L has no lower case: "Am" is not "AM") */
+        p = t + (t[0] ? 1 : 0) + (t[0] && t[1] == '#');
+        w = (uint32_t)text_w(&FONT_S, p);
+        {
+            char root[3] = {t[0], p > t + 1 ? '#' : 0, 0};
+            x = (240 - text_w(&FONT_L, root) - (int32_t)w) / 2;
+            if (x < 0) x = 0;
+            cv_begin(240, 32, C_BLACK);
+            cv_text(x, 0, &FONT_L, root, RGB(255, 170, 120));
+            cv_text(x + text_w(&FONT_L, root), 14, &FONT_S, p, RGB(255, 170, 120));
+            cv_blit(0, 112);
+            lcd_sync();
+        }
+    }
+    if (ui_dirty & UI_KEYS) {
+        p = sapp(t, "KEYS ch1 oct ");
+        if (oct > 0) *p++ = '+';
+        p = sint(p, oct);
+        p = sapp(p, "   PADS ch10");
+        *p = 0;
+        draw_text_box(0, 150, 240, &FONT_S, t, RGB(200, 200, 200), 1);
+    }
+    ui_dirty &= UI_LAST;                        /* (a NAME still awaited stays) */
+}
+static void meter_poll(void)                    /* 25 times a second: the peaks since, falling 1.5 dB a step */
+{
+    uint32_t i, v[2], w;
+    if (fm1_ms - meter_ms < 40u) return;
+    meter_ms = fm1_ms;
+    v[0] = pk_l; v[1] = pk_r;
+    pk_l = pk_r = 0;
+    for (i = 0; i < 2u; i++) {
+        w = meter_of(v[i]);
+        if (meter_w[i] != 999u && w + 4u < meter_w[i]) w = meter_w[i] - 4u;
+        if (w == meter_w[i]) continue;
+        meter_w[i] = w;
+        cv_begin(240, 8, C_BLACK);
+        cv_rect(8, 1, 224, 6, RGB(30, 36, 42));
+        cv_rect(8, 1, (int32_t)w, 6, w > 200u ? RGB(255, 90, 80) : RGB(120, 220, 140));
+        cv_blit(0, 178 + i * 10u);
+        lcd_sync();
+    }
 }
 
-/* the incoming MIDI clock (F8, 24 a quarter note) and transport, counted over one second */
+/* the incoming MIDI: notes from the computer are lights, the clock and transport are the screen's (ctl_info.h) */
 static void clock_poll(void)
 {
-    static uint32_t t0, ticks;
     uint8_t st, d1, d2;
     int from;
     while ((from = midi_get(&st, &d1, &d2)) != 0) {
         if (linked) continue;                   /* (the page has no use for them: they are only drained) */
         if (from == 1 && (st & 0xE0u) == 0x80u) host_light(st & 15u, d1, (st & 0xF0u) == 0x90u ? d2 : 0u);   /* note on/off from USB: a light */
-        else if (st == 0xF8u) ticks++;
-        else if (st == 0xFAu || st == 0xFBu) { clk_run = 1; ui_dirty |= UI_CLOCK; }
-        else if (st == 0xFCu) { clk_run = 0; ui_dirty |= UI_CLOCK; }
-    }
-    if (fm1_ms - t0 >= 1000u) {
-        uint32_t bpm = ticks * 5u / 2u;         /* ticks a second / 24 * 60 */
-        if (bpm != clk_bpm && !linked) { clk_bpm = bpm; ui_dirty |= UI_CLOCK; }
-        ticks = 0;
-        t0 = fm1_ms;
+        else if (st >= 0xF2u && tp_msg(&tp, st, d1, d2, fm1_ms)) ui_dirty |= UI_CLOCK;
     }
 }
 
@@ -411,6 +515,17 @@ static void tether_sysex(const uint8_t *p, uint32_t n)   /* the bytes between F0
         return;                                 /* not "FPT" */
     for (i = 4; i + 1u < n; i++) sum += p[i];
     sum = (sum & 0x7Fu) == p[n - 1u];
+    if (p[4] == PROTO && p[5] == 0x05u) {       /* NAME (0.9): an app names the control just touched, "label" or "label|value"; no link */
+        char *o = ctl_name, *end = ctl_name + 20;
+        if (!sum || linked) return;
+        for (i = 6; i + 1u < n; i++) {
+            if (p[i] == '|' && end == ctl_name + 20) { *o = 0; o = ctl_val; end = ctl_val + 14; continue; }
+            if (o < end) *o++ = p[i] >= 0x20u && p[i] < 0x7Fu ? (char)p[i] : '?';
+        }
+        *o = 0;
+        ui_dirty |= UI_LAST;
+        return;
+    }
     if (sum) { link_ms = fm1_ms; if (!linked) set_link(1); }   /* any valid message from the page keeps the link */
     if (p[5] == 0x01u) { if (sum) hello(); return; }   /* HELLO? whatever its version */
     if (p[4] != PROTO) return;
@@ -470,5 +585,6 @@ static void app_main(void)
         panel();
         clock_poll();
         if (!linked && ui_dirty) ctl_draw();
+        if (!linked) meter_poll();
     }
 }
