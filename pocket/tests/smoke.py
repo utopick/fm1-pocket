@@ -132,9 +132,9 @@ try:
     js("document.querySelector('#mdPanel [data-do=close]').click()"); assert js("return !document.getElementById('mdPanel')")
     # the manual in two languages, and the licences
     js("lang = 'en'; document.querySelector('#manFm').click()"); assert "ALGORITHM" in q("#manBody") and "32 algorithms" in q("#manBody")
-    js("document.querySelector('#manLang').click()"); assert "32 algoritmos" in q("#manBody") and "<" not in js("return document.querySelector('#manBody b').innerHTML")
+    js("document.querySelector('#langBtn').click()"); assert "32 algoritmos" in q("#manBody") and "<" not in js("return document.querySelector('#manBody b').innerHTML")
     js("document.querySelector('#manApp').click()"); assert "Qué es" in q("#manBody")
-    js("document.querySelector('#manLang').click()")
+    js("document.querySelector('#langBtn').click()")
     assert "Joakim Eriksson" in q("#licBody") and "Permission is hereby granted" in q("#licBody"), "the licences are not in the About card"
     # what the firmware writes to its flash is kept, and given back to it when it starts again
     js("const f = run.base.slice(); f[8192] ^= 255; keepFlash(f)"); time.sleep(0.5)

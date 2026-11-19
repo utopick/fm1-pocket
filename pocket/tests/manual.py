@@ -25,7 +25,7 @@ try:
     d.get("http://127.0.0.1:%d/index.html" % srv.server_address[1]); time.sleep(1.5)
     for lang in ("en", "es"):
         js("document.querySelector('#logo').click(); document.querySelector('#menu .tabs [data-tab=man]').click(); document.querySelector('#manFm').click()")
-        if (lang == "es") != js("return document.querySelector('#manLang').textContent.includes('ESPAÑOL')"): js("document.querySelector('#manLang').click()")
+        if (lang == "es") != js("return document.querySelector('#langBtn').textContent.includes('ESPAÑOL')"): js("document.querySelector('#langBtn').click()")
         time.sleep(0.3)
         assert js("return document.querySelector('#manFig').offsetParent !== null"), "no miniature beside the FM-1 manual"
         assert js("return document.querySelectorAll('#manFig [data-c]').length") == 3 + 8 + 14, "controls of the miniature"
