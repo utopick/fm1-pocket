@@ -6,9 +6,13 @@
 
 ### Installing it
 
-Open FM1.Pocket, go to OPTIONS and then REAL FM-1, and press **PLAY WITH THE REAL FM-1**. The app walks you through
-the same steps as any other firmware: it connects to the FM-1, makes a backup of it, adds the protector, and then
-installs Tether. Keep the backup file, because it is your way back to exactly what the FM-1 had before.
+Open FM1.Pocket, go to OPTIONS and then REAL FM-1. If you haven't done it yet, follow the steps there to back up the
+FM-1 and add the protector. Keep the backup file, because it is your way back to exactly what the FM-1 had before.
+
+An FM-1 can't rewrite the firmware it is running, so the install happens in the protector's MIDI mode, where only the
+protector is running. To get there, switch the FM-1 off, hold PLAY while you switch it on, and choose MIDI mode on its
+screen. Then press CONNECT in the app and press **PLAY WITH THE REAL FM-1**, which now says INSTALL TETHER ON THIS FM-1.
+The app checks the backup first, and the FM-1 starts Tether by itself when the install is done.
 
 When Tether starts, the FM-1's screen says TETHER at the top.
 
@@ -83,9 +87,14 @@ hold OCT- while switching it on to reach the USB rescue mode, and see WARNINGS i
 
 ### Instalarlo
 
-Abre FM1.Pocket, entra en OPCIONES y luego en FM-1 REAL, y pulsa **TOCAR CON EL FM-1 REAL**. La app te lleva por los
-mismos pasos que con cualquier otro firmware: se conecta al FM-1, hace una copia de seguridad, añade el protector y
-después instala Tether. Guarda la copia, porque es tu manera de volver exactamente a lo que tenía el FM-1.
+Abre FM1.Pocket y entra en OPCIONES y luego en FM-1 REAL. Si aún no lo has hecho, sigue allí los pasos para hacer una
+copia de seguridad del FM-1 y añadir el protector. Guarda la copia, porque es tu manera de volver exactamente a lo que
+tenía el FM-1.
+
+Un FM-1 no puede reescribir el firmware que está usando, así que la instalación se hace en el modo MIDI del protector,
+donde solo funciona el protector. Para llegar a él, apaga el FM-1, mantén pulsado PLAY mientras lo enciendes y elige
+MIDI mode en su pantalla. Después pulsa CONECTAR en la app y luego **TOCAR CON EL FM-1 REAL**, que ahora dice INSTALAR
+TETHER EN ESTE FM-1. La app comprueba antes la copia de seguridad, y el FM-1 arranca Tether solo cuando termina.
 
 Cuando Tether arranca, la pantalla del FM-1 pone TETHER arriba.
 
