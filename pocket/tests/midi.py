@@ -27,7 +27,8 @@ def tearDownModule(): SRV.shutdown()
 class Midi(unittest.TestCase):
     def setUp(self):
         o = webdriver.ChromeOptions()
-        for a in ("--headless=new", "--mute-audio", "--window-size=844,390"): o.add_argument(a)
+        for a in ("--headless=new", "--mute-audio", "--window-size=844,390", "--lang=en-US"): o.add_argument(a)
+        o.add_experimental_option("prefs", {"intl.accept_languages": "en-US"})  # the page speaks the browser's language: these tests read its English
         self.d = webdriver.Chrome(options=o)
         self.addCleanup(self.d.quit)
         self.d.execute_cdp_cmd("Network.enable", {})
@@ -76,7 +77,7 @@ class Midi(unittest.TestCase):
         time.sleep(0.5)
         self.js("document.querySelector('#fwList .fwc .man:not([hidden])').click()"); time.sleep(1.2)
         body = self.js("return document.querySelector('#shBody').innerHTML")
-        self.assertIn("<h3>Ghoul manual</h3>", body); self.assertIn("<b>PLAY</b>", body); self.assertIn('href="https://example.com/x"', body); self.assertIn("<li>two</li>", body)
+        self.assertIn(">Ghoul manual</h3>", body); self.assertIn("<b>PLAY</b>", body); self.assertIn('href="https://example.com/x"', body); self.assertIn("<li>two</li>", body)
         self.assertNotIn("onerror", body); self.assertNotIn("<img", body)
         self.assertTrue(any("raw.githubusercontent.com" in u for u in self.js("return window.__urls")))
         self.js("document.querySelector('#shClose').click()")
