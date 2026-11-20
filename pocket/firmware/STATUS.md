@@ -10,7 +10,7 @@ tests, and the real JieLi build with its checks.
 - **The JieLi build and its checks pass** (JieLi clang via `tools/get_toolchain.sh`, in Docker on macOS): FM-1 and the
   three SMK-37 packages build; no calls into the chip ROM, no register access outside `hal/`, `.ram_text` without calls.
   FM-1 (with the speaker): image 56,464 B, RAM .data+.bss 16,976 B of 98,304 (the speaker's ring is 4 KB), pool 145,920 B of 344,064 (the 115,200-byte screen copy is
-  in the pool). Package identity `FM-1_960`.
+  in the pool). Package identity `FM-1_9250` (1.0).
 - **`tests/run_tests.sh`: ALL TESTS PASSED** (Dinghy's suite with the Tether build: host app, MIDI and SMK-37 scripts,
   flash map, update entry, update loader and its screen, SMK packages, installer; plus Tether's two tests).
 - `tests/tether_test.js` (host mode, frames encoded by the page's own `vendor/tether.js`):
@@ -96,7 +96,7 @@ in tether.c, marked `shortcut:`), and a faster SPI clock (`LCD_BAUD`, Dinghy run
 - While the unit draws, the USB endpoint is held: MIDI from the page waits too (the page sends none but SysEx).
 - During a firmware update session, Tether frames would still be drawn: the page must stop streaming before it
   installs anything.
-- `FM-1_96N` was picked as unused by the list in Dinghy's docs (900, 91N, 93N, 97N, 98N, 99N); check the Firmware Hub
+- `FM-1_925N` was picked because nothing on the Firmware Hub uses 925 (the 96N first chosen was taken by others); check the Firmware Hub
   before a release.
 - The page's frame pacing (wait for ACK, keyframe after 500 ms of silence) is in PROTOCOL.md and in the reference
   test, not yet in the page.

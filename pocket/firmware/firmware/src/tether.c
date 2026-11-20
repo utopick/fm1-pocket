@@ -299,7 +299,7 @@ static void panel(void)
 }
 
 /* ---- the controller's screen (main loop only): the parts that changed are drawn again
- *   y 4    TETHER 0.9 · MIDI CONTROLLER
+ *   y 4    TETHER 1.0 · MIDI CONTROLLER
  *   y 26   the control last touched (its name on the unit, or the app's: NAME), y 62 what it sends and its value, a bar
  *   y 88   the transport from the MIDI clock: BPM, PLAY / STOP, bar.beat
  *   y 112  the chord held on the keys, or the chord / scale the computer lit (bright root, dim rest)
