@@ -38,11 +38,12 @@ jobs:
             pocket/android/native/target
           key: android-cargo-${{ hashFiles('pocket/android/native/Cargo.toml', 'Cargo.lock') }}
 
-      # the runner's own NDK is the linker
+      # the runner's own NDK is the linker (its path is a variable of the runner, not of the workflow's env
+      # context, so the shell sets it)
       - name: Build libfm1_android.so
-        env:
-          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_LATEST_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
         run: |
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
+          test -x "$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
           cargo build --release --target aarch64-linux-android --manifest-path pocket/android/native/Cargo.toml
           mkdir -p pocket/android/app/src/main/jniLibs/arm64-v8a
           cp pocket/android/native/target/aarch64-linux-android/release/libfm1_android.so pocket/android/app/src/main/jniLibs/arm64-v8a/
