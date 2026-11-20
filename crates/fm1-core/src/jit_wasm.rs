@@ -1252,6 +1252,43 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.op(0x1a); // drop
                 bus_used = true;
             }
+            Fast::Raw { route: 21, raw } if matches!(raw & 255, 0xd0 | 0xd8 | 0xd4 | 0xdc | 0xf8 | 0xfc | 0xfe) => {
+                let lo = ((raw >> 29) & 7) as u8 * 2;
+                let kind = raw & 255;
+                if !matches!(kind, 0xf8) {
+                    g.ld_reg(lo + 1);
+                    g.op(0xad); // i64.extend_i32_u
+                    g.op(I64_CONST); sleb(&mut g.c, 32);
+                    g.op(0x86); // i64.shl
+                    g.ld_reg(lo); g.op(0xad); g.op(0x84); // i64.or
+                }
+                if matches!(kind, 0xf8 | 0xfc | 0xfe) {
+                    let extend = if raw & (1 << 28) != 0 { 0xac } else { 0xad };
+                    g.ld_reg(((raw >> 20) & 15) as u8); g.op(extend);
+                    g.ld_reg(((raw >> 24) & 15) as u8); g.op(extend);
+                    g.op(0x7e); // i64.mul
+                    if kind == 0xfc { g.op(0x7c); } // i64.add
+                    if kind == 0xfe { g.op(0x7d); } // i64.sub
+                } else {
+                    let by_reg = matches!(kind, 0xd8 | 0xdc);
+                    if by_reg {
+                        g.ld_reg(((raw >> 24) & 15) as u8); g.op(0xad);
+                    } else {
+                        g.op(I64_CONST); sleb(&mut g.c, (((raw >> 16) & 15) | ((raw >> 24) & 3) << 4) as i64);
+                    }
+                    let shift = if by_reg { (raw >> 16) & 3 } else { (raw >> 26) & 3 };
+                    g.op(if matches!(kind, 0xd4 | 0xdc) { 0x8a } else {
+                        match shift { 0 | 1 => 0x86, 2 => 0x88, _ => 0x87 }
+                    });
+                }
+                // Save the full result before writing either half (sources may alias).
+                g.set(L_OPRES);
+                g.get(L_CPU); g.get(L_OPRES); g.op(I32_WRAP_I64);
+                g.mem_op(I32_STORE, 2, off_reg(lo));
+                g.get(L_CPU); g.get(L_OPRES);
+                g.op(I64_CONST); sleb(&mut g.c, 32); g.op(I64_SHR_U); g.op(I32_WRAP_I64);
+                g.mem_op(I32_STORE, 2, off_reg(lo + 1));
+            }
             // an add / subtract whose flags are read later (`BOp::flags_only`): this code keeps
             // no flags, the interpreter's executor does
             other if op.flags_only() => {
@@ -2138,8 +2175,19 @@ pub fn int_selftest() -> u32 {
             ops.push(Fast::Div { d, a, b, k });
         }
     }
+    // Pair destinations overlap either source; include signed products and boundary shift counts.
+    for p in [0u32, 1, 7] {
+        for kind in [0xd0u32, 0xd8, 0xd4, 0xdc, 0xf8, 0xfc, 0xfe] {
+            for bits in [0u32, 1, 15, 16, 31, 32, 47, 63] {
+                let raw = 0xe100 | kind | (p << 29) | ((bits & 15) << 16)
+                    | ((bits >> 4) << 24) | ((bits & 3) << 26) | (1 << 20) | ((bits & 1) << 28);
+                ops.push(Fast::Raw { route: 21, raw });
+            }
+        }
+    }
     for fast in ops {
-        let bop = crate::BOp { fast, len: 2, careful: false, pair_head: false, glue: false };
+        let len = if matches!(fast, Fast::Raw { .. }) { 4 } else { 2 };
+        let bop = crate::BOp { fast, len, careful: false, pair_head: false, glue: false };
         let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &[], &mem, false, false);
         let [r, w, o] = helpers::<NoBus>(false);
         // SAFETY: a plain byte slice; the host copies it before returning
@@ -2155,12 +2203,14 @@ pub fn int_selftest() -> u32 {
             cpu.regs[1] = x;
             cpu.regs[2] = y;
             let mut want = Cpu::new(0x0200_0000);
+            cpu.flags = rnd() & 15;
             want.regs = cpu.regs;
-            want.exec_fast(&mut bus, fast, 0x0200_0002);
-            want.pc = 0x0200_0002;
+            want.flags = cpu.flags;
+            want.exec_fast(&mut bus, fast, 0x0200_0000 + len as u32);
+            want.pc = 0x0200_0000 + len as u32;
             // SAFETY: `f` is the module just installed, built for NoBus
             let k = unsafe { run::<NoBus>(f, 0, &mut cpu, &mut bus, 0, 1 << 20) };
-            if k != 1 || cpu.regs != want.regs || cpu.pc != want.pc {
+            if k != 1 || cpu.regs != want.regs || cpu.pc != want.pc || cpu.flags != want.flags {
                 let d = match fast { Fast::Un { d, .. } | Fast::Div { d, .. } => d as usize, _ => 0 };
                 fail(format!("{fast:?}"), x, y, format!("ran {k}, r{d} {:08x}, the executor {:08x}", cpu.regs[d], want.regs[d]));
             }
