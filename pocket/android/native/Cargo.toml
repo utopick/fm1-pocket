@@ -1,0 +1,21 @@
+[package]
+name = "fm1-android"
+description = "The FM-1 emulator for the FM1.Pocket Android app: worklet.js's logic over fm1-web, behind a few JNI functions"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false # no rustdoc in the local toolchain, and there are no doc examples
+
+[dependencies]
+fm1-web = { path = "../../../crates/fm1-web" }
+jni-sys = "0.3"
+
+# not part of the root workspace
+[workspace]
+
+[profile.release]
+opt-level = 3
+lto = true
