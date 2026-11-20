@@ -1902,6 +1902,7 @@ impl Cpu {
         match f {
             Fast::SetIe { on: false } => self.ie = false,
             Fast::IcfgRd { d } => self.regs[(d & 15) as usize] = self.icfg(),
+            Fast::PsrRd { d } => self.regs[(d & 15) as usize] = self.sregs("psr"),
             _ => unreachable!("exec_quiet: {f:?}"),
         }
     }
@@ -1987,6 +1988,7 @@ impl Cpu {
                 self.flags = f;
             }
             Fast::IcfgRd { d } => self.regs[(d & 15) as usize] = self.icfg(),
+            Fast::PsrRd { d } => self.regs[(d & 15) as usize] = self.sregs("psr"),
             Fast::IcfgWr { s } => {
                 self.set_icfg(self.regs[(s & 15) as usize]);
                 bus.irq_window();
@@ -6654,7 +6656,7 @@ impl Fast {
         Some(match *self {
             Fast::Mov { d, s } | Fast::Ext { d, s, .. } | Fast::BitExt { d, s, .. } | Fast::Un { d, s, .. }
             | Fast::ShlI { d, s, .. } | Fast::SarI { d, s, .. } | Fast::AddRI { d, s, .. } => (m(s), m(d)),
-            Fast::MovI { d, .. } | Fast::RFromSp { d, .. } | Fast::IcfgRd { d } => (0, m(d)),
+            Fast::MovI { d, .. } | Fast::RFromSp { d, .. } | Fast::IcfgRd { d } | Fast::PsrRd { d } => (0, m(d)),
             Fast::FOp { d, a, b, op: 7 | 8 } => (m(a) | m(b) | m(d), m(d)),
             Fast::Alu3 { d, a, b, .. } | Fast::FOp { d, a, b, .. } | Fast::MinMax { d, a, b, .. } | Fast::Div { d, a, b, .. } => (m(a) | m(b), m(d)),
             Fast::Alu3I { d, a, .. } => (m(a), m(d)),
@@ -6748,7 +6750,7 @@ impl Fast {
             | Fast::PopRet | Fast::MinMax { .. } | Fast::IfBlk { .. } | Fast::BrIEq { .. } | Fast::BrINe { .. }
             | Fast::LdW { .. } | Fast::LdWSp { .. } | Fast::LdBu { .. } | Fast::StW { .. } | Fast::StWSp { .. }
             | Fast::ShlI { .. } | Fast::SarI { .. } | Fast::SpAdd { .. } | Fast::SpFromR { .. } | Fast::RFromSp { .. }
-            | Fast::BitExt { .. } | Fast::BitIns { .. } | Fast::SetIe { .. } | Fast::IcfgRd { .. } | Fast::IcfgWr { .. }
+            | Fast::BitExt { .. } | Fast::BitIns { .. } | Fast::SetIe { .. } | Fast::IcfgRd { .. } | Fast::PsrRd { .. } | Fast::IcfgWr { .. }
             | Fast::BlockMove { .. } | Fast::PopRets | Fast::Tb { .. } | Fast::Mov2 { .. } | Fast::Mov2I { .. }
             | Fast::Un { .. } | Fast::Div { .. } | Fast::LdPre { .. } | Fast::StPre { .. } | Fast::LdPostR { .. }
             | Fast::StPostR { .. } | Fast::LdPair { .. } | Fast::StPair { .. } => false,
@@ -6760,7 +6762,7 @@ impl Fast {
     /// for `sets_flags`, so a new one has to say.
     fn reads_flags(&self) -> bool {
         match *self {
-            Fast::Raw { .. } | Fast::Swap { .. } | Fast::AddC { .. } => true,
+            Fast::Raw { .. } | Fast::Swap { .. } | Fast::AddC { .. } | Fast::PsrRd { .. } => true,
             Fast::PushSregs { mask } => mask & SREG_PSR != 0,
             Fast::PushRegs { .. } | Fast::PopRegs { .. } | Fast::PopSregs { .. } | Fast::Rti => false,
             Fast::Mov { .. } | Fast::MovI { .. } | Fast::Alu3 { .. } | Fast::Alu3I { .. } | Fast::Alu2 { .. }
@@ -6783,7 +6785,7 @@ impl Fast {
     /// `cli` and `R = icfg`: compiled code calls `Cpu::exec_quiet` for them, not the executor.
     #[cfg(native_jit)]
     fn quiet(&self) -> bool {
-        matches!(self, Fast::SetIe { on: false } | Fast::IcfgRd { .. })
+        matches!(self, Fast::SetIe { on: false } | Fast::IcfgRd { .. } | Fast::PsrRd { .. })
     }
 
     /// May this op change pc to anything but the next instruction?
@@ -7129,6 +7131,8 @@ enum Fast {
     SetIe { on: bool },
     /// `R = icfg` / `icfg = R`
     IcfgRd { d: u8 },
+    /// `R = psr`: the flags in its low bits (`sregs`)
+    PsrRd { d: u8 },
     IcfgWr { s: u8 },
     /// `{regs} = [R+]` / `[R+] = {regs}` (and `[R++]`: the base moves past the block); `down`:
     /// `[-R]` / `[--R]`, the block below the base (`--`: the base moves to its start)
@@ -7716,6 +7720,7 @@ fn fast_of(insn: &Instruction, s: &'static str) -> Option<Fast> {
         "cli" => return Some(Fast::SetIe { on: false }),
         "sti" => return Some(Fast::SetIe { on: true }),
         "R = icfg" => return Some(Fast::IcfgRd { d: r(0)? }),
+        "R = psr" => return Some(Fast::PsrRd { d: r(0)? }),
         "icfg = R" => return Some(Fast::IcfgWr { s: r(0)? }),
         // block push / pop without rets (exec_syntax's arm): 2-byte `6n 04` / `4n 04`, the
         // registers [max(n, 3) .. min(n, 4)]; 4-byte `d8 e8` / `d4 e8`, a mask at bits 16-31

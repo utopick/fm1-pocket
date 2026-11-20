@@ -1574,6 +1574,18 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.i32c(0);
                 g.mem_op(I32_STORE8, 0, offset_of!(Cpu, ie) as u32);
             }
+            Fast::PsrRd { d } => {
+                // `Cpu::sregs("psr")`: the stored word without its low four bits, and the flags
+                g.get(L_CPU);
+                g.get(L_CPU);
+                g.mem_op(I32_LOAD, 2, offset_of!(Cpu, sreg_store) as u32 + 20);
+                g.i32c(!0xf);
+                g.op(I32_AND);
+                g.get(L_CPU);
+                g.mem_op(I32_LOAD, 2, off_flags());
+                g.op(I32_OR);
+                g.mem_op(I32_STORE, 2, off_reg(d));
+            }
             Fast::Mov2 { dh, dl, sh, sl } => {
                 // both read before either is written
                 g.ld_reg(sh);
@@ -2362,6 +2374,10 @@ pub fn int_selftest() -> u32 {
         ops.push(Fast::AddC { d, a, b, sub: false });
         ops.push(Fast::AddC { d, a, b, sub: true });
     }
+    // `R = psr`: the stored word's high bits and the flags (random in both machines below)
+    for d in [0u8, 1, 2] {
+        ops.push(Fast::PsrRd { d });
+    }
     // route 22 (rev8, rev16, revs, popcnt), the destination also a source
     for d in [0u32, 1, 2] {
         for kind in 0..4u32 {
@@ -2401,13 +2417,15 @@ pub fn int_selftest() -> u32 {
             cpu.flags = rnd() & 15;
             want.regs = cpu.regs;
             want.flags = cpu.flags;
+            cpu.sreg_store[5] = rnd();
+            want.sreg_store[5] = cpu.sreg_store[5];
             want.exec_fast(&mut bus, fast, 0x0200_0000 + len as u32);
             want.pc = 0x0200_0000 + len as u32;
             // SAFETY: `f` is the module just installed, built for NoBus
             let k = unsafe { run::<NoBus>(f, 0, &mut cpu, &mut bus, 0, 1 << 20) };
             if k != 1 || cpu.regs != want.regs || cpu.pc != want.pc || cpu.flags != want.flags {
                 let d = match fast { Fast::Un { d, .. } | Fast::Div { d, .. } | Fast::Alu3 { d, .. } | Fast::Alu3I { d, .. } | Fast::Alu2 { d, .. }
-                    | Fast::Alu2I { d, .. } | Fast::A4 { d, .. } | Fast::AddRI { d, .. } | Fast::AddC { d, .. } => d as usize, _ => 0 };
+                    | Fast::Alu2I { d, .. } | Fast::A4 { d, .. } | Fast::AddRI { d, .. } | Fast::AddC { d, .. } | Fast::PsrRd { d } => d as usize, _ => 0 };
                 fail(format!("{fast:?}"), x, y, format!("ran {k}, r{d} {:08x}, the executor {:08x}, flags {:x} against {:x}", cpu.regs[d], want.regs[d], cpu.flags, want.flags));
             }
         }
