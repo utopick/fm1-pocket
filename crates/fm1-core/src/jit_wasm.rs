@@ -439,6 +439,8 @@ const I32_DIV_U: u8 = 0x6e;
 const I32_REM_S: u8 = 0x6f;
 const I32_REM_U: u8 = 0x70;
 const I32_CLZ: u8 = 0x67;
+const I32_POPCNT: u8 = 0x69;
+const I32_ROTL: u8 = 0x77;
 const I32_AND: u8 = 0x71;
 const I32_OR: u8 = 0x72;
 const I32_XOR: u8 = 0x73;
@@ -449,6 +451,8 @@ const I32_WRAP_I64: u8 = 0xa7;
 const I64_SHR_U: u8 = 0x88;
 const I64_CONST: u8 = 0x42;
 const I64_EQZ: u8 = 0x50;
+const I64_ADD: u8 = 0x7c;
+const I64_EXTEND_U: u8 = 0xad;
 const F32_REINTERPRET_I32: u8 = 0xbe;
 const I32_REINTERPRET_F32: u8 = 0xbc;
 const SELECT: u8 = 0x1b;
@@ -503,6 +507,9 @@ const L_STOPI: u32 = 14;
 
 fn off_reg(r: u8) -> u32 {
     (offset_of!(Cpu, regs) + 4 * (r & 15) as usize) as u32
+}
+fn off_flags() -> u32 {
+    offset_of!(Cpu, flags) as u32
 }
 fn off_sp() -> u32 {
     offset_of!(Cpu, sp) as u32
@@ -581,6 +588,113 @@ impl Gen<'_> {
         self.set(L_VAL);
         self.jump_local(L_VAL, count, 7);
         self.end();
+    }
+    /// An add or subtract that sets the flags, as `Cpu::alu_f` and `add_flags` do (the flags a later
+    /// instruction reads): d = x + y' + cin with y' = !y when `inv`, from the locals x and y;
+    /// N = bit 31, C = the carry out, Z = zero, V = signed overflow. `cin`: 0, 1, or None for the
+    /// carry flag (`AddC`). Uses L_OPRES and L_VAL.
+    fn add_flags(&mut self, d: u8, x: u32, y: u32, inv: bool, cin: Option<u32>) {
+        let yv = |g: &mut Self| {
+            g.get(y);
+            if inv {
+                g.i32c(u32::MAX);
+                g.op(I32_XOR);
+            }
+        };
+        self.get(x);
+        self.op(I64_EXTEND_U);
+        yv(self);
+        self.op(I64_EXTEND_U);
+        self.op(I64_ADD);
+        match cin {
+            Some(0) => {}
+            Some(c) => {
+                self.op(I64_CONST);
+                sleb(&mut self.c, c as i64);
+                self.op(I64_ADD);
+            }
+            None => {
+                self.ld_field(off_flags());
+                self.i32c(crate::F_C);
+                self.op(I32_AND);
+                self.i32c(1);
+                self.op(I32_SHR_U);
+                self.op(I64_EXTEND_U);
+                self.op(I64_ADD);
+            }
+        }
+        self.set(L_OPRES);
+        self.get(L_OPRES);
+        self.op(I32_WRAP_I64);
+        self.set(L_VAL);
+        self.get(L_CPU);
+        self.get(L_VAL);
+        self.mem_op(I32_STORE, 2, off_reg(d));
+        self.get(L_CPU);
+        // N (F_N is bit 0, so the sign bit shifted down is the flag)
+        self.get(L_VAL);
+        self.i32c(31);
+        self.op(I32_SHR_U);
+        self.get(L_OPRES);
+        self.op(I64_CONST);
+        sleb(&mut self.c, 32);
+        self.op(I64_SHR_U);
+        self.op(I32_WRAP_I64);
+        self.i32c(crate::F_C);
+        self.op(I32_MUL);
+        self.op(I32_OR);
+        self.get(L_VAL);
+        self.op(I32_EQZ);
+        self.i32c(crate::F_Z);
+        self.op(I32_MUL);
+        self.op(I32_OR);
+        self.get(x);
+        self.get(L_VAL);
+        self.op(I32_XOR);
+        yv(self);
+        self.get(L_VAL);
+        self.op(I32_XOR);
+        self.op(I32_AND);
+        self.i32c(31);
+        self.op(I32_SHR_U);
+        self.i32c(crate::F_V);
+        self.op(I32_MUL);
+        self.op(I32_OR);
+        self.mem_op(I32_STORE, 2, off_flags());
+    }
+    /// The ops `add_flags` computes in place of the executor; false: not one of them.
+    fn flag_op(&mut self, f: Fast) -> bool {
+        let ok = match f {
+            Fast::Alu3 { op, .. } | Fast::Alu3I { op, .. } | Fast::Alu2 { op, .. } | Fast::Alu2I { op, .. } | Fast::A4 { op, .. } => {
+                matches!(op, Op::Add | Op::Sub | Op::RSub)
+            }
+            Fast::AddRI { .. } | Fast::AddC { .. } => true,
+            _ => false,
+        };
+        if !ok {
+            return false;
+        }
+        let (d, a_op) = match f {
+            Fast::Alu3 { d, a, b, op } => { self.ld_reg(a); self.set(L_A); self.ld_reg(b); self.set(L_B); (d, op) }
+            Fast::Alu3I { d, a, v, op } => { self.ld_reg(a); self.set(L_A); self.i32c(v); self.set(L_B); (d, op) }
+            Fast::Alu2 { d, b, op } => { self.ld_reg(d); self.set(L_A); self.ld_reg(b); self.set(L_B); (d, op) }
+            Fast::Alu2I { d, v, op } => { self.ld_reg(d); self.set(L_A); self.i32c(v); self.set(L_B); (d, op) }
+            Fast::A4 { d, s, op, rk, rv } => { self.rhs(rk, rv); self.ld_reg(s); self.set(L_A); (d, op) }
+            Fast::AddRI { d, s, v } => { self.ld_reg(s); self.set(L_A); self.i32c(v); self.set(L_B); (d, Op::Add) }
+            Fast::AddC { d, a, b, sub } => {
+                self.ld_reg(a); self.set(L_A); self.ld_reg(b); self.set(L_B);
+                self.add_flags(d, L_A, L_B, sub, None);
+                return true;
+            }
+            _ => return false,
+        };
+        match a_op {
+            Op::Add => self.add_flags(d, L_A, L_B, false, Some(0)),
+            Op::Sub => self.add_flags(d, L_A, L_B, true, Some(1)),
+            Op::RSub => self.add_flags(d, L_B, L_A, true, Some(1)),
+            _ => unreachable!(),
+        }
+        true
     }
     fn op(&mut self, b: u8) {
         self.c.push(b);
@@ -1270,7 +1384,10 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
         ins += match part { Part::Whole => 1, Part::Tail => 0, Part::Head => 2 };
         let count = if part == Part::Tail { ins + 2 } else { ins };
         let mut bus_used = false;
+        // (an `AddC` reads and sets the flags whether or not anyone reads its result's flags)
+        let inline_flags = (op.flags_only() || matches!(op.fast, Fast::AddC { .. })) && g.flag_op(op.fast);
         match op.fast {
+            _ if inline_flags => {}
             Fast::Raw { route: 21, raw } if matches!(raw & 255, 0xd0 | 0xd8 | 0xd4 | 0xdc | 0xf8 | 0xfc | 0xfe) => {
                 let lo = ((raw >> 29) & 7) as u8 * 2;
                 let kind = raw & 255;
@@ -1307,6 +1424,28 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.get(L_CPU); g.get(L_OPRES);
                 g.op(I64_CONST); sleb(&mut g.c, 32); g.op(I64_SHR_U); g.op(I32_WRAP_I64);
                 g.mem_op(I32_STORE, 2, off_reg(lo + 1));
+            }
+            // rev8 / rev16 / revs / popcnt (`exec_raw`'s route 22), the bytes swapped with rotates
+            Fast::Raw { route: 22, raw } => {
+                let (d, kind) = (((raw >> 28) & 0xf) as u8, (raw >> 22) & 3);
+                g.get(L_CPU);
+                g.ld_reg(((raw >> 24) & 0xf) as u8);
+                g.set(L_A);
+                match kind {
+                    1 => {
+                        g.get(L_A); g.i32c(0x00ff_00ff); g.op(I32_AND); g.i32c(8); g.op(I32_SHL);
+                        g.get(L_A); g.i32c(8); g.op(I32_SHR_U); g.i32c(0x00ff_00ff); g.op(I32_AND);
+                        g.op(I32_OR);
+                    }
+                    3 => { g.get(L_A); g.op(I32_POPCNT); }
+                    _ => {
+                        g.get(L_A); g.i32c(8); g.op(I32_ROTL); g.i32c(0x00ff_00ff); g.op(I32_AND);
+                        g.get(L_A); g.i32c(24); g.op(I32_ROTL); g.i32c(0xff00_ff00); g.op(I32_AND);
+                        g.op(I32_OR);
+                        if kind == 2 { g.i32c(16); g.op(I32_SHR_S); }
+                    }
+                }
+                g.mem_op(I32_STORE, 2, off_reg(d));
             }
             // an add / subtract whose flags are read later (`BOp::flags_only`): this code keeps
             // no flags, the interpreter's executor does
@@ -2205,6 +2344,30 @@ pub fn int_selftest() -> u32 {
             ops.push(Fast::Div { d, a, b, k });
         }
     }
+    // the adds and subtracts that keep the flags (`Gen::flag_op`), as a careful op; the destination
+    // is a third register or one of the sources, and the carry in comes from the random flags
+    for (d, a, b) in [(0u8, 1u8, 2u8), (1, 1, 2), (2, 1, 2), (1, 1, 1), (0, 2, 1)] {
+        for op in [Op::Add, Op::Sub, Op::RSub] {
+            ops.push(Fast::Alu3 { d, a, b, op });
+            ops.push(Fast::Alu3I { d, a, v: 0x8000_0000, op });
+            ops.push(Fast::Alu3I { d, a, v: 1, op });
+            ops.push(Fast::Alu2 { d, b, op });
+            ops.push(Fast::Alu2I { d, v: 0xffff_ffff, op });
+            ops.push(Fast::A4 { d, s: a, op, rk: 0, rv: b as u32 });
+            ops.push(Fast::A4 { d, s: a, op, rk: 1, rv: 0x7fff_ffff });
+            ops.push(Fast::A4 { d, s: a, op, rk: 2, rv: b as u32 });
+        }
+        ops.push(Fast::AddRI { d, s: a, v: 0xffff_ffff });
+        ops.push(Fast::AddRI { d, s: a, v: 0x7fff_ffff });
+        ops.push(Fast::AddC { d, a, b, sub: false });
+        ops.push(Fast::AddC { d, a, b, sub: true });
+    }
+    // route 22 (rev8, rev16, revs, popcnt), the destination also a source
+    for d in [0u32, 1, 2] {
+        for kind in 0..4u32 {
+            ops.push(Fast::Raw { route: 22, raw: (d << 28) | (1 << 24) | (kind << 22) });
+        }
+    }
     // Pair destinations overlap either source; include signed products and boundary shift counts.
     for p in [0u32, 1, 7] {
         for kind in [0xd0u32, 0xd8, 0xd4, 0xdc, 0xf8, 0xfc, 0xfe] {
@@ -2217,7 +2380,9 @@ pub fn int_selftest() -> u32 {
     }
     for fast in ops {
         let len = if matches!(fast, Fast::Raw { .. }) { 4 } else { 2 };
-        let bop = crate::BOp { fast, len, careful: false, pair_head: false, glue: false };
+        let careful = matches!(fast, Fast::Alu3 { .. } | Fast::Alu3I { .. } | Fast::Alu2 { .. } | Fast::Alu2I { .. }
+            | Fast::A4 { .. } | Fast::AddRI { .. } | Fast::AddC { .. });
+        let bop = crate::BOp { fast, len, careful, pair_head: false, glue: false };
         let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &[], &mem, false, false);
         let [r, w, o] = helpers::<NoBus>(false);
         // SAFETY: a plain byte slice; the host copies it before returning
@@ -2241,8 +2406,9 @@ pub fn int_selftest() -> u32 {
             // SAFETY: `f` is the module just installed, built for NoBus
             let k = unsafe { run::<NoBus>(f, 0, &mut cpu, &mut bus, 0, 1 << 20) };
             if k != 1 || cpu.regs != want.regs || cpu.pc != want.pc || cpu.flags != want.flags {
-                let d = match fast { Fast::Un { d, .. } | Fast::Div { d, .. } => d as usize, _ => 0 };
-                fail(format!("{fast:?}"), x, y, format!("ran {k}, r{d} {:08x}, the executor {:08x}", cpu.regs[d], want.regs[d]));
+                let d = match fast { Fast::Un { d, .. } | Fast::Div { d, .. } | Fast::Alu3 { d, .. } | Fast::Alu3I { d, .. } | Fast::Alu2 { d, .. }
+                    | Fast::Alu2I { d, .. } | Fast::A4 { d, .. } | Fast::AddRI { d, .. } | Fast::AddC { d, .. } => d as usize, _ => 0 };
+                fail(format!("{fast:?}"), x, y, format!("ran {k}, r{d} {:08x}, the executor {:08x}, flags {:x} against {:x}", cpu.regs[d], want.regs[d], cpu.flags, want.flags));
             }
         }
     }
