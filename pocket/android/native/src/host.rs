@@ -92,6 +92,7 @@ impl Host {
         if ty == "cancel-boot" {
             self.active = false;
             self.snapshots.clear();
+            self.queue.clear(); // power off: nothing stale reaches the next boot
         } else if ty == "snapshot" && !self.active {
             self.unavailable(seq, m.num("request"), None);
         } else if self.active {
