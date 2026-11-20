@@ -19,3 +19,14 @@ test('the inline FPU ops leave what the interpreter leaves', { skip: !existsSync
   assert.equal(stats.failed, 0, 'every module compiles');
   assert.equal(fails, 0, detail);
 });
+
+test('inline integer and 64-bit pair ops match the executor', { skip: !existsSync(wasm) && 'no wasm build' }, async () => {
+  let x;
+  const stats = { regions: 0, failed: 0, compileMs: 0, compileMaxMs: 0, bytes: 0 };
+  x = (await WebAssembly.instantiate(readFileSync(wasm), { env: jitImports(() => x, stats) })).instance.exports;
+  const fails = x.fm1_jit_int_selftest();
+  const p = x.fm1_jit_selftest_detail(), bytes = new Uint8Array(x.memory.buffer);
+  const detail = new TextDecoder().decode(bytes.subarray(p, bytes.indexOf(0, p)));
+  assert.equal(stats.failed, 0, 'every module compiles');
+  assert.equal(fails, 0, detail);
+});

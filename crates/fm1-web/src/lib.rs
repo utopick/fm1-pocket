@@ -345,6 +345,15 @@ pub extern "C" fn fm1_jit_selftest() -> u32 {
 }
 
 static mut SELFTEST_DETAIL: Vec<u8> = Vec::new();
+/// Integer JIT checks separately from engine-dependent floating-point NaN checks.
+#[no_mangle]
+pub extern "C" fn fm1_jit_int_selftest() -> u32 {
+    #[cfg(target_arch = "wasm32")]
+    { fm1_core::jit_wasm::int_selftest() }
+    #[cfg(not(target_arch = "wasm32"))]
+    0
+}
+
 /// The mismatches `fm1_jit_selftest` found, one per line, NUL-terminated (empty: none).
 #[no_mangle]
 #[allow(static_mut_refs)]
