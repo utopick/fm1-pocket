@@ -37,6 +37,7 @@ pub mod machine;
 pub mod p33;
 pub mod periph;
 mod ram;
+pub mod refill;
 pub mod smk;
 mod spiflash;
 pub mod usb;
@@ -44,7 +45,7 @@ pub mod usb;
 pub use lcd::{write_bmp, Lcd};
 pub use periph::{Action, Periph, CPU_HZ, VEC_BASE};
 pub use ram::Ram;
-pub use spiflash::{SpiFlash, FLASH_SIZE};
+pub use spiflash::{FlashPart, SpiFlash, FLASH_SIZE};
 
 pub const XIP_BASE: u32 = 0x0200_0000;
 pub const RAM_BASE: u32 = 0x01c0_0000;
@@ -254,6 +255,8 @@ impl Board {
 
 pub struct Soc {
     pub board: Board,
+    /// The FM-1's flash part (its JEDEC id; `set_flash_part`): the stock Puya unless asked.
+    pub flash_part: spiflash::FlashPart,
     /// The BT baseband's window base (0x2FC44), as the firmware set it.
     bt_window: u32,
     pub xip: Vec<u8>,
@@ -268,6 +271,11 @@ pub struct Soc {
     pub dbg_cause: u32,
     /// The PC limits were written: `machine::run_blocks` gives the core `pc_windows` again
     pub pc_guard_dirty: bool,
+    /// The PC limits have raised their exception and not been re-armed: on an FM-1 a trip after
+    /// the first sets DBG_MSG bit 12 but raises nothing until software writes DBG_CON (0x1EEE344)
+    /// bit 18, as the SDK's `debug_msg_clear()` does (pi32v2-isa hw/fm1-2026-11-15-excprobe, groups 6 and 8 to 11: a fresh address, rewritten limits,
+    /// windows opened and narrowed again, DBG_CON bit 17 alone: all quiet).
+    pub pc_guard_spent: bool,
     /// EMU_MSG's causes (0x1EEF0D4, write 1 to clear): bit 0 a misaligned access (`strict_align`)
     pub emu_cause: u32,
     /// The FM-1's LCD transfers take their time on the wire, as the SMK-37's (SPI1 at 60 MHz /
@@ -280,8 +288,9 @@ pub struct Soc {
     pub lcd_timed: bool,
     /// A 16- or 32-bit RAM access that is not aligned raises the CPU exception (EMU_MSG bit 0), as
     /// on an FM-1 (a probe, 2026-10-24: every misaligned load or store to RAM faulted; XIP reads
-    /// across). Only where loads and stores go through the bus: fm1-live's FM1_STRICT=1 runs
-    /// without the JIT for it.
+    /// across), and moves the aligned-down halfword or word, as an FM-1 does (pi32v2-isa hw/fm1-2026-11-15-excprobe, group 1; the chip
+    /// takes the exception some 7 instructions later, here after the instruction). Only where
+    /// loads and stores go through the bus: fm1-live's FM1_STRICT=1 runs without the JIT for it.
     pub strict_align: bool,
     /// The flash cache (FM1_STRICT): XIP reads and code fetched from XIP that miss it cost a line's
     /// fill (`XipCache`)
@@ -349,6 +358,8 @@ pub struct Soc {
     pub cpu1_fault: Option<String>,
     /// FM1_AUDIO_TRACE: log each audio half-buffer (debugging the DMA's pace).
     audio_trace: bool,
+    /// The audio halves the firmware did not refill in time (`fm1_starved`, `fm1-live --bench`).
+    pub refill: refill::Refill,
     /// The CRC-16 unit's register (0x13504).
     crc: u16,
     /// The random number generator's state (JL_RAND, 0x13B00: R64L / R64H).
@@ -505,6 +516,7 @@ impl Soc {
     pub fn new(ram_size: usize, xip: Vec<u8>) -> Self {
         let mut soc = Self {
             board: Board::Fm1,
+            flash_part: spiflash::FlashPart::P25q80,
             bt_window: BT_WINDOW_BASE,
             xip,
             ram: Ram::new(ram_size),
@@ -515,6 +527,7 @@ impl Soc {
             console: Vec::new(),
             dbg_cause: 0,
             pc_guard_dirty: false,
+            pc_guard_spent: false,
             emu_cause: 0,
             lcd_timed: false,
             strict_align: false,
@@ -539,6 +552,7 @@ impl Soc {
             cpu1_survives: false,
             cpu1_fault: None,
             audio_trace: std::env::var_os("FM1_AUDIO_TRACE").is_some(),
+            refill: refill::Refill::default(),
             xip_flash: true,
             sfc_key: None,
             sfc_con: 0,
@@ -564,6 +578,10 @@ impl Soc {
         // off under any other clock. `take_boot` keeps them for a reset.
         soc.sfr_set(PLL0_CON0, PLL0_BOOT.0);
         soc.sfr_set(PLL0_CON1, PLL0_BOOT.1);
+        // Both PC limit windows as an FM-1 starts them, 0..0x07FFFFFF (pi32v2-isa
+        // hw/fm1-2026-11-15-excprobe, group 6, read from a RAM app the ROM started)
+        soc.sfr_set(0x1eee380, 0x07ff_ffff);
+        soc.sfr_set(0x1eee388, 0x07ff_ffff);
         soc
     }
 
@@ -617,10 +635,11 @@ impl Soc {
         (self.cpu1_idle, self.cpu1_fault) = (false, None);
         (self.cpu1_running, self.waits) = (false, [None; 2]);
         self.flash.chip_reset();
+        self.refill.chip_reset();
         cpu.set_plain_state(&boot.cpu);
-        // the guards as at power-on: no causes, no PC limits (the restored SFRs hold none; the
-        // runner gives the core `pc_windows` again before its next block)
-        (self.dbg_cause, self.emu_cause) = (0, 0);
+        // the guards as at power-on: no causes, the PC limits as `new` sets them (the restored
+        // SFRs; the runner gives the core `pc_windows` again before its next block)
+        (self.dbg_cause, self.emu_cause, self.pc_guard_spent) = (0, 0, false);
         (cpu.pc_win, cpu.pc_trip) = (None, false);
         self.pc_guard_dirty = true;
         // (core 1 is dropped: nothing it owes or stalled on carries over)
@@ -728,13 +747,18 @@ impl Soc {
         }
     }
 
-    /// Wire the chip into `board`'s panel (and its flash chip's id).
+    /// Wire the chip into `board`'s panel (and its flash chip's id: the SMK-37 Pro's own part,
+    /// the FM-1's `flash_part`).
     pub fn set_board(&mut self, board: Board) {
         self.board = board;
         self.periph.board = board;
-        if board == Board::Smk37 {
-            self.flash.jedec = [0xeb, 0x60, 0x14];
-        }
+        self.flash.jedec = if board == Board::Smk37 { [0xeb, 0x60, 0x14] } else { self.flash_part.jedec() };
+    }
+
+    /// Which part the FM-1's flash is (the SMK-37 Pro keeps its own): before or after the boot.
+    pub fn set_flash_part(&mut self, part: spiflash::FlashPart) {
+        self.flash_part = part;
+        self.set_board(self.board);
     }
 
     /// All unknown accesses so far — the peripheral bring-up TODO list.
@@ -753,16 +777,21 @@ impl Soc {
             let pullup = self.sfr_get(usb::USB_IO_CON0) & 0x40 != 0;
             let mut u = std::mem::take(&mut self.usb);
             u.frame(self, pullup);
+            self.periph.set_usb_irqs(u.irq_lines());
             self.usb = u;
         }
         if let Some((adr, words)) = due.audio_half {
             if self.audio_trace {
                 eprintln!("half {} ms {}", self.periph.ms(), self.periph.cycles);
             }
-            for i in 0..words {
-                let w = self.read32(adr.wrapping_add(i * 4)) as i32;
-                self.periph.audio.push((w >> 8).clamp(-32768, 32767) as i16);
+            let mut half = std::mem::take(&mut self.refill.buf);
+            half.clear();
+            half.extend((0..words).map(|i| self.read32(adr.wrapping_add(i * 4))));
+            for &w in &half {
+                self.periph.audio.push(((w as i32) >> 8).clamp(-32768, 32767) as i16);
             }
+            self.refill.half(adr, &half);
+            self.refill.buf = half;
         }
     }
 
@@ -895,6 +924,13 @@ impl Soc {
     /// run from RAM outside the PC limits, 2026-10-24) ran on here.
     pub fn guard_trip(&mut self, bit: u32) {
         self.dbg_cause |= 1 << bit;
+        if bit == 12 {
+            // once per acknowledgement (`pc_guard_spent`)
+            if self.pc_guard_spent {
+                return;
+            }
+            self.pc_guard_spent = true;
+        }
         self.raise_exception();
     }
 
@@ -935,7 +971,7 @@ impl Soc {
 
     /// The PC limits (0x1EEE380 / 84: window 0 high / low, 88 / 8C: window 1): code may run inside
     /// either window and an instruction fetched outside both raises the exception (DBG_MSG bit
-    /// 12). None until a firmware sets them.
+    /// 12).
     pub fn pc_windows(&mut self) -> Option<[(u32, u32); 2]> {
         let w = [(self.sfr_get(0x1eee384), self.sfr_get(0x1eee380)), (self.sfr_get(0x1eee38c), self.sfr_get(0x1eee388))];
         (w[0].1 != 0 || w[1].1 != 0).then_some(w)
@@ -1196,10 +1232,12 @@ impl Bus for Soc {
     #[inline(always)]
     fn read32(&mut self, addr: u32) -> u32 {
         let o = addr.wrapping_sub(RAM_BASE) as usize;
+        if addr & 3 != 0 && self.strict_align && (o & !3) + 4 <= self.ram.len() {
+            // the aligned-down word, as an FM-1 loads it (pi32v2-isa hw/fm1-2026-11-15-excprobe, group 1; RAM's last word too)
+            self.misaligned(addr, 4);
+            return self.ram.read32((o & !3) as u32);
+        }
         if o + 4 <= self.ram.len() {
-            if addr & 3 != 0 && self.strict_align {
-                self.misaligned(addr, 4);
-            }
             return self.ram.read32(o as u32);
         }
         let x = addr.wrapping_sub(XIP_BASE) as usize;
@@ -1263,10 +1301,13 @@ impl Bus for Soc {
     #[inline(always)]
     fn write32(&mut self, addr: u32, value: u32) {
         let o = addr.wrapping_sub(RAM_BASE) as usize;
+        if addr & 3 != 0 && self.strict_align && (o & !3) + 4 <= self.ram.len() {
+            // the whole word at the aligned-down address, as an FM-1 stores it (pi32v2-isa hw/fm1-2026-11-15-excprobe, group 1;
+            // RAM's last word too)
+            self.misaligned(addr, 4);
+            return self.ram.write32((o & !3) as u32, value);
+        }
         if o + 4 <= self.ram.len() {
-            if addr & 3 != 0 && self.strict_align {
-                self.misaligned(addr, 4);
-            }
             return self.ram.write32(o as u32, value);
         }
         self.write32_slow(addr, value)
@@ -1485,7 +1526,10 @@ impl Soc {
                 }
                 self.sfr_set(addr, value)
             }
-            Region::Usb if (usb::USB_LO..=usb::USB_HI).contains(&addr) => self.usb.write(addr, value, self.periph.cycles),
+            Region::Usb if (usb::USB_LO..=usb::USB_HI).contains(&addr) => {
+                self.usb.write(addr, value, self.periph.cycles);
+                self.periph.set_usb_irqs(self.usb.irq_lines());
+            }
             Region::Usb => {
                 if addr == 0x16a0c && self.board == Board::Smk37 {
                     self.periph.smk.commons = value;
@@ -1535,6 +1579,13 @@ impl Soc {
                 self.sfr_set(addr, value);
             }
             Region::Guard => {
+                // DBG_CON bit 18 re-arms the PC limits' exception and reads back 0
+                let value = if addr == 0x1eee344 && value & 1 << 18 != 0 {
+                    self.pc_guard_spent = false;
+                    value & !(1 << 18)
+                } else {
+                    value
+                };
                 if (0x1eee380..=0x1eee38f).contains(&addr) {
                     // (the runner hands the core its new windows before the next block: the run
                     // stops at once, as for an event due now)
@@ -1608,6 +1659,9 @@ pub fn stock_from_package(pkg: &[u8], syx: Option<&[u8]>) -> Result<Stock, Strin
     let u = fwsc::unpack(pkg)?;
     let board = Board::of_identity(&u.identity);
     let mut flash = fwsc::full_flash(&u.raw, FLASH_SIZE);
+    // the app's resource region, which the update loader writes after the app (Polly 0.6.4's
+    // band styles, Melodee 1.6's factory sounds): without it the firmware boots, and does without
+    fwsc::lay_resources(&mut flash, &u.res);
     if board == Board::Smk37 {
         // a unit's factory calibration record, with the stock defaults
         fwsc::smk_trim_fill_defaults(&mut flash);
@@ -1636,6 +1690,9 @@ pub fn stock_boot(soc: &mut Soc, flash: &[u8], params: u32, board: Board) -> u32
     write_boot_info(soc, params, flash)
 }
 
+/// The trim value in the boot-parameter block: the one an FM-1 had (`write_boot_info`).
+const BOOT_TRIM: u32 = 0xf80a;
+
 /// The boot-parameter block the SPL (uboot.boot) hands the stock app in r0, as the SDK's
 /// `BOOT_DEVICE_INFO` (include_lib/system/boot.h) and the SPL's own code at 0x31B2..0x3200
 /// build it: fs_info (-> the flash header copied right after the struct), sfc_base_addr (the
@@ -1643,6 +1700,10 @@ pub fn stock_boot(soc: &mut Soc, flash: &[u8], params: u32, board: Board) -> u32
 /// 8-byte MAC, then the 32-byte flash header unmasked (CRC-16 keystream from 0xFFFF; its CRC
 /// checks). The app copies parts of it to 0x01C7FD50 (boot_hwinfo_save) and its NOR file
 /// system finds the flash from sfc_base_addr. Writes the block at `at` (RAM); returns `at`.
+///
+/// As an FM-1's loaders (M-VAVE's uboot.boot 015 and m-bootloader 2.3) left it at the app's
+/// entry (pi32v2-isa hw/fm1-2026-11-14-bootprobe): chip_id is the chip key (the flash's, `flash_key`:
+/// 0x980F there), trim_value that unit's 0xF80A, the MAC all 0xFF (none programmed).
 pub fn write_boot_info(soc: &mut Soc, at: u32, flash: &[u8]) -> u32 {
     let mut head = [0u8; 32];
     head.copy_from_slice(&flash[..32]);
@@ -1651,7 +1712,8 @@ pub fn write_boot_info(soc: &mut Soc, at: u32, flash: &[u8]) -> u32 {
         *b ^= key as u8;
         key = (key << 1) ^ if key & 0x8000 != 0 { 0x1021 } else { 0 };
     }
-    let words = [at + 24, 0x4000, XIP_BASE, 0, 0, 0];
+    let chip = fwsc::flash_key(flash).unwrap_or(0) as u32;
+    let words = [at + 24, 0x4000, XIP_BASE, chip | BOOT_TRIM << 16, u32::MAX, u32::MAX];
     for (i, w) in words.iter().enumerate() {
         soc.write32(at + 4 * i as u32, *w);
     }
@@ -1869,6 +1931,45 @@ mod tests {
         soc.write32(0x11d00, 0xc021);
         soc.advance(1_000_000);
         assert_eq!(soc.periph.pending_irq(), None);
+    }
+
+    #[test]
+    fn usb_frame_and_bus_reset_interrupts_are_acknowledged_independently() {
+        const CON0: u32 = usb::USB_LO;
+        const CON1: u32 = CON0 + 4;
+        const ON: u32 = 0x0005;
+        const SOFIE: u32 = 1 << 10;
+        const SIEIE: u32 = 1 << 11;
+        const CLR_SOF_PND: u32 = 1 << 12;
+        const SOF_PND: u32 = 1 << 13;
+        const SIE_PND: u32 = 1 << 14;
+
+        let mut soc = Soc::new(1 << 16, vec![0; 0x1000]);
+        for irq in [periph::IRQ_USB_SOF, periph::IRQ_USB_CTRL] {
+            soc.periph.icfg[(irq >> 3) as usize] |= 1 << ((irq & 7) * 4);
+        }
+        soc.usb_plug();
+        let frame = soc.periph.usb_period;
+        soc.write32(usb::USB_IO_CON0, 0x40);
+        soc.write32(CON0, ON | SOFIE);
+        soc.advance(frame);
+        assert_eq!(soc.pending_irq(), Some((periph::IRQ_USB_SOF, 0)));
+        soc.write32(CON0, ON | CLR_SOF_PND);
+        assert_eq!(soc.read32(CON0) & SOF_PND, 0);
+        assert_eq!(soc.pending_irq(), None);
+
+        for _ in 0..100 {
+            soc.advance(frame);
+        }
+        soc.write32(CON0, ON | SIEIE);
+        assert_eq!(soc.pending_irq(), None, "reset is masked in the SIE");
+        soc.write32(CON1, 0x0b04); // INTRUSBE: enable reset
+        assert_ne!(soc.read32(CON0) & SIE_PND, 0);
+        assert_eq!(soc.pending_irq(), Some((periph::IRQ_USB_CTRL, 0)));
+        soc.write32(CON1, 0x4600); // INTRUSB: read and acknowledge reset
+        assert_eq!(soc.pending_irq(), None);
+        assert_eq!(soc.read32(CON0) & SIE_PND, 0);
+        assert_ne!(soc.read32(CON0) & SOF_PND, 0);
     }
 
     #[test]
