@@ -920,7 +920,7 @@ impl Cpu {
                             // does not fit (k = 0) or was dropped: round the loop, as ever
                             while !stretch && !careful && n < limit && !self.no_ram_blocks && !bus.next_tick_due() {
                                 let Some((f, at, r)) = self.wjit.as_ref().and_then(|j| j.cached(pc)) else { break };
-                                if !self.wasm_region_ok(bus, r) {
+                                if r != jit_wasm::NO_RAM && !self.wasm_region_ok(bus, r) {
                                     break;
                                 }
                                 sync!();

@@ -80,6 +80,9 @@ pub struct Jit {
     cache: Box<[(u32, u32, u32, u32)]>,
 }
 
+/// A `cached` region with no blocks over RAM, which `Cpu::wasm_region_ok` has nothing to check in.
+pub(crate) const NO_RAM: u32 = u32::MAX;
+
 /// Entries of `Jit::cache` (a power of two).
 const CACHE: usize = 1 << 12;
 
@@ -114,7 +117,9 @@ impl Jit {
     pub(crate) fn lookup(&mut self, id: usize, pc: u32) -> (Option<(u32, u32, u32)>, bool) {
         match *self.at(id) {
             Entry::In(f, k, r) => {
-                self.cache[(pc >> 1) as usize & (CACHE - 1)] = (pc, f, k, r);
+                // (a region over no RAM is never found stale: `cached` says so with `NO_RAM`)
+                let r2 = if self.rinfo[r as usize].0.is_empty() { NO_RAM } else { r };
+                self.cache[(pc >> 1) as usize & (CACHE - 1)] = (pc, f, k, r2);
                 (Some((f, k, r)), false)
             }
             Entry::No => (None, false),
