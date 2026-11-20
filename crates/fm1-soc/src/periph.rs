@@ -73,6 +73,9 @@ const FRAME_T4: u64 = 544;
 pub const IRQ_ALNK0: u8 = 11;
 pub const IRQ_TIMER5: u8 = 63;
 pub const IRQ_OS_TICK: u8 = 3;
+// AC79/WL82 SDK, asm/hwi.h: USB0 SOF and SIE use separate vectors.
+pub(crate) const IRQ_USB_SOF: u8 = 8;
+pub(crate) const IRQ_USB_CTRL: u8 = 9;
 pub const IRQ_SPI1: u8 = 16;
 pub const IRQ_SARADC: u8 = 24;
 pub const IRQ_SPI2: u8 = 37;
@@ -117,16 +120,36 @@ const TMR_DIV: [u64; 16] = [1, 4, 16, 64, 2, 8, 32, 128, 256, 1024, 4096, 16384,
 /// crystal, bits 4-7 the prescaler, bit 15 pending, written bit 14 clears it), CNT (where it
 /// counts from), PRD (the count that raises the interrupt and restarts). The stock firmware
 /// runs its usr_timer engine (the 2 ms ADC scan, key scan) on TIMER1.
+/// A running timer is kept as the cycle it was armed on and counts since then, so its periods
+/// add up exactly at any CPU clock: each interrupt falls on the cycle its count is reached on,
+/// with no rounding carried from one period to the next.
 #[derive(Clone, Copy, Default)]
 struct Tmr {
     con: u32,
     prd: u32,
+    /// the count at `start` (0 after an interrupt)
     cnt0: u32,
+    /// the cycle it was armed on
     start: u64,
+    /// counts from `start` to the last interrupt (0 before the first)
+    done: u64,
+    /// counts from `start` to the next interrupt
+    due: u64,
     next: u64,
     pending: bool,
 }
 pub const VEC_BASE: u32 = 0x01C7_FE00;
+
+/// How long an eye takes in a LED, in seconds (`led_shown`). A firmware that dims a LED pulses it
+/// faster than this, and a 16 ms frame catches a varying number of the pulses: a dim LED drawn
+/// from one frame's fraction flickers. Raise it if a dim LED still flickers, lower it if a LED
+/// that blinks on the beat looks smeared.
+const LED_SEEN_S: f32 = 0.04;
+
+/// A change in a LED's lit fraction bigger than this shows at once (`led_shown`), so a button
+/// lights and goes out as it is pressed: a lit LED is on for 1 matrix column in 11 (about
+/// 0.09), while a dim LED's fraction only wobbles from frame to frame (DX747's: 0.027..0.041).
+const LED_STEP: f32 = 0.03;
 
 /// Key id at (packed row bit, physical column), -1 = none
 /// (hal/fm1_input.h FM1_KEYMAP). Ids 0..13 are buttons, 14..40 note keys
@@ -238,6 +261,8 @@ pub struct Periph {
     /// USB frames (usb.rs): the next, and cycles per millisecond; MAX = no cable.
     pub(crate) usb_next: u64,
     pub(crate) usb_period: u64,
+    usb_sof_irq: bool,
+    usb_ctrl_irq: bool,
     /// The cycle the watchdog runs out at (p33.rs; MAX: stopped).
     pub(crate) wdt_at: u64,
     tmr: [Tmr; 4],
@@ -257,6 +282,7 @@ pub struct Periph {
     led_pend: u64,
     led_last: u64,
     led_since: u64,
+    led_avg: [f32; 41],
     pub keys_down: [bool; 41],
     /// The keys' force (the module notes): a ramp from `from` to `to` over `dur` cycles from `t0`
     key_force: [Ramp; 41],
@@ -388,6 +414,8 @@ impl Default for Periph {
             spi2_next: u64::MAX,
             usb_next: u64::MAX,
             usb_period: 0,
+            usb_sof_irq: false,
+            usb_ctrl_irq: false,
             wdt_at: u64::MAX,
             tmr: [Tmr { next: u64::MAX, ..Default::default() }; 4],
             uart: Uart { next: u64::MAX, ot_next: u64::MAX, ..Default::default() },
@@ -401,6 +429,7 @@ impl Default for Periph {
             led_pend: 0,
             led_last: 0,
             led_since: 0,
+            led_avg: [0.0; 41],
             keys_down: [false; 41],
             key_force: [Ramp::default(); 41],
             key_vel: 100,
@@ -460,11 +489,28 @@ impl Periph {
         (self.t5_prd.max(1) as u64 * self.hz / T5_HZ).max(1)
     }
 
-    /// CPU cycles per count of TIMER0..3 `i` (the crystal through the prescaler).
-    fn tmr_cycles_per_count(&self, i: usize) -> u64 {
-        TMR_DIV[((self.tmr[i].con >> 4) & 15) as usize] * self.hz / T4_HZ
+    fn tmr_div(&self, i: usize) -> u64 {
+        TMR_DIV[((self.tmr[i].con >> 4) & 15) as usize]
     }
 
+    /// The CPU cycles until TIMER0..3 `i` has counted `counts` (the crystal through the
+    /// prescaler), rounded up to the cycle the count is reached on. Multiplied out before the one
+    /// division, since at most clocks a count is not a whole number of cycles.
+    fn tmr_cycles(&self, i: usize, counts: u64) -> u64 {
+        (counts as u128 * self.tmr_div(i) as u128 * self.hz as u128).div_ceil(T4_HZ as u128) as u64
+    }
+
+    /// TIMER0..3 `i`'s count now (CNT).
+    fn tmr_count(&self, i: usize) -> u32 {
+        let t = self.tmr[i];
+        if t.next == u64::MAX {
+            return t.cnt0;
+        }
+        let counts = (self.cycles - t.start) as u128 * T4_HZ as u128 / (self.tmr_div(i) as u128 * self.hz as u128);
+        t.cnt0.wrapping_add((counts as u64 - t.done) as u32)
+    }
+
+    /// Start counting from `cnt0`, now.
     fn tmr_arm(&mut self, i: usize) {
         let t = self.tmr[i];
         if t.con & 3 == 0 || t.prd == 0 {
@@ -473,7 +519,9 @@ impl Periph {
         }
         let left = t.prd.saturating_sub(t.cnt0).max(1) as u64;
         self.tmr[i].start = self.cycles;
-        self.tmr[i].next = self.cycles + left * self.tmr_cycles_per_count(i).max(1);
+        self.tmr[i].done = 0;
+        self.tmr[i].due = left;
+        self.tmr[i].next = self.cycles + self.tmr_cycles(i, left);
     }
 
     /// The OS tick: 10 ms however the period register is scaled (os_start writes clk/100).
@@ -541,11 +589,14 @@ impl Periph {
             if self.cycles >= self.tmr[i].next {
                 self.tmr[i].pending = true;
                 self.tmr[i].cnt0 = 0;
-                let per = self.tmr[i].prd.max(1) as u64 * self.tmr_cycles_per_count(i).max(1);
-                self.tmr[i].start = self.tmr[i].next;
-                self.tmr[i].next += per;
-                if self.tmr[i].next <= self.cycles {
-                    self.tmr[i].next = self.cycles + per;
+                let t = &mut self.tmr[i];
+                t.done = t.due;
+                t.due += t.prd.max(1) as u64;
+                let next = t.start + self.tmr_cycles(i, self.tmr[i].due);
+                self.tmr[i].next = next;
+                if next <= self.cycles {
+                    // (a whole period behind: count again from now)
+                    self.tmr_arm(i);
                 }
             }
         }
@@ -643,6 +694,7 @@ impl Periph {
             led_acc: old.led_acc,
             led_last: old.led_last,
             led_since: old.led_since,
+            led_avg: old.led_avg,
             keys_down: old.keys_down,
             key_force: old.key_force,
             key_vel: old.key_vel,
@@ -791,6 +843,15 @@ impl Periph {
     pub fn any_pending(&self) -> bool {
         self.t5_pending || self.alnk_pend & 0xf0 != 0 || self.ilat != 0 || self.tick_pending || self.spi1_pending || self.exc_pending
             || self.tmr.iter().any(|t| t.pending) || self.adc_irq || self.spi2_pending || self.uart_irq
+            || self.usb_sof_irq || self.usb_ctrl_irq
+    }
+
+    pub(crate) fn set_usb_irqs(&mut self, (sof, ctrl): (bool, bool)) {
+        if (sof && !self.usb_sof_irq) || (ctrl && !self.usb_ctrl_irq) {
+            self.next_due = 0;
+        }
+        self.usb_sof_irq = sof;
+        self.usb_ctrl_irq = ctrl;
     }
 
     /// Has core `core` (0, 1) source `n` enabled (its ICFG nibble's bit 0)?
@@ -841,6 +902,12 @@ impl Periph {
         }
         if self.uart_irq {
             consider(IRQ_UART1);
+        }
+        if self.usb_sof_irq {
+            consider(IRQ_USB_SOF);
+        }
+        if self.usb_ctrl_irq {
+            consider(IRQ_USB_CTRL);
         }
         for i in 0..4 {
             if self.tmr[i].pending {
@@ -897,15 +964,7 @@ impl Periph {
                 let t = &self.tmr[((addr - 0x10400) >> 8) as usize];
                 t.con | if t.pending { 0x8000 } else { 0 }
             }
-            0x10404 | 0x10504 | 0x10604 | 0x10704 => {
-                let i = ((addr - 0x10400) >> 8) as usize;
-                let t = self.tmr[i];
-                if t.next == u64::MAX {
-                    t.cnt0
-                } else {
-                    t.cnt0 + ((self.cycles - t.start) / self.tmr_cycles_per_count(i).max(1)) as u32
-                }
-            }
+            0x10404 | 0x10504 | 0x10604 | 0x10704 => self.tmr_count(((addr - 0x10400) >> 8) as usize),
             0x10408 | 0x10508 | 0x10608 | 0x10708 => self.tmr[((addr - 0x10400) >> 8) as usize].prd,
             0x10900 => self.t5_con | if self.t5_pending { 0x8000 } else { 0 },
             0x10904 => {
@@ -1010,8 +1069,13 @@ impl Periph {
                 if v & 0x4000 != 0 {
                     self.tmr[i].pending = false;
                 }
-                self.tmr[i].con = v & !0xc000;
-                self.tmr_arm(i);
+                // (the interrupt handler's CON |= 1 << 14 changes nothing else: the count goes on.
+                // A new mode or prescaler counts on from where it is.)
+                if v & !0xc000 != self.tmr[i].con {
+                    self.tmr[i].cnt0 = self.tmr_count(i);
+                    self.tmr[i].con = v & !0xc000;
+                    self.tmr_arm(i);
+                }
             }
             0x10404 | 0x10504 | 0x10604 | 0x10704 => {
                 let i = ((addr - 0x10400) >> 8) as usize;
@@ -1020,6 +1084,7 @@ impl Periph {
             }
             0x10408 | 0x10508 | 0x10608 | 0x10708 => {
                 let i = ((addr - 0x10400) >> 8) as usize;
+                self.tmr[i].cnt0 = self.tmr_count(i);
                 self.tmr[i].prd = v;
                 self.tmr_arm(i);
             }
@@ -1231,6 +1296,19 @@ impl Periph {
         self.led_since = self.cycles;
         self.led_acc = [0; 41];
         out
+    }
+
+    /// The LEDs as an eye sees them, for a panel to draw: each LED's lit fraction since the last
+    /// call (`led_take`), averaged over about LED_SEEN_S of emulated time; a jump of more than
+    /// LED_STEP (a LED lit or put out) shows at once.
+    pub fn led_shown(&mut self) -> [f32; 41] {
+        let span = (self.cycles - self.led_since) as f32 / self.hz as f32;
+        let now = self.led_take();
+        let k = 1.0 - (-span / LED_SEEN_S).exp();
+        for (avg, now) in self.led_avg.iter_mut().zip(now) {
+            *avg = if (now - *avg).abs() > LED_STEP { now } else { *avg + k * (now - *avg) };
+        }
+        self.led_avg
     }
 
     // ---- key matrix -----------------------------------------------------
@@ -1570,6 +1648,69 @@ mod tests {
     }
 
     #[test]
+    fn a_timer_keeps_the_crystals_time_at_any_cpu_clock() {
+        // TIMER1 from the 24 MHz crystal, PRD 48000: the stock firmware's 2 ms engine tick
+        for hz in [60_000_000, 80_000_000, 100_000_000, 120_000_000, 160_000_000, 200_000_000, 240_000_000] {
+            for prescaler in [0, 4, 1] {
+                let div = TMR_DIV[prescaler as usize] as u32;
+                let mut p = Periph { hz, ..Periph::default() };
+                p.write(0x10508, 48_000 / div);
+                p.write(0x10500, prescaler << 4 | 1);
+                let period = 2 * hz / 1000;
+                p.advance(period / 2);
+                assert_eq!(p.read(0x10504), Some(24_000 / div), "{hz} Hz / {div}: the count half way");
+                p.advance(period / 2 - 1);
+                assert!(!p.tmr[1].pending, "{hz} Hz / {div}: early");
+                p.advance(1);
+                assert!(p.tmr[1].pending, "{hz} Hz / {div}: on time");
+                p.tmr[1].pending = false;
+                p.advance(period);
+                assert!(p.tmr[1].pending, "{hz} Hz / {div}: the next period on time");
+            }
+        }
+    }
+
+    #[test]
+    fn a_timer_s_periods_add_up_exactly_through_late_pending_clears() {
+        // TIMER1 at one 44.1 kHz sample (PRD 544): at 100 MHz a period is 2266.67 cycles. Each
+        // interrupt is cleared 300 cycles late, as a handler does (CON |= 1 << 14), and the
+        // N-th still falls on the cycle N periods' counts are reached on, 10000 periods on.
+        let hz = 100_000_000u64;
+        let mut p = Periph { hz, ..Periph::default() };
+        p.write(0x10508, 544);
+        p.write(0x10500, 1);
+        let con = p.read(0x10500).unwrap();
+        for n in 1..=10_000u64 {
+            let want = ((n * 544) as u128 * hz as u128).div_ceil(T4_HZ as u128) as u64;
+            p.advance(want - 1 - p.cycles);
+            assert!(!p.tmr[1].pending, "interrupt {n}: early");
+            p.advance(1);
+            assert!(p.tmr[1].pending, "interrupt {n}: on cycle {want}");
+            p.advance(300);
+            assert_eq!(p.read(0x10504), Some((300 * T4_HZ / hz) as u32), "interrupt {n}: the count went on");
+            p.write(0x10500, con | 0x4000);
+            assert!(!p.tmr[1].pending);
+        }
+    }
+
+    #[test]
+    fn a_timer_counts_on_through_a_new_prescaler_or_period() {
+        let mut p = Periph { hz: 240_000_000, ..Periph::default() };
+        p.write(0x10508, 48_000);
+        p.write(0x10500, 1);
+        p.advance(240_000); // 1 ms: 24000 counts
+        assert_eq!(p.read(0x10504), Some(24_000));
+        p.write(0x10500, 4 << 4 | 1); // the prescaler /2: on from 24000, at half the rate
+        p.advance(240_000);
+        assert_eq!(p.read(0x10504), Some(36_000));
+        p.write(0x10508, 40_000); // a shorter period: 4000 counts from here (8000 crystal ticks)
+        p.advance(80_000 - 1);
+        assert!(!p.tmr[1].pending);
+        p.advance(1);
+        assert!(p.tmr[1].pending);
+    }
+
+    #[test]
     fn led_peek_reads_the_fractions_without_taking_them() {
         let mut p = Periph::default();
         // LED 5 lit for half of the 1000 cycles since the last take
@@ -1582,5 +1723,54 @@ mod tests {
         p.cycles = 2000;
         p.led_last = 2000;
         assert_eq!(p.led_take()[5], 0.0, "the take did reset it");
+    }
+
+    /// LED 5 lit `lit(t0, t1)` cycles of each 16 ms frame: (its lit fraction, its `led_shown`)
+    /// for each frame once the average has settled.
+    fn led_frames(lit: impl Fn(u64, u64) -> u64) -> Vec<(f32, f32)> {
+        let mut p = Periph::default();
+        let frame = p.cycle_of_ms(16);
+        (0..2500 / 16)
+            .map(|_| {
+                p.led_acc[5] = lit(p.cycles, p.cycles + frame);
+                p.cycles += frame;
+                p.led_last = p.cycles;
+                (p.led_acc[5] as f32 / frame as f32, p.led_shown()[5])
+            })
+            .skip(500 / 16)
+            .collect()
+    }
+
+    fn swing(v: impl Iterator<Item = f32> + Clone) -> f32 {
+        v.clone().fold(0.0, f32::max) / v.fold(f32::MAX, f32::min)
+    }
+
+    #[test]
+    fn a_dim_led_whose_pulses_fall_unevenly_into_frames_looks_steady() {
+        // a 45 us pulse every 2.4 ms: 6 or 7 pulses in a 16 ms frame
+        let (period, width) = (CPU_HZ * 24 / 10_000, CPU_HZ * 45 / 1_000_000);
+        let f = led_frames(|t0, t1| (t1 / period - t0 / period) * width);
+        assert!(swing(f.iter().map(|x| x.0)) > 1.1, "a frame's fraction swings");
+        assert!(swing(f.iter().map(|x| x.1)) < 1.05, "led_shown holds still");
+        let mean = f.iter().map(|x| x.1).sum::<f32>() / f.len() as f32;
+        assert!((mean / (width as f32 / period as f32) - 1.0).abs() < 0.02, "at the LED's duty");
+    }
+
+    #[test]
+    fn a_led_blinking_on_the_beat_still_blinks() {
+        // lit 64 ms of each 112 ms, at the matrix's full fraction (1 column in 11)
+        let f = led_frames(|t0, t1| if t0 % (CPU_HZ * 112 / 1000) < CPU_HZ * 64 / 1000 { (t1 - t0) / 11 } else { 0 });
+        assert!(swing(f.iter().map(|x| x.1)) > 2.0, "led_shown still goes dark and bright");
+    }
+
+    #[test]
+    fn a_pressed_button_lights_and_goes_out_at_once() {
+        // dark, lit at the matrix's full fraction from 1 s, dark again from 2 s
+        let full = |t0: u64, t1: u64| (t1 - t0) / 11;
+        let f = led_frames(|t0, t1| if (CPU_HZ..2 * CPU_HZ).contains(&t0) { full(t0, t1) } else { 0 });
+        let lit = f.iter().position(|x| x.0 > 0.0).unwrap();
+        assert!(f[lit].1 > 0.08, "fully tinted in its first frame: {}", f[lit].1);
+        let dark = lit + f[lit..].iter().position(|x| x.0 == 0.0).unwrap();
+        assert_eq!(f[dark].1, 0.0, "dark in its first frame");
     }
 }

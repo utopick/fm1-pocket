@@ -33,6 +33,8 @@ You need Rust, CMake and Ninja (`brew install cmake ninja`). The script builds t
 AU and the VST3 (clap-wrapper downloads the SDKs it needs on the first run). It signs them ad hoc,
 installs them in `~/Library/Audio/Plug-Ins/{Components,VST3,CLAP}` and runs Apple's AU validator
 (`auval -v aumu Fm1s Fm1e`). Add `NO_INSTALL=1` to only build them, into `target/plugin/`.
+`UNIVERSAL=1` builds them for Apple silicon and Intel Macs at once, as the release does; it needs
+both Rust targets (`rustup target add aarch64-apple-darwin x86_64-apple-darwin`).
 
 A host that is already running doesn't see the new build: GarageBand and Logic look for plugins
 when they start, so quit them (⌘Q) and open them again.
@@ -102,7 +104,8 @@ The plugin is released with the rest of the emulator (`.github/workflows/release
 version, in this crate's `Cargo.toml`, is the workspace's. On an Apple silicon runner the
 workflow:
 1. runs the tests;
-2. builds and installs the plugin and runs Apple's AU validator;
+2. builds and installs the plugin for Apple silicon and Intel (`UNIVERSAL=1`) and runs Apple's
+   AU validator on both (Intel through Rosetta);
 3. builds Steinberg's validator and runs it on the VST3;
 4. packages the zip (`tools/package_plugin.sh`: the three plugins and an `INSTALL.txt`).
 
@@ -151,6 +154,8 @@ Locally, `SIGN_IDENTITY="Developer ID Application: …" tools/build_plugin.sh` t
   - a key or button is held while pressed, and a drag across the keys plays a glissando;
   - a knob turns when you drag it up or down, or scroll over it;
   - on the SMK-37 the pads, faders and wheels work too.
+- **Record** writes the FM-1's output to a WAV (44.1 kHz, 16-bit) in your Music folder's
+  `fm1-emu`, until you press Stop.
 - **The status bar** shows the emulation's speed against real time, and counts the frames that
   came late when the computer couldn't keep up.
 - **Lead** is how far ahead of the host the firmware runs beyond one host block, 23, 12 or

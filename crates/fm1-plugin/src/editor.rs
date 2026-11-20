@@ -79,7 +79,7 @@ pub fn create(params: Arc<Fm1Params>, link: Arc<Link>) -> Option<Box<dyn Editor>
         };
         if board != ui.board || ui.base.is_empty() {
             ui.board = board;
-            ui.base = if board == Board::Smk37 { panel_smk::base() } else { panel::base() };
+            ui.base = if board == Board::Smk37 { panel_smk::base() } else { panel::base(panel::Theme::by_name("default")) };
             ui.buf = vec![0; ui.base.len()];
         }
         let smk = board == Board::Smk37;
@@ -125,6 +125,24 @@ pub fn create(params: Arc<Fm1Params>, link: Arc<Link>) -> Option<Box<dyn Editor>
                 enum_menu(bar, setter, "clock", &params.clock, &Clock::ALL, 90.0, Clock::name);
                 bar.label("Lead").on_hover_text("How far ahead of the host the firmware runs, beyond one host block: a note you play waits this long, plus the host's own buffers, before it sounds. 23 ms is room for any firmware; try less, and go back up if \"frames late\" appear in the status bar. An AU host learns the new latency when the plugin is loaded again");
                 enum_menu(bar, setter, "lead", &params.lead, &Lead::ALL, 70.0, Lead::name);
+                bar.separator();
+                // the recorder: a WAV of the output, as the machine's thread reports it
+                let (file, said) = {
+                    let mut r = params.rec.lock().unwrap();
+                    (r.file.clone(), r.msg.take())
+                };
+                if let Some(said) = said {
+                    ui.msg = said;
+                    ui.msg_until = Some(std::time::Instant::now() + std::time::Duration::from_secs(4));
+                }
+                let rec_label = match &file {
+                    Some((_, frames)) => format!("■ Stop  {}:{:02}", frames / 44_100 / 60, frames / 44_100 % 60),
+                    None => "● Record".into(),
+                };
+                if bar.add_enabled(booted, egui::Button::new(rec_label))
+                    .on_hover_text("Write the FM-1's output to a WAV (44.1 kHz, 16-bit) in your Music folder's fm1-emu").clicked() {
+                    let _ = link.cmds.send(Cmd::Record);
+                }
                 bar.separator();
                 let status = if !ui.msg.is_empty() {
                     ui.msg.clone()
@@ -272,7 +290,7 @@ pub fn create(params: Arc<Fm1Params>, link: Arc<Link>) -> Option<Box<dyn Editor>
                     leds: &leds,
                     turning: &std::array::from_fn(|i| ui.turning[i]),
                 };
-                panel::draw(&mut ui.buf, &ui.base, &st);
+                panel::draw(&mut ui.buf, &ui.base, &st, panel::Theme::by_name("default"));
             }
             for t in ui.turning.iter_mut() {
                 *t = t.saturating_sub(1);

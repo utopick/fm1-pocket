@@ -1020,15 +1020,21 @@ mod tests {
     #[test]
     fn code_outside_the_pc_limits_raises_the_exception() {
         // the PC limits as Dinghy's fm1_guard_enable sets them, around code that is not in them
-        // (harbor's probes from RAM on an FM-1, 2026-10-24): DBG_MSG bit 12 and the exception pend
+        // (harbor's probes from RAM on an FM-1, 2026-10-24): DBG_MSG bit 12 and the exception pend.
+        // Both windows start at 0..0x07FFFFFF (pi32v2-isa hw/fm1-2026-11-15-excprobe, group 6), so
+        // code keeps running between the writes of window 0 and window 1, as felucca-bsp's
+        // fm1_guard_enable needs (FM1 Audio Router and DUB-BOX run from RAM through that gap)
         let code = [0x20u8, 0x00].repeat(32); // csync x 32
         let (mut cpu, mut soc) = machine(&code, &[], false);
+        assert_eq!(soc.pc_windows(), Some([(0, 0x07ff_ffff); 2]));
         soc.write32(0x1eef100, 0xf << 4); // IRQ 1 enabled, priority 7 (as fm1_irq.h)
         soc.write32(0x1eee384, XIP_BASE + 0x1000); // window 0 (low, high): past the code
         soc.write32(0x1eee380, XIP_BASE + 0x2000);
+        let mut t = false;
+        run_blocks(&mut cpu, &mut soc, 4, &mut t).unwrap();
+        assert_eq!(soc.dbg_cause, 0, "window 1 as at power-on holds the code");
         soc.write32(0x1eee38c, RAM_BASE); // window 1: RAM
         soc.write32(0x1eee388, RAM_BASE + 0xfff);
-        let mut t = false;
         run_blocks(&mut cpu, &mut soc, 8, &mut t).unwrap();
         assert_ne!(soc.read32(0x1eee244) & 1 << 12, 0);
         assert!(soc.periph.exc_pending);
@@ -1074,6 +1080,35 @@ mod tests {
     }
 
     #[test]
+    fn misaligned_words_move_the_aligned_down_word() {
+        // an FM-1 (pi32v2-isa hw/fm1-2026-11-15-excprobe, group 1): a misaligned word load gives the aligned-down word, a misaligned
+        // word store writes the whole word there; a halfword load at +1 the aligned-down halfword
+        let (_, mut soc) = machine(&[0x20, 0x00], &[], false);
+        soc.strict_align = true;
+        soc.write32(RAM_BASE + 0x100, 0x1122_3344);
+        soc.write32(RAM_BASE + 0x104, 0x5566_7788);
+        assert_eq!(soc.read32(RAM_BASE + 0x103), 0x1122_3344);
+        assert_eq!(soc.read16(RAM_BASE + 0x101), 0x3344);
+        soc.write32(RAM_BASE + 0x106, 0xa1b2_c3d4);
+        assert_eq!((soc.read32(RAM_BASE + 0x100), soc.read32(RAM_BASE + 0x104)), (0x1122_3344, 0xa1b2_c3d4));
+        assert_eq!(soc.emu_cause, 1);
+        // RAM's last word as well
+        let end = RAM_BASE + soc.ram.len() as u32 - 4;
+        soc.write32(end, 0x1122_3344);
+        assert_eq!(soc.read32(end + 1), 0x1122_3344);
+        soc.write32(end + 3, 0x5566_7788);
+        assert_eq!(soc.read32(end), 0x5566_7788);
+    }
+
+    /// Both PC limit windows to `lo..=hi`
+    fn pc_limits(soc: &mut Soc, lo: u32, hi: u32) {
+        for high in [0x1eee380, 0x1eee388] {
+            soc.write32(high + 4, lo);
+            soc.write32(high, hi);
+        }
+    }
+
+    #[test]
     fn a_chip_reset_clears_the_guards() {
         // after a watchdog or PR_PWR reset the PC limits and the causes are as at power-on: a boot
         // into code outside the old windows takes no exception
@@ -1082,8 +1117,7 @@ mod tests {
         soc.write32(0x1eef100, 0xf << 4);
         let mut t = false;
         run_blocks(&mut cpu, &mut soc, 1, &mut t).unwrap(); // (the boot state taken)
-        soc.write32(0x1eee384, XIP_BASE + 0x1000);
-        soc.write32(0x1eee380, XIP_BASE + 0x2000);
+        pc_limits(&mut soc, XIP_BASE + 0x1000, XIP_BASE + 0x2000);
         run_blocks(&mut cpu, &mut soc, 8, &mut t).unwrap();
         assert!(cpu.pc_win.is_some() && soc.dbg_cause != 0);
         soc.emu_cause = 1;
@@ -1091,7 +1125,7 @@ mod tests {
         run_blocks(&mut cpu, &mut soc, 8, &mut t).unwrap();
         assert_eq!(soc.resets, 1);
         assert_eq!((soc.dbg_cause, soc.emu_cause, soc.periph.exc_pending), (0, 0, false));
-        assert!(cpu.pc_win.is_none() && soc.pc_windows().is_none());
+        assert!(cpu.pc_win.is_none() && soc.pc_windows() == Some([(0, 0x07ff_ffff); 2]));
         run_blocks(&mut cpu, &mut soc, 8, &mut t).unwrap();
         assert_eq!(soc.dbg_cause, 0, "the boot runs outside the old windows: no exception");
     }
@@ -1106,8 +1140,7 @@ mod tests {
         let (mut cpu, mut soc) = machine(&code, &[], false);
         soc.write32(0x1eef100, 0xf << 4);
         soc.write32(VEC_BASE + 4, XIP_BASE + 0x80);
-        soc.write32(0x1eee384, XIP_BASE + 0x80); // window 0: the handler only
-        soc.write32(0x1eee380, XIP_BASE + 0xff);
+        pc_limits(&mut soc, XIP_BASE + 0x80, XIP_BASE + 0xff); // the handler only
         cpu.ie = true;
         cpu.sreg_store[0] |= 0x100;
         let mut taken = 0;
@@ -1122,6 +1155,37 @@ mod tests {
         assert_eq!(taken, 1, "the exception after the first instruction outside the limits");
         assert_ne!(soc.dbg_cause & 1 << 12, 0);
         assert!(!soc.periph.exc_pending, "taken once");
+    }
+
+    #[test]
+    fn the_pc_limits_trip_once_until_dbg_con_bit_18() {
+        // an FM-1 (pi32v2-isa hw/fm1-2026-11-15-excprobe, groups 6 and 8 to 11): after a trip, code outside the limits sets DBG_MSG bit 12 again but
+        // raises nothing until DBG_CON bit 18 is written (it reads back 0)
+        let code = [0x20u8, 0x00].repeat(32); // csync x 32
+        let (mut cpu, mut soc) = machine(&code, &[], false);
+        soc.write32(0x1eef100, 0xf << 4);
+        pc_limits(&mut soc, XIP_BASE + 0x1000, XIP_BASE + 0x2000);
+        let mut t = false;
+        run_blocks(&mut cpu, &mut soc, 8, &mut t).unwrap();
+        assert!(soc.periph.exc_pending, "the first trip");
+        // (the code inside the windows for a while, then the limits narrowed again)
+        let trip_again = |cpu: &mut fm1_core::Cpu, soc: &mut Soc| {
+            (soc.periph.exc_pending, soc.dbg_cause) = (false, 0);
+            cpu.pc = XIP_BASE;
+            soc.write32(0x1eee384, XIP_BASE);
+            let mut t = false;
+            run_blocks(cpu, soc, 4, &mut t).unwrap();
+            cpu.pc = XIP_BASE;
+            soc.write32(0x1eee384, XIP_BASE + 0x1000);
+            run_blocks(cpu, soc, 4, &mut t).unwrap();
+            (soc.periph.exc_pending, soc.dbg_cause & 1 << 12 != 0)
+        };
+        assert_eq!(trip_again(&mut cpu, &mut soc), (false, true), "spent: the cause only");
+        soc.write32(0x1eee344, 1 << 17);
+        assert_eq!(trip_again(&mut cpu, &mut soc), (false, true), "bit 17 alone does not re-arm");
+        soc.write32(0x1eee344, 1 << 18);
+        assert_eq!(soc.read32(0x1eee344), 0, "bit 18 reads back 0");
+        assert_eq!(trip_again(&mut cpu, &mut soc), (true, true), "re-armed");
     }
 
     #[test]

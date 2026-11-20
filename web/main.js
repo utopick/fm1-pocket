@@ -36,6 +36,10 @@ for (const f of catalog.firmwares) if (f.hub && !byId.has(f.hub)) byId.set(f.hub
 // <head> set data-embed before the first paint; style.css hides the rest). It does not change the
 // firmware this browser starts with on the full page.
 const EMBED = document.documentElement.hasAttribute("data-embed");
+// ?chip=uc25hq80 (or new): the FM-1 with the flash part of units sold since autumn 2026 (UC25HQ80,
+// JEDEC B3 60 14) in place of the stock Puya P25Q80: a firmware that knows only the Puya keeps its
+// saves in RAM there, as on those units. For firmware authors to try theirs.
+const CHIP = ["uc25hq80", "new"].includes((params.get("chip") || "").toLowerCase()) ? "uc25hq80" : "p25q80";
 // ?package=URL: a package on another site (https), for a page that lists firmware this one does not
 // (mutant.cloud's "Try", other hubs, older versions); &name= names it. It plays like a catalog entry,
 // its saved flash kept by its package as every firmware's is, and is not added to the list for later.
@@ -89,6 +93,7 @@ const title = document.getElementById("title");
 const openInput = document.getElementById("open");
 const bankInput = document.getElementById("bank");
 const bankName = document.getElementById("bankname");
+const themeSel = document.getElementById("theme");
 const saveStatus = document.getElementById("save-status");
 const saveStore = new SaveStore();
 const memoryRecords = new Map();
@@ -100,12 +105,22 @@ const wasm = await (await fetch("fm1_web.wasm")).arrayBuffer();   // the worklet
 const ui = (await WebAssembly.instantiate(wasm, { env: { fm1_jit_compile: () => 0 } })).instance.exports;
 // the panel drawn: 0 the FM-1's, 1 the SMK-37's (setBoard; the canvas takes its size)
 let W = 0, H = 0, board = -1;
-const fitPanel = () => document.documentElement.style.setProperty("--above",
-  `${Math.round(canvas.parentElement.getBoundingClientRect().top + scrollY)}px`);
+// --above: what sits over the panel in the player (its title, the screen's controls, a warning)
+// when the player is scrolled to the top of the window, as by the Play link. From the player, not
+// the page's top: the opening and the header above the player scroll away. The big screen does
+// not count: the panel goes below it at its full size.
+const player = document.getElementById("play");
+const fitPanel = () => {
+  const bigScreen = document.getElementById("big");
+  const big = bigScreen.hidden ? 0 : (bigScreen.getBoundingClientRect().height || 0) + 12;
+  const above = canvas.parentElement.getBoundingClientRect().top - player.getBoundingClientRect().top - big;
+  document.documentElement.style.setProperty("--above", `${Math.round(above + 12)}px`);   // (12: html's scroll-padding-top)
+};
 {
   const ro = new ResizeObserver(fitPanel);
-  ro.observe(document.querySelector("header"));
-  ro.observe(document.querySelector(".bar"));
+  ro.observe(document.querySelector(".deck-head"));
+  ro.observe(document.querySelector(".view"));
+  ro.observe(document.getElementById("perfwarn"));
 }
 fitPanel();
 
@@ -149,10 +164,49 @@ for (const c of new Set([...CLOCKS, mhz].sort((a, b) => a - b))) mhzSel.add(new 
 fwSel.value = fw.id;
 mhzSel.value = mhz;
 
+// theme picker: the Rust side exposes the list and switches the panel art
+if (themeSel) {
+  const n = ui.panel_theme_count();
+  const names = [];
+  for (let i = 0; i < n; i++) {
+    const ptr = ui.panel_theme_name(i);
+    const mem = new Uint8Array(ui.memory.buffer);
+    let end = ptr;
+    while (mem[end]) end++;
+    const name = new TextDecoder().decode(mem.subarray(ptr, end));
+    names.push(name);
+    themeSel.add(new Option(name, name));
+  }
+  const saved = stored(DEV.key + "theme");
+  const idx = saved !== null ? names.indexOf(saved) : -1;
+  if (idx >= 0) {
+    themeSel.value = saved;
+    ui.panel_theme(idx);
+  }
+  themeSel.addEventListener("change", () => {
+    const i = names.indexOf(themeSel.value);
+    if (i >= 0) ui.panel_theme(i);
+    store(DEV.key + "theme", themeSel.value);
+  });
+}
+
+// pictures of the firmwares' screens beside this page (tools/firmware_shots.py): each card's, and
+// the wall at the top; by the start of the picture's hash, so a new picture is fetched again
+let shots = {};
+try { shots = await (await fetch("shots/shots.json")).json(); } catch { /* (no pictures here: cards without) */ }
+const shotUrl = (id) => (shots[id]?.v ? `shots/${encodeURIComponent(id)}.webp?v=${shots[id].v}` : null);
+const picture = (id, cls) => {
+  const img = document.createElement("img");
+  Object.assign(img, { src: shotUrl(id), alt: "", loading: "lazy", decoding: "async", width: 240, height: 240 });
+  if (cls) img.className = cls;
+  return img;
+};
+
 // the guide's firmware list, one card per catalog entry; "Play" picks it like the select does
 const NO_NOTE = "MIDI: no sound from a plain note-on";
 const MIDI_NOTES = {
   mvave: "MIDI: channel 2 in the emulator (not yet checked on a real FM-1)",
+  "mvave-v15": "MIDI: channel 2 in the emulator (not yet checked on a real FM-1)",
   felucca: "MIDI: its parts play on channels 1–4",
   choralroot: NO_NOTE, hortator: NO_NOTE, "sloop-alg": NO_NOTE, x0x: NO_NOTE,
 };
@@ -198,18 +252,56 @@ if (DEVICE === "fm1") {
     const twin = DEVICE === "smk37" ? f.fm1 : twins.get(f.id);
     if (twin) links.append(link(`${DEV.other.href}?fw=${twin}`, `also on the ${DEV.other.name}`));
     const by = [f.author + (f.base ? ` (${f.base})` : ""), f.porter && `SMK-37 port: ${f.porter}`].filter(Boolean).join(" · ");
-    const card = el("li", "",
+    // its screen, clicked like Play (for the mouse; the keyboard has the Play button)
+    const pic = shotUrl(f.id) ? [el("div", "pic", picture(f.id))] : [];
+    if (pic.length) pic[0].addEventListener("click", () => play.click());
+    const card = el("li", pic.length ? "has-pic" : "", ...pic,
       el("div", "head", el("b", "", f.name), el("span", "dim", f.version), play),
       el("div", "by", by),
-      el("p", "what", f.byo && DEVICE === "fm1" ? "The firmware the FM-1 ships with: a DX7-style FM synth, both cores running. " +
-        "Bring your own copy (see below)." : f.about));
+      el("p", "what", f.byo && DEVICE === "fm1" ? "M-VAVE's current version (V16 since October 2026), the one its update page " +
+        "installs. Bring your own copy (see below); V15 plays from the card before this one." : f.about));
     if (DEVICE === "fm1" && MIDI_NOTES[f.id]) card.append(el("div", "midi", MIDI_NOTES[f.id]));
     if (f.untested) card.append(el("div", "untested", UNTESTED));
     card.append(links);
+    card.dataset.find = [f.name, f.version, f.author, f.base, f.porter, f.about].filter(Boolean).join(" ").toLowerCase();
     list.append(card);
     cards.set(f.id, card);
   }
+
+  // the search over the cards: every word somewhere in a card's name, version, author or description
+  const search = document.getElementById("fwsearch"), found = document.getElementById("fwcount");
+  const count = (n) => `${n} firmware${n === 1 ? "" : "s"}`;
+  found.textContent = count(catalog.firmwares.length);
+  search.addEventListener("input", () => {
+    const words = search.value.toLowerCase().split(/\s+/).filter(Boolean);
+    let n = 0;
+    for (const card of cards.values()) {
+      card.hidden = !words.every((w) => card.dataset.find.includes(w));
+      if (!card.hidden) n++;
+    }
+    found.textContent = words.length ? `${count(n)} of ${catalog.firmwares.length}` : count(n);
+  });
+
+  // the opening: the catalog's counts, and the wall of its screens (those that show the firmware
+  // itself: tools/firmware_shots.json keeps an error screen off it), in a fixed order so it looks
+  // the same at every visit; each column twice over, for the drift's loop. The counts are of the
+  // firmwares that run here: not the Hub's newcomers, which nobody has run here yet.
+  const runs = catalog.firmwares.filter((f) => !f.untested);
+  const all = runs.length, own = runs.filter((f) => f.byo || f.author === "M-VAVE").length;
+  document.getElementById("hero-count").textContent = String(all);
+  document.getElementById("hero-community").textContent = String(all - own);
+  const wall = document.getElementById("wall");
+  const onWall = catalog.firmwares.filter((f) => shotUrl(f.id) && shots[f.id].wall !== false)
+    .map((f, i) => [(i * 37) % 101, f]).sort((a, b) => a[0] - b[0]).map(([, f]) => f);
+  const COLS = 6, PER = 8;
+  if (onWall.length >= COLS * 2) {
+    for (let c = 0; c < COLS; c++) {
+      const mine = onWall.filter((_, i) => i % COLS === c).slice(0, PER);
+      wall.append(el("div", "col", ...[...mine, ...mine].map((f) => picture(f.id))));
+    }
+  } else wall.hidden = true;
 }
+const heroPlay = document.getElementById("hero-play");
 
 // Cached packages are pinned to their exact bytes. Checking for updates is explicit.
 const packages = new Map();
@@ -266,6 +358,7 @@ let loadedUrl = null;                      // the package the running machine ca
 
 function showFirmware() {
   title.textContent = `${DEV.product} · ${fw.name} (emulated)`;
+  heroPlay.textContent = `Play ${fw.name}`;
   for (const [id, card] of cards) {
     card.classList.toggle("on", id === fw.id);
     card.querySelector("button").textContent = id === fw.id ? "Selected" : "Play";
@@ -400,13 +493,74 @@ stage.addEventListener("drop", (e) => {
   }
 });
 
+// ---------------------------------------------------------------- the screen, for eyes that need more
+// Big screen: the LCD again above the panel, as large as the page allows. Colours: the screen's
+// pixels by their brightness in two colours of strong contrast, on the big screen and the panel's.
+// Both are remembered for both devices.
+const SCHEMES = { yellow: [[0, 0, 0], [255, 221, 0]], white: [[0, 0, 0], [255, 255, 255]], paper: [[255, 255, 255], [0, 0, 0]] };
+const bigBtn = document.getElementById("bigscreen");
+const big = document.getElementById("big");
+const colourSel = document.getElementById("colours");
+const lcdRaw = new Uint16Array(240 * 240), lcdOut = new Uint16Array(240 * 240);
+let haveLcd = false, recolour = null, bigImg = null, rgba = null;
+const rgb565 = (p) => [(p >> 11) * 255 / 31, ((p >> 5) & 63) * 255 / 63, (p & 31) * 255 / 31];
+function setColours(name) {
+  const sc = SCHEMES[name];
+  colourSel.value = sc ? name : "";
+  recolour = null;
+  if (sc) {
+    // brightness (the eye's, a quarter of the way to its brightest primary, so that blue text
+    // still shows): its darkest tenth to the background, anything over half lit the full colour
+    recolour = new Uint16Array(65536);
+    for (let p = 0; p < 65536; p++) {
+      const [r, g, b] = rgb565(p), luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const t = Math.min(1, Math.max(0, ((luma + (Math.max(r, g, b) - luma) / 4) / 255 - 0.1) / 0.45));
+      const [R, G, B] = sc[0].map((bg, i) => bg + (sc[1][i] - bg) * t);
+      recolour[p] = (Math.round(R * 31 / 255) << 11) | (Math.round(G * 63 / 255) << 5) | Math.round(B * 31 / 255);
+    }
+  }
+  store("fm1.colours", sc ? name : "");
+  if (haveLcd) showLcd();
+}
+function setBig(on) {
+  big.hidden = !on;
+  bigBtn.setAttribute("aria-pressed", String(on));
+  document.documentElement.toggleAttribute?.("data-big", on);
+  store("fm1.bigscreen", on ? "1" : "");
+  fitPanel();
+  if (on && haveLcd) showLcd();
+}
+// the latest screen (lcdRaw) to the panel's, recoloured, and to the big screen when it shows
+function showLcd() {
+  const out = recolour ? lcdOut : lcdRaw;
+  if (recolour) for (let i = 0; i < out.length; i++) out[i] = recolour[lcdRaw[i]];
+  new Uint16Array(ui.memory.buffer, ui.panel_lcd(), 240 * 240).set(out);
+  if (big.hidden) return;
+  if (!rgba) {
+    rgba = new Uint32Array(65536);         // (ImageData's bytes: R, G, B, A, little-endian)
+    for (let p = 0; p < 65536; p++) { const [r, g, b] = rgb565(p).map(Math.round); rgba[p] = 0xff000000 | (b << 16) | (g << 8) | r; }
+    bigImg = new ImageData(240, 240);
+  }
+  const px = new Uint32Array(bigImg.data.buffer);
+  for (let i = 0; i < out.length; i++) px[i] = rgba[out[i]];
+  big.getContext("2d").putImageData(bigImg, 0, 0);
+}
+for (const [v, t] of [["", "As the firmware draws it"], ["yellow", "Yellow on black"], ["white", "White on black"], ["paper", "Black on white"]])
+  colourSel.add(new Option(t, v));
+setColours(stored("fm1.colours") || "");
+setBig(stored("fm1.bigscreen") === "1");
+bigBtn.addEventListener("click", () => setBig(big.hidden));
+colourSel.addEventListener("change", () => setColours(colourSel.value));
+
 // ---------------------------------------------------------------- drawing
 function draw() {
   const mem = () => ui.memory.buffer;
   if (frame) {
     if (frame.lcd) {
-      new Uint16Array(mem(), ui.panel_lcd(), 240 * 240).set(frame.lcd);
+      lcdRaw.set(frame.lcd);
+      haveLcd = true;
       frame.lcd = null;
+      showLcd();
     }
     new Float32Array(mem(), ui.panel_leds(), 41).set(frame.leds);
     if (frame.pads) for (let p = 0; p < 16; p++) ui.panel_set(5, p, frame.pads[p]);
@@ -539,19 +693,24 @@ canvas.addEventListener("wheel", (e) => {
 }, { passive: false });
 
 // computer keyboard: A W S E D F T G Y H U J K O L P ; ' = C4..F5, Z X OCT- OCT+, Space PLAY,
-// R REC, 1..0 FX SCL ENV LFO EDIT GLO HOME SAVE ARP SEQ, arrows / , . encoders. SMK-37: the same
-// notes (keys 12..29), Z X OCTAVE- / +, Space SEQ PLAY, R SEQ REC, 1..8 the top pads, arrows K1 / K2,
-// , . K3
+// Shift+Space REC, 1..0 FX SCL ENV LFO EDIT GLO HOME SAVE ARP SEQ, arrows / , . encoders. SMK-37:
+// the same notes (keys 12..29), Z X OCTAVE- / +, Space SEQ PLAY, Shift+Space SEQ REC, 1..8 the top
+// pads, arrows K1 / K2, , . K3. (REC was R, in the gap of the black keys' row: a slip started a
+// recording.)
 const PIANO = "awsedftgyhujkolp;'";
 const BUTTONS = [
-  { z: 0, x: 1, " ": 12, r: 13, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 0: 11 },
-  { z: BTN0 + 4, x: BTN0 + 5, " ": BTN0 + 16, r: BTN0 + 17 },
+  { z: 0, x: 1, " ": 12, "shift ": 13, 1: 2, 2: 3, 3: 4, 4: 5, 5: 6, 6: 7, 7: 8, 8: 9, 9: 10, 0: 11 },
+  { z: BTN0 + 4, x: BTN0 + 5, " ": BTN0 + 16, "shift ": BTN0 + 17 },
 ];
+// what each held key pressed, by its place on the keyboard: Space lets go of REC or PLAY, whichever it
+// pressed, whether or not Shift is still held
+const held = new Map();
 const ENC_KEYS = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowDown: [1, -1], ArrowUp: [1, 1], ",": [2, -1], ".": [2, 1] };
-function keyId(k) {
+function keyId(k, shift = false) {
   const i = PIANO.indexOf(k.toLowerCase());
   if (i >= 0) return (board === 1 ? 12 : 21) + i;
-  const b = BUTTONS[board === 1 ? 1 : 0][k.toLowerCase()];
+  const map = BUTTONS[board === 1 ? 1 : 0];
+  const b = (k === " " && shift ? map["shift "] : undefined) ?? map[k.toLowerCase()];
   return b === undefined ? -1 : b;
 }
 const padKey = (k) => (board === 1 && /^[1-8]$/.test(k) ? Number(k) - 1 : -1);
@@ -560,16 +719,18 @@ addEventListener("keydown", (e) => {
   if (ENC_KEYS[e.key]) { e.preventDefault(); turn(...ENC_KEYS[e.key]); return; }
   const pad = padKey(e.key);
   if (pad >= 0) { e.preventDefault(); if (!e.repeat) setAnalog(pad, 700); return; }
-  const id = keyId(e.key);
+  const id = keyId(e.key, e.shiftKey);
   if (id < 0 || e.repeat) return;
   e.preventDefault();
   if (board === 1 && id < NKEY) setVelocity(0.75);
+  held.set(e.code, id);
   setKey(id, true);
 });
 addEventListener("keyup", (e) => {
   const pad = padKey(e.key);
   if (pad >= 0) { setAnalog(pad, 0); return; }
-  const id = keyId(e.key);
+  const id = held.get(e.code) ?? keyId(e.key, e.shiftKey);
+  held.delete(e.code);
   if (id >= 0) setKey(id, false);
 });
 
@@ -665,11 +826,18 @@ midiChSel.addEventListener("change", () => {
 // The speed shown is the emulator's own: emulated time per time spent emulating (as
 // `node web/bench.mjs` and `fm1-live --bench` print it); at 1x a device just keeps up.
 const warnBox = document.getElementById("perfwarn");
+// The highest clock each firmware (id@version) ran out of time at during this visit: below it the
+// emulated chip is too slow for the firmware, on any device (the audio blocks it leaves unfilled,
+// fm1_starved), so the advice offers none of those clocks. Kept for the visit only: the clock the
+// user settles on is stored, and a firmware or emulator update can change where the floor is.
+const outOfTime = new Map();
+const fwKey = () => `${fw.id}@${fw.version || fw.name}`;   // (every package from this computer is "local")
 const perf = {
   reset() {
     this.busy = 0; this.span = 0; this.emulated = 0; this.idle = 0; this.idleShare = 0; this.worst = 0;
     this.secs = 0; this.bad = 0; this.drops = 0; this.loads = []; this.speeds = []; this.drift = 0;
     this.stamp = null; this.jit = null; this.dismissed = false;
+    this.starved = 0; this.starvedTotal = 0; this.starvedSecs = 0; this.starvedRun = 0;
     warnBox.hidden = true;
   },
   add(m) {
@@ -677,6 +845,7 @@ const perf = {
     this.span += (m.quanta * m.frames) / 44.1;     // ms of audio those quanta stand for
     this.emulated += m.emulated ?? 0;              // ms of emulated time they ran
     this.idle += m.idle ?? 0;                      // of which idle skipping jumped over
+    this.starved += m.starved ?? 0;                // audio blocks the firmware left unfilled
     if (m.worst > this.worst) this.worst = m.worst;
     this.jit = m.jit;
   },
@@ -692,7 +861,8 @@ const perf = {
     if (this.emulated > 0) this.idleShare = Math.min(1, this.idle / this.emulated);
     if (this.loads.length > 30) this.loads.shift();
     if (this.speeds.length > 30) this.speeds.shift();
-    this.busy = 0; this.span = 0; this.emulated = 0; this.idle = 0;
+    const starved = this.starved;
+    this.busy = 0; this.span = 0; this.emulated = 0; this.idle = 0; this.starved = 0;
     const ts = ac.getOutputTimestamp?.();
     let drift = 0;
     if (ts && ts.contextTime > 0) {
@@ -704,10 +874,17 @@ const perf = {
     }
     this.drift = drift;
     if (++this.secs <= 3 || m.halted) return;      // (the first seconds: booting, compiling)
+    if (starved > 0) {
+      this.starvedTotal += starved;
+      this.starvedSecs++;
+      outOfTime.set(fwKey(), Math.max(mhz, outOfTime.get(fwKey()) ?? 0));
+    }
+    this.starvedRun = starved > 0 ? this.starvedRun + 1 : 0;
     const over = this.load() > 0.95, late = drift > 0.02;
     if (late) this.drops++;
     this.bad = over || late ? this.bad + 1 : 0;
-    if (this.bad >= 3 && warnBox.hidden && !this.dismissed) this.warn(over);
+    const hungry = this.starvedRun >= 2;
+    if ((hungry || this.bad >= 3) && warnBox.hidden && !this.dismissed) this.warn(over, hungry);
   },
   // A lower clock that brings the load down to ~80%, if one does. The cost of emulating a
   // second is a fixed part (about a quarter at the clocks offered: the peripherals, the audio, the
@@ -719,26 +896,42 @@ const perf = {
   lowerClock(load) {
     const FIXED = 0.25, busy = mhz * (1 - this.idleShare);   // MHz of cycles the firmware runs
     const at = (c) => load * (FIXED + (1 - FIXED) * Math.min(busy, c) / Math.max(busy, 1));
-    const lower = CLOCKS.filter((c) => c < mhz && at(c) <= 0.8);
-    const pick = lower.length ? lower[lower.length - 1] : CLOCKS.find((c) => c < mhz);
+    const clocks = this.lowerClocks();
+    const lower = clocks.filter((c) => at(c) <= 0.8);
+    const pick = lower.length ? lower[lower.length - 1] : clocks[0];
     return pick && at(pick) < 0.85 * load ? pick : null;     // only where it clearly helps
   },
-  warn(over) {
+  lowerClocks() {
+    return CLOCKS.filter((c) => c < mhz && c > (outOfTime.get(fwKey()) ?? 0));
+  },
+  warn(over, hungry) {
     const load = this.load();
-    const pick = over ? this.lowerClock(load) : null;
+    const pick = over && !hungry ? this.lowerClock(load) : null;
     const text = document.getElementById("perfwarn-text");
     const fix = document.getElementById("perfwarn-fix");
     // (a debugger attached, as DevTools open, runs the WebAssembly 3-4x slower)
     const devtools = " If the browser's developer tools are open, close them: they slow the emulator down 3-4x.";
     fix.hidden = false;
-    if (over && pick) {
+    if (hungry) {
+      // (a higher clock costs this device more; overloaded already, it would only trade one dropout for another)
+      const up = over ? null : CLOCKS.find((c) => c > Math.max(mhz, outOfTime.get(fwKey()) ?? 0));
+      text.textContent = `${fw.name} runs out of time at ${mhz} MHz: the emulated chip is too slow for it, so its ` +
+        `own sound breaks up, on any device.` + (up ? " The real FM-1 runs at 240 MHz." : !over ?
+          " No higher clock gives it enough, the desktop version too." :
+          ` This device can't run it faster in real time. A faster device or the desktop version will play it.`);
+      fix.hidden = !up;
+      if (up) {
+        fix.textContent = `Use ${up} MHz`;
+        fix.onclick = () => { setClock(up); };
+      }
+    } else if (over && pick) {
       text.textContent = `This device can't run ${fw.name} at ${mhz} MHz in real time (it needs ${Math.round(100 * load)}% ` +
         `of the audio thread), so the sound breaks up. It needs less at a lower clock.` + devtools;
       fix.textContent = `Use ${pick} MHz`;
       fix.onclick = () => { setClock(pick); };
     } else if (over) {
       // (a lower clock exists but would not help: say why)
-      const why = !CLOCKS.some((c) => c < mhz) ? "" : this.idleShare >= 0.3
+      const why = !this.lowerClocks().length ? "" : this.idleShare >= 0.3
         ? " A lower clock would not help: the emulator skips the time this firmware idles, so it costs about the same at any clock."
         : " A lower clock would help only a little.";
       text.textContent = `This device can't run ${fw.name} at ${mhz} MHz in real time (it needs ` +
@@ -762,7 +955,8 @@ const perf = {
     const loads = this.loads.map((l) => Math.round(100 * l)), jit = this.jit;
     return [
       `FM-1 emulator report (${location.origin}${location.pathname})`,
-      `firmware: ${fw.id} ${fw.version || ""} · clock ${mhz} MHz · JIT ${params.get("jit") === "0" ? "off" : "on"}`,
+      `firmware: ${fw.id} ${fw.version || ""} · clock ${mhz} MHz · JIT ${params.get("jit") === "0" ? "off" : "on"}` +
+        (CHIP === "p25q80" ? "" : ` · flash ${CHIP}`),
       `browser: ${navigator.userAgent}`,
       `cores: ${navigator.hardwareConcurrency ?? "?"} · memory: ${navigator.deviceMemory ?? "?"} GB`,
       `audio: ${ac ? `${ac.sampleRate} Hz, buffer "${latency}", base latency ${r(1000 * (ac.baseLatency ?? NaN), 1)} ms, ` +
@@ -770,6 +964,8 @@ const perf = {
       `speed (emulated time per time spent emulating, last ${this.speeds.length} s): ${this.speeds.map((v) => r(v, 2)).join(" ")}x real time`,
       `load (last ${loads.length} s): ${loads.join(" ")}% · worst quantum since the audio started ${r(this.worst, 1)} ms of ${r(128 / 44.1, 1)}`,
       `audio clock drift: ${r(100 * this.drift, 1)}% · seconds with drops: ${this.drops} · idle skipped: ${r(100 * this.idleShare)}% of the time`,
+      `firmware out of time: ${this.starvedSecs} s, ${this.starvedTotal} audio blocks not computed in time (its own sound ` +
+        `breaks up at this clock, on any device)`,
       `jit: ${jit ? `${jit.regions} regions compiled, ${jit.failed} failed${jit.error ? ` (${jit.error})` : ""} · ` +
         `compiling took ${r(jit.compileMs)} ms, the longest ${r(jit.compileMaxMs, 1)} ms` : "?"}`,
       `emulated: ${frame ? r(frame.ms / 1000, 1) : "?"} s · short audio quanta: ${frame?.short ?? "?"}`,
@@ -939,7 +1135,7 @@ function boot(options = {}) {
       node.port.postMessage({ type: "boot", seq, wasm: wasm.slice(0), package: got.bytes.slice().buffer,
         sectors: packSectors(sectors).buffer, syx: importedBank ? importedBank.slice().buffer : null,
         script: trying?.script ? new TextEncoder().encode(trying.script).buffer : null,
-        mhz: clock, jit: params.get("jit") !== "0",
+        mhz: clock, jit: params.get("jit") !== "0", chip: CHIP,
         // (?ahead=0: each quantum emulates only for its own frames, as before the even pace)
         ahead: params.has("ahead") ? Number(params.get("ahead")) : undefined });
       status.textContent = `booting ${f.name}…`;

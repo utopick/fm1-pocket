@@ -121,6 +121,8 @@ impl Machine {
         soc.periph.skip_idle = true;
         soc.lcd_timed = unsafe { LCD_TIMED };
         soc.cpu1_survives = unsafe { CPU1_SURVIVES };
+        // (before the boot: the board sets the flash chip's id from it)
+        soc.set_flash_part(flash_part(unsafe { FLASH_PART }));
         let mut cpu = Cpu::new(entry);
         // (cpu1 follows cpu0's setting: run_dual)
         cpu.jit_on = unsafe { JIT };
@@ -198,6 +200,8 @@ static mut AHEAD: u32 = 0;
 static mut LCD_TIMED: bool = false;
 /// `fm1_cpu1_survives`: a fault on core 1 stops that core alone and cpu0 goes on (`Soc::cpu1_survives`)
 static mut CPU1_SURVIVES: bool = false;
+/// `fm1_flash_part`: the next boot's FM-1 flash part (0 the stock Puya P25Q80, 1 the UC25HQ80)
+static mut FLASH_PART: u32 = 0;
 static mut OUT_L: [f32; 1024] = [0.0; 1024];
 static mut OUT_R: [f32; 1024] = [0.0; 1024];
 static mut LEDS: [f32; 41] = [0.0; 41];
@@ -435,6 +439,19 @@ pub extern "C" fn fm1_ahead(frames: u32) {
 /// A fault on core 1 stops that core alone and cpu0 goes on, as the chip's would (`on` = 1;
 /// `Soc::cpu1_survives`), for a firmware whose core 1 fails on the chip too (COSMOS 0.23).
 /// Off, the default, the machine halts there: most such faults are the emulator's own gaps.
+fn flash_part(n: u32) -> fm1_soc::FlashPart {
+    if n == 1 { fm1_soc::FlashPart::Uc25hq80 } else { fm1_soc::FlashPart::P25q80 }
+}
+
+/// Which part the FM-1's flash is: 0 the stock Puya P25Q80 (JEDEC 85 60 14), 1 the UC25HQ80
+/// (B3 60 14) of units sold since autumn 2026. Before the boot, or for the machine running (a
+/// firmware reads the id at its start, so the running one goes on as it began).
+#[no_mangle]
+pub extern "C" fn fm1_flash_part(part: u32) {
+    unsafe { FLASH_PART = part };
+    if let Some(m) = machine() { m.soc.set_flash_part(flash_part(part)); }
+}
+
 /// Before the boot, or for the machine running.
 #[no_mangle]
 pub extern "C" fn fm1_cpu1_survives(on: u32) {
@@ -466,7 +483,8 @@ pub extern "C" fn fm1_lcd_revision() -> u32 {
     machine().map_or(0, |m| m.soc.lcd.revision)
 }
 
-/// The LEDs' on-fractions since the last call (41 floats; SMK-37: its 19 button LEDs first).
+/// The LEDs as an eye sees them (41 floats, fm1_soc's `led_shown`). SMK-37: its 19 button LEDs
+/// first, each its on-fraction since the last call.
 #[no_mangle]
 pub extern "C" fn fm1_leds() -> *const f32 {
     #[allow(static_mut_refs)]
@@ -476,7 +494,7 @@ pub extern "C" fn fm1_leds() -> *const f32 {
                 LEDS = [0.0; 41];
                 LEDS[..fm1_soc::smk::NLED].copy_from_slice(&m.soc.periph.smk.led_take());
             } else {
-                LEDS = m.soc.periph.led_take();
+                LEDS = m.soc.periph.led_shown();
             }
         }
         LEDS.as_ptr()
@@ -565,6 +583,13 @@ pub extern "C" fn fm1_idle_ms() -> u32 {
     machine().map_or(0, |m| (m.soc.periph.skipped * 1000 / m.soc.periph.hz) as u32)
 }
 
+/// The audio halves the firmware did not refill in time since boot (fm1_soc's `refill`): its own
+/// sound breaks up at this clock, on any device.
+#[no_mangle]
+pub extern "C" fn fm1_starved() -> u32 {
+    machine().map_or(0, |m| m.soc.refill.starved as u32)
+}
+
 /// cpu0's run budget handed out so far, in millions (not instructions executed: idle skipping
 /// and a short chunk count whole; the page's speed readout is fm1_ms per wall time instead).
 #[no_mangle]
@@ -586,6 +611,7 @@ pub extern "C" fn fm1_cpu1_fault() -> u32 {
 
 // ---------------------------------------------------------------- the front panel (page side)
 
+static mut PANEL_THEME_ID: u32 = 0;
 static mut PANEL_BASE: Vec<u32> = Vec::new();
 static mut PANEL_BUF: Vec<u32> = Vec::new();
 static mut PANEL_LCD: Vec<u16> = Vec::new();
@@ -615,6 +641,39 @@ pub extern "C" fn panel_board(b: u32) {
                 PANEL_ANALOG[fm1_soc::smk::ANALOG_MOD as usize] = fm1_soc::smk::MOD_REST;
             }
         }
+    }
+}
+
+/// Switch to theme `id` (0..THEMES.len()). Forces a base rebuild.
+#[no_mangle]
+pub extern "C" fn panel_theme(id: u32) {
+    unsafe {
+        let id = id.min(panel::THEMES.len() as u32 - 1);
+        if PANEL_THEME_ID != id {
+            PANEL_THEME_ID = id;
+            PANEL_BASE = Vec::new();
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn panel_theme_count() -> u32 {
+    panel::THEMES.len() as u32
+}
+
+static mut THEME_NAME_BUF: Vec<u8> = Vec::new();
+
+/// The theme's display label as a NUL-terminated UTF-8 string in linear memory.
+#[no_mangle]
+#[allow(static_mut_refs)]
+pub extern "C" fn panel_theme_name(id: u32) -> *const u8 {
+    unsafe {
+        let id = id.min(panel::THEMES.len() as u32 - 1) as usize;
+        let label = panel::THEMES[id].1;
+        THEME_NAME_BUF.clear();
+        THEME_NAME_BUF.extend_from_slice(label.as_bytes());
+        THEME_NAME_BUF.push(0);
+        THEME_NAME_BUF.as_ptr()
     }
 }
 
@@ -670,8 +729,9 @@ pub extern "C" fn panel_set(kind: u32, i: u32, v: i32) {
 pub extern "C" fn panel_draw() -> *const u8 {
     unsafe {
         let smk = PANEL_BOARD == 1;
+        let theme = &panel::THEMES[PANEL_THEME_ID.min(panel::THEMES.len() as u32 - 1) as usize].2;
         if PANEL_BASE.is_empty() {
-            PANEL_BASE = if smk { panel_smk::base() } else { panel::base() };
+            PANEL_BASE = if smk { panel_smk::base() } else { panel::base(theme) };
             PANEL_BUF = vec![0; PANEL_BASE.len()];
         }
         if PANEL_LCD.is_empty() {
@@ -701,7 +761,7 @@ pub extern "C" fn panel_draw() -> *const u8 {
                 leds: &PANEL_LEDS,
                 turning: &std::array::from_fn(|i| PANEL_TURN[i]),
             };
-            panel::draw(&mut PANEL_BUF, &PANEL_BASE, &st);
+            panel::draw(&mut PANEL_BUF, &PANEL_BASE, &st, theme);
         }
         // 0RGB -> RGBA bytes in place (little endian: R G B A)
         for p in PANEL_BUF.iter_mut() {

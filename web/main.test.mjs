@@ -81,7 +81,7 @@ async function page(disk = storage(), initialSearch = '', selected = '', manualB
     ResizeObserver: class { observe() {} }, scrollY: 0, Option: Element, navigator: {},
     fetch: async url => ({ json: async () => url === 'smk37/firmwares.json' ? { firmwares: [] } : cat,
       arrayBuffer: async () => new ArrayBuffer(0) }),
-    WebAssembly: { instantiate: async () => ({ instance: { exports: { panel_board() {}, panel_width: () => 100, panel_height: () => 100 } } }) },
+    WebAssembly: { instantiate: async () => ({ instance: { exports: { panel_board() {}, panel_width: () => 100, panel_height: () => 100, panel_theme_count: () => 1, panel_theme_name: () => 0, panel_theme() {}, memory: { buffer: new ArrayBuffer(256) } } } }) },
     requestAnimationFrame() {}, addEventListener() {}, AudioContext, AudioWorkletNode,
     matchMedia: () => ({ matches: false }), confirm: () => true,
     fetchPackage: async f => ({ bytes: new Uint8Array(960).fill(f.id === 'a' ? 1 : 2), url: f.package }),
@@ -91,7 +91,7 @@ async function page(disk = storage(), initialSearch = '', selected = '', manualB
   const run = new Function(...Object.keys(environment), `return (async () => { ${source}\nreturn {
     startAudio, boot, flushRunning, setLatency, get running() { return running; },
     setFirmware(id) { fw = byId.get(id); fwSel.value = id; }, setBank(bytes) { bank = bytes; },
-    get fw() { return fw; }, perf, setMhz(c) { mhz = c; }, get bootSeq() { return bootSeq; }
+    get fw() { return fw; }, perf, setMhz(c) { mhz = c; }, get bootSeq() { return bootSeq; }, screen: { lcdRaw, showLcd }
   }; })()`);
   const api = await run(...Object.values(environment));
   return { api, disk, elements, location, expireBoot: () => bootTimer(), get audio() { return audio; } };
@@ -202,6 +202,42 @@ test('a boot timeout cancels the machine and the next firmware selection recover
   assert.equal(await p.api.boot(), true);
 });
 
+test('Shift+Space is REC, Space PLAY, and R presses nothing (a slip among the black keys must not record)', async () => {
+  const on = {};
+  const p = await page(storage(), '', '', false, { addEventListener(type, fn) { on[type] = fn; }, HTMLSelectElement: class {} });
+  await p.api.startAudio(); await p.api.boot(); await settle();
+  const key = (type, key, code, shiftKey = false) => on[type]({ type, key, code, shiftKey, repeat: false, target: {}, preventDefault() {} });
+  const sent = () => {   // the key messages since the last call: id, v down, ^ up
+    const k = p.audio.messages.filter(m => m.type === 'key').map(m => `${m.id}${m.down ? 'v' : '^'}`);
+    p.audio.messages = p.audio.messages.filter(m => m.type !== 'key');
+    return k.join(' ');
+  };
+  key('keydown', 'r', 'KeyR'); key('keyup', 'r', 'KeyR');
+  assert.equal(sent(), '');
+  key('keydown', ' ', 'Space', true); key('keyup', ' ', 'Space');          // (Shift let go first)
+  assert.equal(sent(), '13v 13^');
+  key('keydown', ' ', 'Space'); key('keyup', ' ', 'Space', true);
+  assert.equal(sent(), '12v 12^');
+});
+
+test('Big screen shows the screen again; Screen colours recolour it by brightness, on the panel too', async () => {
+  const memory = { buffer: new ArrayBuffer(240 * 240 * 2) };
+  const exports = { panel_board() {}, panel_width: () => 100, panel_height: () => 100, panel_theme_count: () => 1,
+    panel_theme_name: () => 0, panel_theme() {}, panel_lcd: () => 0, memory };
+  const p = await page(storage(), '', '', false, { WebAssembly: { instantiate: async () => ({ instance: { exports } }) } });
+  const big = p.elements.get('big'), button = p.elements.get('bigscreen'), colours = p.elements.get('colours');
+  assert.equal(big.hidden, true);
+  button.listeners.click(); assert.equal(big.hidden, false);
+  button.listeners.click(); assert.equal(big.hidden, true);
+  assert.deepEqual(colours.options.map(o => o.value), ['', 'yellow', 'white', 'paper']);
+  const { lcdRaw, showLcd } = p.api.screen, lcd = new Uint16Array(memory.buffer);
+  lcdRaw.set([0xffff, 0x0000, 0x07e0, 0x0841]);   // white, black, full green, a near-black grey
+  const show = (v) => { colours.value = v; colours.listeners.change(); showLcd(); return [...lcd.subarray(0, 4)]; };
+  assert.deepEqual(show(''), [0xffff, 0x0000, 0x07e0, 0x0841]);
+  assert.deepEqual(show('paper'), [0x0000, 0xffff, 0x0000, 0xffff]);
+  assert.deepEqual(show('yellow'), [0xfee0, 0x0000, 0xfee0, 0x0000]);
+});
+
 test('the status line and the report give the emulation speed and the JIT; idle firmwares get no lower clock', async () => {
   const p = await page(); await p.api.startAudio(); await p.api.boot(); await settle();
   const jit = { regions: 812, failed: 1, error: 'CompileError: x', compileMs: 40, compileMaxMs: 1.5 };
@@ -228,6 +264,50 @@ test('the status line and the report give the emulation speed and the JIT; idle 
   assert.equal(p.api.perf.lowerClock(3), 60);
   p.api.setMhz(80);
   assert.equal(p.api.perf.lowerClock(1.2), null);    // (60 MHz would save only ~13%)
+});
+
+test('a firmware out of time at its clock: the warning offers a higher one, and the advice never suggests that clock again', async () => {
+  const p = await page(); await p.api.startAudio(); await p.api.boot(); await settle();
+  // a second of audio: load 40% (busy 1000 for 100%), `starved` audio blocks the firmware left unfilled
+  const second = (starved, busy = 400) => {
+    p.api.perf.add({ busy, quanta: 345, frames: 128, emulated: 1000, idle: 0, worst: 1, starved });
+    p.api.perf.second({ halted: false });
+  };
+  const warning = () => p.elements.get('perfwarn').hidden ? null : p.elements.get('perfwarn-text').textContent;
+  for (let i = 0; i < 3; i++) second(9);             // (booting: not judged)
+  second(9); second(0); second(9);
+  assert.equal(warning(), null);                     // (seconds apart are not enough)
+  second(9);
+  assert.match(warning(), /^a runs out of time at 100 MHz: .* on any device\. The real FM-1 runs at 240 MHz\./);
+  assert.equal(p.elements.get('perfwarn-fix').hidden, false);
+  assert.equal(p.elements.get('perfwarn-fix').textContent, 'Use 120 MHz');
+  assert.match(p.api.perf.report(), /^firmware out of time: 3 s, 27 audio blocks not computed in time/m);
+  // later, on a device too slow at 240 MHz: the advice stays above the clock it ran out of time at
+  await p.api.boot(); await settle();
+  p.api.setMhz(240); p.api.perf.idleShare = 0.1;
+  assert.equal(p.api.perf.lowerClock(3), 120);
+  p.api.setFirmware('b');
+  assert.equal(p.api.perf.lowerClock(3), 60);        // (another firmware: its own clocks)
+  // out of time and the device overloaded too: no clock to offer
+  p.api.setFirmware('a'); p.api.setMhz(100); await p.api.boot(); await settle();
+  for (let i = 0; i < 5; i++) second(9, 1000);
+  assert.match(warning(), /^a runs out of time at 100 MHz: .* A faster device or the desktop version will play it\./);
+  assert.equal(p.elements.get('perfwarn-fix').hidden, true);
+  // out of time at the top clock: no clock gives it enough, on any device
+  p.api.setMhz(240); await p.api.boot(); await settle();
+  for (let i = 0; i < 5; i++) second(9);
+  assert.match(warning(), /^a runs out of time at 240 MHz: .* No higher clock gives it enough, the desktop version too\.$/);
+  assert.equal(p.elements.get('perfwarn-fix').hidden, true);
+  // two packages from this computer: each its own clocks
+  const open = async (name) => {
+    p.elements.get('open').files = [{ name, arrayBuffer: async () => new ArrayBuffer(960) }];
+    p.elements.get('open').listeners.change(); await settle(); await settle();
+  };
+  await open('x.fwsc'); p.api.setMhz(100); await p.api.boot(); await settle();
+  for (let i = 0; i < 5; i++) second(9);
+  await open('y.fwsc'); p.api.setMhz(240);
+  assert.equal(p.api.fw.name, 'y');
+  assert.equal(p.api.perf.lowerClock(3), 60);
 });
 
 test("a try-out boots with its sectors and script from this origin, starts by itself and saves nothing", async () => {
