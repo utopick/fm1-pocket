@@ -39,7 +39,7 @@ PATH="$(dirname "$PYTHON"):$PATH"; export PATH   # (some tests call plain python
 
 echo "autobuild: building"
 rm -rf build
-V="$(tr -d ' \n' < VERSION)"   # the release: VERSION (X.Y), one digit each; it becomes the identity FM-1_96Y and the name "Tether X.Y"
+V="$(tr -d ' \n' < VERSION)"   # the release: VERSION (X.Y), one digit each; it becomes the identity FM-1_925Y and the name "Tether X.Y"
 ./build.sh --release "$V"
 cp "build/tether-$V.fwsc" build/tether.fwsc
 [ -s build/tether.fwsc ] || { echo "autobuild: no build/tether.fwsc"; exit 1; }

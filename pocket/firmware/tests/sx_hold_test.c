@@ -22,7 +22,7 @@ static int ota_prog(uint32_t off, const void *p, uint32_t n) { (void)off; (void)
 static int ota_fread(uint32_t off, void *p, uint32_t n) { (void)off; (void)p; (void)n; return -8; }
 static void ota_show(uint32_t step, int32_t code) { (void)step; (void)code; }
 static void ota_commit(const uint8_t *parm) { (void)parm; }
-#define FELUCCA_ID "FM-1_960"
+#define FELUCCA_ID "FM-1_9250"
 #include "../firmware/src/ota.c"
 
 static int fails;

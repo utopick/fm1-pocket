@@ -1,0 +1,9 @@
+{
+  "what": "Tether turns a real FM-1 into the front panel of FM1.Pocket, the FM-1 emulator in your browser. Its keys, knobs and buttons play the page, and the page's screen and lights show on the unit. When no page is open, it works as a plain USB MIDI controller.",
+  "author": "utopick",
+  "kinds": [
+    "other"
+  ],
+  "image": "pocket/firmware/release/tether-card.png",
+  "color": "#B48CFF"
+}
