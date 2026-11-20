@@ -140,9 +140,9 @@ impl Jit {
     /// Compile a region (blocks with their ids; the first is the hot one) and install it: every
     /// block not yet in a region gets this one. `ver`: the bus's count of code-word writes, its
     /// RAM blocks having just been found current. False: it could not be compiled.
-    pub(crate) fn install<B: Bus>(&mut self, blocks: &[(usize, u32, Vec<crate::BOp>)], mem: &JitMem, ver: u64, profile: bool) -> bool {
+    pub(crate) fn install<B: Bus>(&mut self, blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u8)], mem: &JitMem, ver: u64, profile: bool) -> bool {
         COMPILE_BUDGET.fetch_sub(1, Ordering::Relaxed);
-        let m = compile::<B>(blocks, mem, self.stops, profile);
+        let m = compile::<B>(blocks, swaps, mem, self.stops, profile);
         let [r, w, o] = helpers::<B>(profile);
         // SAFETY: a plain byte slice; the host copies it before returning
         let f = unsafe { fm1_jit_compile(m.as_ptr(), m.len(), r, w, o) };
@@ -320,6 +320,18 @@ extern "C" fn h_op<B: Bus, const PROF: bool>(ctx: *mut Ctx, op: *const Fast, idx
     if PROF {
         cpu.profile_helper(unsafe { &*op });
     }
+    if let Fast::Swap { .. } = unsafe { *op } {
+        // a swapped pair whole, as `Cpu::exec_careful_op` runs it: the second instruction (no
+        // jump: `Cpu::wasm_region`), then the head; both ticks are taken (`idx` is the second's).
+        // Then the code leaves if the next tick is due or an interrupt is pending, and for the
+        // interrupt `run_fast` stops, as the careful path does after a pair.
+        // SAFETY: a Swap's `op` is the first field of a leaked `SwapOp` (`Gen::swap_op`)
+        let s = unsafe { &*(op as *const SwapOp) };
+        if swap_pair(cpu, bus, s, next_pc) {
+            ctx.brk = 1;
+        }
+        return 0;
+    }
     let j = cpu.exec_fast(bus, unsafe { *op }, next_pc);
     if bus.next_tick_due() {
         ctx.brk = 1;
@@ -328,6 +340,35 @@ extern "C" fn h_op<B: Bus, const PROF: bool>(ctx: *mut Ctx, op: *const Fast, idx
         Some(t) => (1u64 << 32) | t as u64,
         None => 0,
     }
+}
+
+/// What `h_op` runs for a `Fast::Swap`: the op itself first (the helper is told a `Fast`), then
+/// the pair, and the pc between its two instructions (the head's next pc).
+#[repr(C)]
+struct SwapOp {
+    op: Fast,
+    head: Fast,
+    tail: Fast,
+    mid: u32,
+}
+
+/// `h_op`'s swapped pair (out of line, the executor in it once: `h_op` stays what it was for
+/// every other op); true: the code leaves after it.
+#[inline(never)]
+fn swap_pair<B: Bus>(cpu: &mut Cpu, bus: &mut B, s: &SwapOp, next_pc: u32) -> bool {
+    for (f, next) in [(s.tail, next_pc), (s.head, s.mid)] {
+        let _ = cpu.exec_fast(bus, f, next);
+    }
+    if cpu.pair_irq(bus) {
+        cpu.pair_stop = true;
+        return true;
+    }
+    bus.next_tick_due()
+}
+
+/// The instructions of a block's ops (a swapped pair is two).
+fn insns(ops: &[crate::BOp]) -> u32 {
+    ops.iter().map(|o| if matches!(o.fast, Fast::Swap { .. }) { 2 } else { 1 }).sum()
 }
 
 // ------------------------------------------------------------------ wasm encoding
@@ -504,6 +545,8 @@ pub const EXIT_NAMES: [&str; 10] = ["none", "limit", "stop", "stop_io", "goto_ou
 struct Gen<'a> {
     c: Vec<u8>,
     mem: &'a JitMem,
+    /// the core's swapped pairs (`Fast::Swap`'s index)
+    swaps: &'a [(Fast, Fast, u8)],
     /// the region's blocks by start pc -> index
     index: std::collections::HashMap<u32, u32>,
     /// the same as a table in memory for jumps to a pc known only at run time (`jump_local`):
@@ -522,6 +565,28 @@ struct Gen<'a> {
 }
 
 impl Gen<'_> {
+    /// `op` through the interpreter's executor (`h_op`); a jump it made is taken.
+    fn exec_op(&mut self, op: Fast, idx: u32, next_pc: u32, count: u32) {
+        let p: &'static Fast = Box::leak(Box::new(op));
+        self.get(L_CTX);
+        self.i32c(p as *const Fast as u32);
+        self.idx(idx);
+        self.i32c(next_pc);
+        self.call(F_OP);
+        self.c.push(LOCAL_TEE);
+        uleb(&mut self.c, L_OPRES as u64);
+        self.c.push(I64_CONST);
+        sleb(&mut self.c, 32);
+        self.op(I64_SHR_U);
+        self.op(I64_EQZ);
+        self.op(I32_EQZ);
+        self.if_();
+        self.get(L_OPRES);
+        self.op(I32_WRAP_I64);
+        self.set(L_VAL);
+        self.jump_local(L_VAL, count, 7);
+        self.end();
+    }
     fn op(&mut self, b: u8) {
         self.c.push(b);
     }
@@ -1008,11 +1073,12 @@ fn helpers<B: Bus>(profile: bool) -> [u32; 3] {
     ]
 }
 
-fn compile<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], mem: &JitMem, stops: bool, prof: bool) -> Vec<u8> {
+fn compile<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u8)], mem: &JitMem, stops: bool, prof: bool) -> Vec<u8> {
     let n = blocks.len() as u32;
     let mut g = Gen {
         c: Vec::with_capacity(64 * blocks.iter().map(|b| b.2.len()).sum::<usize>()),
         mem,
+        swaps,
         index: blocks.iter().enumerate().map(|(k, b)| (b.1, k as u32)).collect(),
         table: jump_table(blocks),
         pred: None,
@@ -1055,7 +1121,7 @@ fn compile<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], mem: &JitMem, stops
 /// The code of one block of a region.
 fn block<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp]) {
     // the whole block must fit the call's limit, else back to Rust before running any of it
-    g.done_plus(ops.len() as u32);
+    g.done_plus(insns(ops));
     g.get(L_LIMIT);
     g.op(I32_GT_U);
     g.if_();
@@ -1161,15 +1227,37 @@ const PROBE_OPS: usize = 4;
 fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool) {
     let mut pc = pc0;
     let mut ended = false;
+    // instructions so far (a swapped pair is two)
+    let mut ins = 0u32;
     for (i, op) in ops.iter().enumerate() {
-        let idx = i as u32;
+        let idx = ins;
         if probe && idx > 0 {
             g.probe_point(pc, idx);
         }
         let next_pc = pc + op.len as u32;
-        let count = idx + 1;
+        ins += if matches!(op.fast, Fast::Swap { .. }) { 2 } else { 1 };
+        let count = ins;
         let mut bus_used = false;
         match op.fast {
+            // a dual-issue pair run second instruction first, whole, by the executor (`h_op`,
+            // told the second's index: both ticks); then out if it set brk (`check_brk` below)
+            Fast::Swap { idx: sw } => {
+                let (head, tail, hlen) = g.swaps[sw as usize];
+                let p: &'static SwapOp = Box::leak(Box::new(SwapOp { op: op.fast, head, tail, mid: pc + hlen as u32 }));
+                g.get(L_CTX);
+                g.i32c(p as *const SwapOp as u32);
+                g.idx(idx + 1);
+                g.i32c(next_pc);
+                g.call(F_OP);
+                g.op(0x1a); // drop
+                bus_used = true;
+            }
+            // an add / subtract whose flags are read later (`BOp::flags_only`): this code keeps
+            // no flags, the interpreter's executor does
+            other if op.flags_only() => {
+                g.exec_op(other, idx, next_pc, count);
+                bus_used = true;
+            }
             Fast::Nop => {}
             Fast::MovI { d, v } => {
                 g.get(L_CPU);
@@ -1963,25 +2051,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
             }
             // ---- everything else: the interpreter's executor for this one op
             other => {
-                let p: &'static Fast = Box::leak(Box::new(other));
-                g.get(L_CTX);
-                g.i32c(p as *const Fast as u32);
-                g.idx(idx);
-                g.i32c(next_pc);
-                g.call(F_OP);
-                g.c.push(LOCAL_TEE);
-                uleb(&mut g.c, L_OPRES as u64);
-                g.c.push(I64_CONST);
-                sleb(&mut g.c, 32);
-                g.op(I64_SHR_U);
-                g.op(I64_EQZ);
-                g.op(I32_EQZ);
-                g.if_();
-                g.get(L_OPRES);
-                g.op(I32_WRAP_I64);
-                g.set(L_VAL);
-                g.jump_local(L_VAL, count, 7);
-                g.end();
+                g.exec_op(other, idx, next_pc, count);
                 bus_used = true;
             }
         }
@@ -2009,7 +2079,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
     }
     if !ended {
         // fell off the end of the prefix
-        g.goto(pc, ops.len() as u32, true);
+        g.goto(pc, ins, true);
     }
 }
 
@@ -2070,7 +2140,7 @@ pub fn int_selftest() -> u32 {
     }
     for fast in ops {
         let bop = crate::BOp { fast, len: 2, careful: false, pair_head: false, glue: false };
-        let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &mem, false, false);
+        let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &[], &mem, false, false);
         let [r, w, o] = helpers::<NoBus>(false);
         // SAFETY: a plain byte slice; the host copies it before returning
         let f = unsafe { fm1_jit_compile(m.as_ptr(), m.len(), r, w, o) };
@@ -2146,7 +2216,7 @@ pub fn fop_selftest() -> u32 {
             let (b2, b3) = if op <= 6 { (a << 4 | op, d << 4 | b) } else { (op, d << 4 | a) };
             bus.0 = [0; 16];
             bus.0[..4].copy_from_slice(&[0x3f, 0xe5, b2, b3]);
-            let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &mem, false, false);
+            let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &[], &mem, false, false);
             let [r, w, o] = helpers::<NoBus>(false);
             // SAFETY: a plain byte slice; the host copies it before returning
             let f = unsafe { fm1_jit_compile(m.as_ptr(), m.len(), r, w, o) };

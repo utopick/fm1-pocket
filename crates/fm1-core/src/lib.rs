@@ -69,6 +69,14 @@ pub trait Bus {
     fn irq_pending(&self) -> bool {
         false
     }
+    /// With a source pending: would this core's runner take an interrupt now, the core being
+    /// ready for its priority (`ready`: `Cpu::irq_ready`)? A bus that knows no enables and
+    /// priorities says yes for any pending source.
+    #[inline(always)]
+    fn irq_takes(&self, ready: &dyn Fn(u8) -> bool) -> bool {
+        let _ = ready;
+        self.irq_pending()
+    }
     /// Host pointers for the JIT's inline memory paths (None: no JIT on this bus).
     fn jit_mem(&mut self) -> Option<JitMem> {
         None
@@ -251,6 +259,12 @@ pub struct Cpu {
     swaps: Vec<(Fast, Fast, u8)>,
     blocks: Vec<(u32, u32, u32)>,
     bmap: Vec<u32>,
+    /// pc -> block+1 for every block, exact: where `bmap`'s slot holds another pc's block (two
+    /// pcs 128 KiB apart in RAM, or 512 KiB apart in XIP, share one), the block is found here
+    /// and not built anew. Melodee's RAM code has such pairs in its audio path: each built the
+    /// other's block anew 4000 times a second, every new block a region compiled anew in the
+    /// wasm JIT (150 a second, never freed): 428 MB and 77 k regions after three minutes.
+    bfind: std::collections::HashMap<u32, u32>,
     /// Per block: for one over RAM code, the bytes it was built from. RAM can change (code
     /// copied in, overlays), so such a block is checked against memory before every entry
     /// and rebuilt when they differ. AArch64 chain targets validate their own snapshots;
@@ -309,6 +323,9 @@ pub struct Cpu {
     /// Set (while `stop_pc` is) by compiled code's helpers: a bus access off its inline paths,
     /// or an op through the interpreter's executor. (u32: compiled code reads it.)
     pub stop_io: u32,
+    /// The wasm JIT's code ran a swapped pair and an interrupt is pending: `run_fast` stops
+    /// there, as the careful path does after a pair (`exec_careful_op`).
+    pub(crate) pair_stop: bool,
     /// Set by compiled code that leaves inside a block (after a write to code): how many of its
     /// instructions are left, so a stretch knows where that block's call ends. (u32: compiled
     /// code stores it.)
@@ -490,6 +507,17 @@ impl Cpu {
             no_ram_blocks: std::env::var_os("FM1_NO_RAM_BLOCKS").is_some(),
             ..Default::default()
         }
+    }
+
+    /// After a swapped pair, nothing else in progress: is an interrupt pending that the core's
+    /// runner would take now (`Bus::irq_takes`)? Then `run_fast` stops, for the runner to take
+    /// it right after the pair, as the per-step loop does. A source that is pending but not
+    /// enabled for this core, or below the level it runs at, is nothing to stop for: the runner
+    /// would only call again. (386DX keeps one pending while it plays: every pair of its two
+    /// cores' DSP code, 1.5 M a second, went back to the runner.)
+    #[inline]
+    pub(crate) fn pair_irq<B: Bus>(&self, bus: &B) -> bool {
+        bus.irq_pending() && bus.irq_takes(&|prio| self.irq_ready(prio))
     }
 
     /// Would an interrupt of priority `prio` be taken now? Only between
@@ -843,7 +871,7 @@ impl Cpu {
                             let ver = bus.code_writes().unwrap_or(u64::MAX);
                             // (profiling as the core is now: core 1 gets the flag after its release)
                             let profile = self.profile;
-                            let ok = !region.is_empty() && self.wjit.as_mut().is_some_and(|j| j.install::<B>(&region, &mem, ver, profile));
+                            let ok = !region.is_empty() && self.wjit.as_mut().is_some_and(|j| j.install::<B>(&region, &self.swaps, &mem, ver, profile));
                             if !ok {
                                 if let Some(j) = self.wjit.as_mut() {
                                     j.refuse(id);
@@ -865,6 +893,12 @@ impl Cpu {
                         // SAFETY: code was compiled for this bus type and memory map
                         let k = unsafe { jit_wasm::run(code, at, self, bus, extra, cap) };
                         if self.profile { self.jit_entries += 1; self.jit_insns += k as u64; }
+                        if std::mem::take(&mut self.pair_stop) {
+                            // a swapped pair ended with an interrupt pending (`exec_careful_op`)
+                            n += k;
+                            self.insn_count += (n - synced) as u64;
+                            return Ok((n, false));
+                        }
                         if k > 0 {
                             n += k;
                             if open {
@@ -893,6 +927,11 @@ impl Cpu {
                                 // SAFETY: as above; n > 0: the first instruction's tick is due
                                 let k = unsafe { jit_wasm::run(f, at, self, bus, 1, limit - n) };
                                 if self.profile { self.jit_entries += 1; self.jit_insns += k as u64; }
+                                if std::mem::take(&mut self.pair_stop) {
+                                    n += k;
+                                    self.insn_count += (n - synced) as u64;
+                                    return Ok((n, false));
+                                }
                                 if k == 0 {
                                     break;
                                 }
@@ -1063,7 +1102,7 @@ impl Cpu {
                 self.insn_count += 2;
                 self.pc = jumped.unwrap_or(next_pc);
                 // (the careful path stops after a pair when an interrupt is pending)
-                return pack(2, false, bus.irq_pending(), false);
+                return pack(2, false, self.pair_irq(bus), false);
             }
             // a head always leaves its pair in progress: never a stop
             let (still, _) = self.exec_careful(bus, head, true, gated, head_next);
@@ -1126,7 +1165,15 @@ impl Cpu {
             return Ok(None);
         }
         if !self.bmap.is_empty() {
-            let id = self.bmap[icache_slot(pc)];
+            let slot = icache_slot(pc);
+            let mut id = self.bmap[slot];
+            if id != 0 && self.blocks[id as usize - 1].0 != pc {
+                // another pc's block has the slot: this pc's own, if it was built, takes it back
+                id = self.bfind.get(&pc).copied().unwrap_or(0);
+                if id != 0 {
+                    self.bmap[slot] = id;
+                }
+            }
             if id != 0 {
                 let (bpc, start, len) = self.blocks[id as usize - 1];
                 if bpc == pc && (xip || self.ram_block_ok(bus, id as usize - 1)) {
@@ -1189,7 +1236,19 @@ impl Cpu {
                 continue;
             }
             let all = &self.bops[start as usize..(start + len) as usize];
-            let mut ops: Vec<BOp> = all.iter().take_while(|o| !o.careful).copied().collect();
+            // (a careful op that is careful only for its flags, which a later instruction reads,
+            // stays in: `jit_wasm` runs it through the interpreter's executor, which keeps them)
+            // (and a swapped pair, unless its second instruction jumps: as jit.rs, through
+            // `jit_wasm`'s `h_op`)
+            let swaps = &self.swaps;
+            let mut ops: Vec<BOp> = all
+                .iter()
+                .take_while(|o| match o.fast {
+                    Fast::Swap { idx } => !swaps[idx as usize].1.may_jump(),
+                    _ => !o.careful || o.flags_only(),
+                })
+                .copied()
+                .collect();
             let (all_len, tail) = (all.len(), all.get(ops.len()).copied());
             // an if-else block at the end, its then-part plain: compiled with the then-part in
             // tow (`jit_wasm`'s IfBlk), going on at the else part or past it
@@ -1330,6 +1389,7 @@ impl Cpu {
             self.bbytes.clear();
             self.bver.clear();
             self.bmap.iter_mut().for_each(|x| *x = 0);
+            self.bfind.clear();
             #[cfg(native_jit)]
             if let Some(j) = self.jit.as_mut() {
                 j.reset();
@@ -1401,6 +1461,7 @@ impl Cpu {
         }
         let slot = icache_slot(pc);
         self.bmap[slot] = self.blocks.len() as u32;
+        self.bfind.insert(pc, self.blocks.len() as u32);
         Ok(if len == 0 { None } else { Some((self.blocks.len() - 1, start, len)) })
     }
 
@@ -4750,6 +4811,52 @@ mod tests {
         assert_eq!(run("jit"), want, "compiled");
     }
 
+    /// Two blocks whose pcs share a slot of the direct-mapped block map (128 KiB apart in RAM),
+    /// run in turn: each keeps the block it was given, and none is built anew. (Built anew each
+    /// time, the block table grew without end and the wasm JIT compiled a region for every copy:
+    /// Melodee's audio path.)
+    #[test]
+    fn blocks_that_share_a_map_slot_are_not_built_anew() {
+        struct Ram(Vec<u8>, Vec<u8>);
+        impl Bus for Ram {
+            fn read8(&mut self, a: u32) -> u8 { *self.0.get(a as usize).unwrap_or(&0) }
+            fn read16(&mut self, a: u32) -> u16 { u16::from_le_bytes([self.read8(a), self.read8(a.wrapping_add(1))]) }
+            fn read32(&mut self, a: u32) -> u32 { u32::from_le_bytes([0, 1, 2, 3].map(|i| self.read8(a.wrapping_add(i)))) }
+            fn write8(&mut self, _: u32, _: u8) {}
+            fn write16(&mut self, _: u32, _: u16) {}
+            fn write32(&mut self, _: u32, _: u32) {}
+            fn next_tick_due(&self) -> bool { false }
+            fn jit_mem(&mut self) -> Option<JitMem> {
+                Some(JitMem { ram: self.0.as_mut_ptr(), ram_base: 0, ram_len: self.0.len() as u32, ram_code: self.1.as_ptr(),
+                    xip: std::ptr::null(), xip_base: 0x0200_0000, xip_len: 0 })
+            }
+            fn code_writes(&self) -> Option<u64> { Some(0) }
+        }
+        let (a, b) = (0x100u32, 0x100 + (2 << ICACHE_RAM_BITS));
+        assert_eq!(icache_slot(a), icache_slot(b));
+        let mut ram = vec![0u8; b as usize + 0x100];
+        // `r0 = 10; goto +2` at both
+        for pc in [a, b] {
+            ram[pc as usize..pc as usize + 4].copy_from_slice(&[0x40, 0x2a, 0x04, 0x81]);
+        }
+        let mut bus = Ram(ram, vec![0; b as usize / 4 + 0x40]);
+        let mut cpu = Cpu::new(a);
+        let first: Vec<_> = [a, b].iter().map(|&pc| cpu.block_at(&mut bus, pc).unwrap().expect("a block")).collect();
+        for _ in 0..100 {
+            for (i, &pc) in [a, b].iter().enumerate() {
+                assert_eq!(cpu.block_at(&mut bus, pc).unwrap(), Some(first[i]));
+            }
+        }
+        assert_eq!(cpu.blocks.len(), 2);
+        // and run in turn, each runs its own: r0 = 10, then on past the goto
+        for &pc in &[a, b, a, b] {
+            (cpu.pc, cpu.regs[0]) = (pc, 0);
+            cpu.run_fast(&mut bus, 2).unwrap();
+            assert_eq!((cpu.regs[0], cpu.pc), (10, pc + 6));
+        }
+        assert_eq!(cpu.blocks.len(), 2);
+    }
+
     #[test]
     fn nop_runs_at_entry() {
         let mut ram = FlatRam::new(vec![0u8; 16]);
@@ -5207,7 +5314,7 @@ mod tests {
             for jit in [false, true] {
                 let mut xip = mem.clone();
                 xip.resize(0x200, 0);
-                let mut bus = Clocked { ram: vec![0; 0x1000], xip, cycles: 0, next_due: u64::MAX, irq: false, due_on_mmio: false, writes: 0 };
+                let mut bus = Clocked { ram: vec![0; 0x1000], xip, cycles: 0, next_due: u64::MAX, irq: false, due_on_mmio: false, writes: 0, masked: false };
                 let mut cpu = Cpu::new(0x0200_0080);
                 (cpu.jit_on, cpu.profile) = (jit, true);
                 let mut fast = 0;
@@ -5284,7 +5391,7 @@ mod tests {
         for jit in [false, true] {
             let mut xip = callee_loop_program();
             xip.resize(0x200, 0);
-            let mut bus = Clocked { ram: vec![0; 0x1000], xip, cycles: 0, next_due: u64::MAX, irq: false, due_on_mmio: false, writes: 0 };
+            let mut bus = Clocked { ram: vec![0; 0x1000], xip, cycles: 0, next_due: u64::MAX, irq: false, due_on_mmio: false, writes: 0, masked: false };
             let mut cpu = Cpu::new(0x0200_0080);
             (cpu.jit_on, cpu.profile) = (jit, true);
             let mut fast = 0;
@@ -6150,7 +6257,9 @@ mod tests {
     #[cfg(native_jit)]
     const MMIO: u32 = 0x0100_0000;
     #[cfg(native_jit)]
-    struct Clocked { ram: Vec<u8>, xip: Vec<u8>, cycles: u64, next_due: u64, irq: bool, due_on_mmio: bool, writes: u32 }
+    struct Clocked { ram: Vec<u8>, xip: Vec<u8>, cycles: u64, next_due: u64, irq: bool, due_on_mmio: bool, writes: u32,
+        /// the pending source is one the core's runner would not take (`Bus::irq_takes`)
+        masked: bool }
     #[cfg(native_jit)]
     impl Clocked {
         fn r8(&mut self, a: u32) -> u8 {
@@ -6182,6 +6291,7 @@ mod tests {
         fn write32(&mut self, a: u32, v: u32) { for (i, b) in v.to_le_bytes().into_iter().enumerate() { self.w8(a + i as u32, b) } }
         fn tick(&mut self) -> bool { self.cycles += 1; self.cycles >= self.next_due }
         fn irq_pending(&self) -> bool { self.irq }
+        fn irq_takes(&self, _: &dyn Fn(u8) -> bool) -> bool { self.irq && !self.masked }
         fn tick_room(&self) -> u64 { self.next_due.saturating_sub(self.cycles + 1) }
         fn add_ticks(&mut self, n: u64) { self.cycles += n; }
         fn next_tick_due(&self) -> bool { self.cycles + 1 >= self.next_due }
@@ -6200,7 +6310,7 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn drive_clocked(xip: &[u8], jit: bool, (irq, r4, due_on_mmio): (bool, u32, bool), seed: u64, before: &dyn Fn(&mut Cpu, u32, u64))
         -> (Vec<(u32, bool, u32, u64, u32, bool)>, u64, Vec<u8>, u32, u64, u64) {
-        let mut bus = Clocked { ram: vec![0; 0x1000], xip: xip.to_vec(), cycles: 0, next_due: 5, irq, due_on_mmio, writes: 0 };
+        let mut bus = Clocked { ram: vec![0; 0x1000], xip: xip.to_vec(), cycles: 0, next_due: 5, irq, due_on_mmio, writes: 0, masked: seed % 2 == 0 };
         let mut cpu = Cpu::new(0x0200_0000);
         (cpu.jit_on, cpu.profile) = (jit, true);
         cpu.regs[4] = r4;
@@ -6271,6 +6381,22 @@ mod tests {
                 }
                 assert_eq!((want.1, &want.2, want.3), (got.1, &got.2, got.3));
             }
+        }
+    }
+
+    /// After a swapped pair `run_fast` stops for an interrupt the runner would take, and only
+    /// for one: a source that is pending but masked (`Bus::irq_takes`) lets the calls run on, so
+    /// they are fewer for the same instructions and the same state. (Even seeds: masked.)
+    #[cfg(native_jit)]
+    #[test]
+    fn a_masked_source_does_not_stop_run_fast_after_a_pair() {
+        let xip = clocked_loop(false);
+        let before = |cpu: &mut Cpu, round: u32, _: u64| if cpu.pair_pending.is_none() && round % 7 == 0 { cpu.regs[0] = round | 1 };
+        let setup = CLOCKED_SETUPS.iter().copied().find(|s| s.0).expect("a setup with the interrupt pending");
+        for jit in [false, true] {
+            let (taken, masked) = (drive_clocked(&xip, jit, setup, 1, &before), drive_clocked(&xip, jit, setup, 2, &before));
+            // (the same 3000 calls each: where none stops early for the pair, they run further)
+            assert!(masked.1 > taken.1, "jit {jit}: {} instructions masked, {} taken", masked.1, taken.1);
         }
     }
 
@@ -6473,6 +6599,17 @@ struct BOp {
     /// one after the other they give the pair's result, so the plain path (and compiled code)
     /// runs it like any op. The careful path still runs it as a pair (`pair_head` stays set).
     glue: bool,
+}
+
+impl BOp {
+    /// Careful for one reason only: its flags are read later (`Line::flags_live`). Not a pair's
+    /// head, not an if-else block: with nothing in progress the careful path runs it as the plain
+    /// one does (`exec_careful`: `exec_fast`, which keeps the flags), so the wasm JIT may keep it
+    /// in a region as a call of that executor.
+    #[cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+    fn flags_only(&self) -> bool {
+        self.careful && !self.pair_head && !self.glue && !matches!(self.fast, Fast::IfBlk { .. } | Fast::Swap { .. })
+    }
 }
 
 impl Fast {

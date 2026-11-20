@@ -314,7 +314,7 @@
       #menu section.row { flex-direction: row; }
       #menu section[data-tab="look"], #menu section[data-tab="conn"] { flex-direction: row; }
       #menu section[data-tab="look"] > .grid, #menu section[data-tab="conn"] > .grid, #menu section[data-tab="fw"] > .grid { flex: 0 0 25%; min-width: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 10px; }
-      #menu section[data-tab="fw"] > .grid { grid-template-rows: repeat(4, minmax(0, 1fr)); }
+      #menu section[data-tab="fw"] > .grid { grid-template-rows: repeat(5, minmax(0, 1fr)); }
       /* the text of the big buttons grows with the window (13 px on a phone held sideways, up to 34 px on a big screen) */
       #menu section[data-tab="look"] > .grid button, #menu section[data-tab="conn"] > .grid button, #menu section[data-tab="fw"] > .grid button { font-size: clamp(13px, 3.4vmin, 34px); }
       #menu section > .grid button i { font-size: 0.62em; }
@@ -560,6 +560,7 @@
             <button id="fwFind" title="Search the firmwares by name, author or what they do"></button>
             <button id="open" title="Open a firmware package (.fwsc) from this device, such as your own build or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FIRMWARE FILE</button>
             <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>.SYX</i>LOAD DX7 BANK</button>
+            <button id="clock" title="Choose how fast the emulated FM-1 runs, in MHz. The real FM-1 runs at 240 MHz and this app starts at 100. Lower it if the sound breaks up, raise it if this device has power to spare. The firmware starts again."><i></i>CPU CLOCK</button>
             <button id="forget" title="Delete every downloaded firmware from this device. What they saved stays, and it asks you first."><i>DOWNLOADS</i>CLEAR DATA</button>
           </div>
           <select id="fw" hidden title="The firmware the FM-1 runs"></select>
@@ -805,9 +806,10 @@
       }
       const WASM = b64($("#wasm").textContent);
       $("#wasm").textContent = ""; // 4 MB of text the page no longer needs
-      let mhz = 100; // the clock the emulated CPU runs at. Lowered when this device cannot keep up (keepUp)
-      // shortcut: the lower clock lasts until the page is closed, keep it (with a way back to 100) if slow phones ask every time
-      const CLOCKS = [60, 80, 100];
+      const CLOCKS = [60, 80, 100, 160, 240]; // (240: the real FM-1's)
+      let clock = CLOCKS.includes(+stored("fm1.mhz")) ? +stored("fm1.mhz") : 100; // the clock chosen in the menu (CPU CLOCK), kept on this device
+      let mhz = clock; // the clock the emulated CPU runs at. Lowered when this device cannot keep up (keepUp)
+      // shortcut: the clock keepUp lowers lasts until the page is closed (with a way back to the chosen one); the chosen one is kept
       let bank = null; // a DX7 bank (.syx) for the next start: M-VAVE's own firmware takes its 32 voices, once
       const MAX_PACKAGE = 32 * 1024 * 1024,
         SECTOR = 4096;
@@ -1201,6 +1203,7 @@
       async function boot(fresh) {
         const f = current(),
           mine = ++seq;
+        $("#clock i").textContent = mhz + " MHz";
         if (!f) return toast("Choose a firmware first");
         try {
           const bytes = await packageOf(f),
@@ -1352,7 +1355,7 @@
         ac.resume();
         // the hidden seconds look like a slow device: do not judge them, and give the clock back if they already lowered it
         Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
-        if (mhz < 100 && run && node && $("#sure").hidden) sure("The clock was lowered to " + mhz + " MHz. Slide to restart " + run.f.name + " at 100 MHz. What it has not saved is lost.", () => ((mhz = 100), (perf.asked = false), boot(), toast(run.f.name + " at 100 MHz")));
+        if (mhz < clock && run && node && $("#sure").hidden) sure("The clock was lowered to " + mhz + " MHz. Slide to restart " + run.f.name + " at " + clock + " MHz. What it has not saved is lost.", () => ((mhz = clock), (perf.asked = false), boot(), toast(run.f.name + " at " + clock + " MHz")));
       });
       addEventListener("pagehide", flush);
 
@@ -1473,6 +1476,26 @@
       // a DX7 bank from this device: untrusted, so its shape is checked here (Yamaha's bulk dump of 32 voices: 4104 bytes), the emulator checks the rest
       const vetBank = (b) => b.length === 4104 && b[0] === 0xf0 && b[1] === 0x43 && b[3] === 9 && b[4] === 0x20 && b[5] === 0 && b[4103] === 0xf7;
       $("#bank").onclick = () => $("#bankFile").click();
+      // CPU CLOCK: the clock chosen, kept on this device. Its face shows the clock the machine runs at (keepUp may have lowered it)
+      const clockFace = () => ($("#clock i").textContent = mhz + " MHz");
+      clockFace();
+      $("#clock").onclick = () => {
+        const name = run && node ? run.f.name : "";
+        sure(
+          "The clock is how fast the emulated FM-1 runs. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare. It is " + mhz + " MHz now. Slide to keep your choice" + (name ? " and restart " + name + ". What it has not saved is lost." : "."),
+          (pick) => {
+            store("fm1.mhz", (clock = mhz = CLOCKS[pick]));
+            perf.asked = false;
+            clockFace();
+            if (name) boot();
+            toast((name || "CPU clock") + " at " + mhz + " MHz");
+          },
+          CLOCKS.map(String),
+        );
+        // (the dialog starts on its first choice: start on the clock it runs at, or the nearest below)
+        const at = CLOCKS.reduce((a, c, i) => (c <= mhz ? i : a), 0);
+        $$("#sureOpt button")[at].click();
+      };
       $("#bankFile").onchange = async (e) => {
         const file = e.target.files[0];
         e.target.value = "";
@@ -2553,7 +2576,7 @@
           "A phone is always played sideways, so if you hold it upright the FM-1 is drawn turned and you just need to turn the phone.",
           "## The menu (the FM1. button)",
           "**FIRMWARE** has a card for each firmware. **USE** runs it, and **DOWNLOAD** keeps it on this device so it runs with no connection (it is then marked ●). **OPEN FIRMWARE FILE** runs your own .fwsc file, and **LOAD DX7 BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware.",
-          "If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock.",
+          "If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock. **CPU CLOCK** lets you choose it yourself: the real FM-1 runs at 240 MHz and the app starts at 100, so lower it if the sound breaks up and raise it if this device has power to spare. Your choice is kept on this device.",
           "**ERASE**, on a card, forgets what that firmware saved, and **CLEAR DATA** deletes the downloaded firmwares. Both ask you to slide to confirm. What a firmware saves (patches, songs, settings) is kept on this device, separately for each exact version of it.",
           "**LOOK** is where you choose the keys (the FM-1's own or a piano), the skin (the colours the FM-1 is sold in, then ours) and the screen filter (LCD, CRT or clean). **OPTIONS** has MIDI, a real FM-1 on USB, and installing the app. The **ENGLISH / ESPAÑOL** button at the top left of the menu switches the language of the app and its manuals.",
           "## A real FM-1 on USB",
@@ -2585,7 +2608,7 @@
           "En el móvil siempre se toca en horizontal, así que si lo pones en vertical el FM-1 se dibuja girado y solo tienes que girar el móvil.",
           "## El menú (el botón FM1.)",
           "**FIRMWARE** tiene una tarjeta por firmware. **USAR** lo ejecuta, y **DESCARGAR** lo guarda en este dispositivo para usarlo sin conexión (entonces sale marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc, y **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE.",
-          "Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento.",
+          "Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento. **RELOJ CPU** te deja elegirlo: el FM-1 real va a 240 MHz y la app empieza a 100, así que bájalo si el sonido se corta y súbelo si este dispositivo tiene potencia de sobra. Tu elección se guarda en este dispositivo.",
           "**BORRAR**, en una tarjeta, borra lo que ha guardado ese firmware, y **BORRAR DATOS** borra los firmwares descargados. Los dos piden deslizar para confirmar. Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, por separado para cada versión exacta.",
           "En **ASPECTO** eliges las teclas (las del FM-1 o un piano), los colores (los del FM-1 a la venta y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpia). **OPCIONES** tiene el MIDI, un FM-1 real por USB e instalar la app. El botón **ENGLISH / ESPAÑOL**, arriba a la izquierda del menú, cambia el idioma de la app y de sus manuales.",
           "## Un FM-1 real por USB",
@@ -2768,6 +2791,8 @@
         "OPEN FIRMWARE FILE": "ABRIR FIRMWARE",
         "Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it.": "Carga un banco DX7 de 32 voces (.syx) en el firmware en marcha (el de M-VAVE y los hechos sobre sus voces DX7). El firmware vuelve a arrancar con él.",
         "LOAD DX7 BANK": "CARGAR BANCO DX7",
+        "Choose how fast the emulated FM-1 runs, in MHz. The real FM-1 runs at 240 MHz and this app starts at 100. Lower it if the sound breaks up, raise it if this device has power to spare. The firmware starts again.": "Elige a qué velocidad funciona el FM-1 emulado, en MHz. El FM-1 real va a 240 MHz y esta app empieza a 100. Bájalo si el sonido se corta, súbelo si este dispositivo tiene potencia de sobra. El firmware vuelve a arrancar.",
+        "CPU CLOCK": "RELOJ CPU",
         "Delete every downloaded firmware from this device. What they saved stays, and it asks you first.": "Borra de este dispositivo todos los firmwares descargados. Lo que guardaron se queda, y te pregunta antes.",
         DOWNLOADS: "DESCARGAS",
         "CLEAR DATA": "BORRAR DATOS",
@@ -3149,7 +3174,10 @@
         [/^The sound of (.+) drops out although this device has time to spare, because its audio buffer is too small\. Slide to restart with a larger one, and the keys will answer a little later\. What it has not saved is lost\.$/, "El sonido de $1 se corta aunque a este dispositivo le sobra tiempo, porque su búfer de audio es demasiado pequeño. Desliza para reiniciar con uno mayor, y las teclas responderán un poco más tarde. Lo que no haya guardado se pierde."],
         [/^This device cannot run (.+) in real time, so the sound breaks up$/, "Este dispositivo no puede ejecutar $1 en tiempo real, así que el sonido se corta"],
         [/^This device cannot keep up with (.+) at (\d+) MHz, so the sound breaks up\. Slide to restart it at (\d+) MHz\. What it has not saved is lost\.$/, "Este dispositivo no da abasto con $1 a $2 MHz y el sonido se corta. Desliza para reiniciarlo a $3 MHz. Lo que no haya guardado se pierde."],
-        [/^The clock was lowered to (\d+) MHz\. Slide to restart (.+) at 100 MHz\. What it has not saved is lost\.$/, "El reloj se bajó a $1 MHz. Desliza para reiniciar $2 a 100 MHz. Lo que no haya guardado se pierde."],
+        [/^The clock was lowered to (\d+) MHz\. Slide to restart (.+) at (\d+) MHz\. What it has not saved is lost\.$/, "El reloj se bajó a $1 MHz. Desliza para reiniciar $2 a $3 MHz. Lo que no haya guardado se pierde."],
+        [/^The clock is how fast the emulated FM-1 runs\. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up\. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare\. It is (\d+) MHz now\. Slide to keep your choice and restart (.+)\. What it has not saved is lost\.$/, "El reloj es la velocidad a la que funciona el FM-1 emulado. El FM-1 real va a 240 MHz, y esta app empieza a 100 MHz para que más dispositivos den abasto. Elige menos si el sonido se corta, o más si un firmware va lento y este dispositivo tiene potencia de sobra. Ahora está a $1 MHz. Desliza para guardar tu elección y reiniciar $2. Lo que no haya guardado se pierde."],
+        [/^The clock is how fast the emulated FM-1 runs\. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up\. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare\. It is (\d+) MHz now\. Slide to keep your choice\.$/, "El reloj es la velocidad a la que funciona el FM-1 emulado. El FM-1 real va a 240 MHz, y esta app empieza a 100 MHz para que más dispositivos den abasto. Elige menos si el sonido se corta, o más si un firmware va lento y este dispositivo tiene potencia de sobra. Ahora está a $1 MHz. Desliza para guardar tu elección."],
+        [/^CPU clock at (\d+) MHz$/, "Reloj de la CPU a $1 MHz"],
         [/^(.+) at (\d+) MHz$/, "$1 a $2 MHz"],
         [/^(.+) is made for the SMK-37, another device, so not all its controls are here$/, "$1 está hecho para el SMK-37, otro aparato, así que aquí no están todos sus controles"],
         [/^(.+) is on$/, "$1 está en marcha"],
