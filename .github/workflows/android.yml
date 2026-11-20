@@ -1,0 +1,86 @@
+# FM1.Pocket for Android (pocket/android): the Rust core built for arm64 as libfm1_android.so, the page built
+# from pocket/src, and the APK that holds both. See pocket/android/README.md.
+#
+# The APK is signed for release only when these four repository secrets exist: ANDROID_KEYSTORE_B64 (the keystore
+# file, base64), ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. Without them it is the debug APK.
+
+name: Android
+
+on:
+  push:
+    branches: [pocket, "android*"]
+    paths:
+      - pocket/**
+      - crates/**
+      - Cargo.lock
+      - .github/workflows/android.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            pocket/android/native/target
+          key: android-cargo-${{ hashFiles('pocket/android/native/Cargo.toml', 'Cargo.lock') }}
+
+      # the runner's own NDK is the linker
+      - name: Build libfm1_android.so
+        env:
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: ${{ env.ANDROID_NDK_LATEST_HOME }}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang
+        run: |
+          cargo build --release --target aarch64-linux-android --manifest-path pocket/android/native/Cargo.toml
+          mkdir -p pocket/android/app/src/main/jniLibs/arm64-v8a
+          cp pocket/android/native/target/aarch64-linux-android/release/libfm1_android.so pocket/android/app/src/main/jniLibs/arm64-v8a/
+
+      # the app copies index.html, the manifest and the icons from pocket/ into its assets while it builds
+      - name: Build the page
+        run: python3 pocket/build.py
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Keystore
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      - name: Build the APK
+        working-directory: pocket/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_FILE" ]; then
+            gradle --no-daemon assembleRelease
+          else
+            gradle --no-daemon assembleDebug
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fm1-pocket-apk
+          path: pocket/android/app/build/outputs/apk/*/*.apk
+          if-no-files-found: error

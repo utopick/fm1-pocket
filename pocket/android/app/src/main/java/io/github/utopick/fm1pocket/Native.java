@@ -1,0 +1,18 @@
+package io.github.utopick.fm1pocket;
+
+/** The Rust emulator (pocket/android/native, libfm1_android.so). Every call takes one lock inside, so any thread may call. */
+final class Native {
+    static { System.loadLibrary("fm1_android"); }
+
+    /** A message the page sends the worklet, as JSON (everything but "boot"). */
+    static native void post(String json);
+    /** "boot": json holds the non-binary fields; the binaries are null for none. */
+    static native void boot(String json, byte[] pkg, byte[] sectors, byte[] syx);
+    /** Fills interleaved stereo floats; returns the frames written (0 or less: nothing to play). */
+    static native int render(float[] interleavedStereo);
+    /** The queue of messages for the page, in the format of pocket/android/README.md. */
+    static native byte[] poll();
+    static native String version();
+
+    private Native() {}
+}
