@@ -1136,6 +1136,10 @@ impl Bus for Soc {
     fn irq_pending(&self) -> bool {
         self.periph.any_pending()
     }
+    /// (core 0's: what `machine::cpu0_between` takes)
+    fn irq_takes(&self, ready: &dyn Fn(u8) -> bool) -> bool {
+        self.periph.any_pending() && self.pending_irq().is_some_and(|(_, prio)| ready(prio))
+    }
     fn jit_mem(&mut self) -> Option<fm1_core::JitMem> {
         Some(fm1_core::JitMem {
             ram: self.ram.as_mut_ptr(),

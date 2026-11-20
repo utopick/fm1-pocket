@@ -615,10 +615,12 @@ fn h_pair<B: Bus>(ctx: *mut Ctx) -> u32 {
         ctx.irq = 0;
         return ctx.brk;
     }
-    let p = bus.irq_pending();
-    ctx.irq = p as u32;
-    ctx.stop = p as u32;
-    (ctx.brk != 0 || p) as u32
+    // (`Ctx::irq` stays the plain "a source is pending": while one is, every pair asks here)
+    ctx.irq = bus.irq_pending() as u32;
+    // SAFETY: ctx.cpu is the live Cpu `run` was given.
+    let stop = unsafe { &*ctx.cpu }.pair_irq(bus);
+    ctx.stop = stop as u32;
+    (ctx.brk != 0 || stop) as u32
 }
 }
 

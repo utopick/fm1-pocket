@@ -86,6 +86,10 @@ impl Bus for Core1Bus<'_> {
     fn irq_pending(&self) -> bool {
         self.soc.periph.any_pending()
     }
+    /// (core 1's: what `run_cpu1_in` takes)
+    fn irq_takes(&self, ready: &dyn Fn(u8) -> bool) -> bool {
+        self.soc.periph.any_pending() && self.soc.pending_irq_for(1).is_some_and(|(_, prio)| ready(prio))
+    }
     fn jit_mem(&mut self) -> Option<fm1_core::JitMem> {
         // a flaky core 1 runs interpreted: compiled code reads RAM without the bus
         if self.soc.flaky_core1.is_some() {
@@ -169,6 +173,9 @@ impl Bus for Core1Loads<'_> {
     }
     fn irq_pending(&self) -> bool {
         self.0.irq_pending()
+    }
+    fn irq_takes(&self, ready: &dyn Fn(u8) -> bool) -> bool {
+        self.0.periph.any_pending() && self.0.pending_irq_for(1).is_some_and(|(_, prio)| ready(prio))
     }
     fn jit_mem(&mut self) -> Option<fm1_core::JitMem> {
         None // (as Core1Bus's: interpreted, every load through the bus)
