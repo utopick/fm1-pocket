@@ -215,6 +215,10 @@ pub struct Ctx {
     /// by path (RAM, XIP, bus; RAM store, code-word store, bus store)
     reason: u32,
     hist: [u32; 6],
+    /// 0: since the last helper, no interrupt the runner would take after a swapped pair
+    /// (`Cpu::pair_irq`), so a pair's end needs no call (`Gen::pair_end`). Any helper may change
+    /// that (the bus, the core's interrupt state): each sets it back to 1 (`stop_io`).
+    irq: u32,
 }
 
 /// Run compiled code: returns the instructions executed; cpu.pc is set. At most `cap`
@@ -225,7 +229,7 @@ pub struct Ctx {
 pub(crate) unsafe fn run<B: Bus>(f: u32, start: u32, cpu: &mut Cpu, bus: &mut B, extra: u32, cap: u32) -> u32 {
     // instructions this call may run: their ticks ((k - 1) + extra) must all fit tick_room
     let limit = (bus.tick_room() + 1).saturating_sub(extra as u64).min(1 << 30).min(cap as u64) as u32;
-    let mut ctx = Ctx { cpu: cpu as *mut Cpu, bus: bus as *mut B as *mut (), extra, synced: 0, brk: 0, pred: [0; 3], reason: 0, hist: [0; 6] };
+    let mut ctx = Ctx { cpu: cpu as *mut Cpu, bus: bus as *mut B as *mut (), extra, synced: 0, brk: 0, pred: [0; 3], reason: 0, hist: [0; 6], irq: 1 };
     // SAFETY: on wasm32 a function pointer is its index in the function table, where the host
     // installed this block's `run` with exactly this signature
     let code: extern "C" fn(*mut Cpu, *mut Ctx, u32, u32) -> u32 = unsafe { std::mem::transmute(f as usize) };
@@ -262,8 +266,10 @@ unsafe fn sync<B: Bus>(ctx: &mut Ctx, bus: &mut B, idx: u32) {
     }
 }
 
-/// A helper reached the bus: a runner's stretch (`Cpu::stop_pc`) wants a look (as jit.rs).
+/// A helper reached the bus: a runner's stretch (`Cpu::stop_pc`) wants a look (as jit.rs), and
+/// what a swapped pair's end knew of interrupts is stale (`Ctx::irq`).
 fn stop_io(ctx: &mut Ctx) {
+    ctx.irq = 1;
     // SAFETY: ctx.cpu is the live Cpu `run` was given.
     let cpu = unsafe { &mut *ctx.cpu };
     if cpu.stop_pc != 0 {
@@ -315,22 +321,26 @@ extern "C" fn h_op<B: Bus, const PROF: bool>(ctx: *mut Ctx, op: *const Fast, idx
     let ctx = unsafe { &mut *ctx };
     let bus = unsafe { &mut *(ctx.bus as *mut B) };
     let cpu = unsafe { &mut *ctx.cpu };
+    if let Fast::Swap { .. } = unsafe { *op } {
+        // a swapped pair's end (`Gen::pair_end`, both its ops compiled before): an interrupt the
+        // runner would take now makes the code leave and `run_fast` stop, as the careful path
+        // does after a pair (`exec_careful_op`); none is remembered until the next helper. (No
+        // ticks synced and no `stop_io`: this reaches nothing on the bus.)
+        if PROF {
+            cpu.profile_helper(unsafe { &*op });
+        }
+        if cpu.pair_irq(bus) {
+            cpu.pair_stop = true;
+            ctx.brk = 1;
+        } else {
+            ctx.irq = 0;
+        }
+        return 0;
+    }
     unsafe { sync(ctx, bus, idx) };
     stop_io(ctx);
     if PROF {
         cpu.profile_helper(unsafe { &*op });
-    }
-    if let Fast::Swap { .. } = unsafe { *op } {
-        // a swapped pair whole, as `Cpu::exec_careful_op` runs it: the second instruction (no
-        // jump: `Cpu::wasm_region`), then the head; both ticks are taken (`idx` is the second's).
-        // Then the code leaves if the next tick is due or an interrupt is pending, and for the
-        // interrupt `run_fast` stops, as the careful path does after a pair.
-        // SAFETY: a Swap's `op` is the first field of a leaked `SwapOp` (`Gen::swap_op`)
-        let s = unsafe { &*(op as *const SwapOp) };
-        if swap_pair(cpu, bus, s, next_pc) {
-            ctx.brk = 1;
-        }
-        return 0;
     }
     let j = cpu.exec_fast(bus, unsafe { *op }, next_pc);
     if bus.next_tick_due() {
@@ -342,29 +352,8 @@ extern "C" fn h_op<B: Bus, const PROF: bool>(ctx: *mut Ctx, op: *const Fast, idx
     }
 }
 
-/// What `h_op` runs for a `Fast::Swap`: the op itself first (the helper is told a `Fast`), then
-/// the pair, and the pc between its two instructions (the head's next pc).
-#[repr(C)]
-struct SwapOp {
-    op: Fast,
-    head: Fast,
-    tail: Fast,
-    mid: u32,
-}
-
-/// `h_op`'s swapped pair (out of line, the executor in it once: `h_op` stays what it was for
-/// every other op); true: the code leaves after it.
-#[inline(never)]
-fn swap_pair<B: Bus>(cpu: &mut Cpu, bus: &mut B, s: &SwapOp, next_pc: u32) -> bool {
-    for (f, next) in [(s.tail, next_pc), (s.head, s.mid)] {
-        let _ = cpu.exec_fast(bus, f, next);
-    }
-    if cpu.pair_irq(bus) {
-        cpu.pair_stop = true;
-        return true;
-    }
-    bus.next_tick_due()
-}
+/// What `Gen::pair_end` passes `h_op` (only its kind is read).
+static PAIR_END: Fast = Fast::Swap { idx: u32::MAX };
 
 /// The instructions of a block's ops (a swapped pair is two).
 fn insns(ops: &[crate::BOp]) -> u32 {
@@ -535,6 +524,7 @@ const OFF_BRK: u32 = offset_of!(Ctx, brk) as u32;
 const OFF_PRED: u32 = offset_of!(Ctx, pred) as u32;
 const OFF_REASON: u32 = offset_of!(Ctx, reason) as u32;
 const OFF_HIST: u32 = offset_of!(Ctx, hist) as u32;
+const OFF_IRQ: u32 = offset_of!(Ctx, irq) as u32;
 
 /// Exit reasons the code records when profiling (`Cpu::exit_hist`): the block does not fit the
 /// limit; a stretch's stop pc; its `stop_io` or room; a goto out of the region; a return, a
@@ -827,6 +817,22 @@ impl Gen<'_> {
         self.exit_imm(pc, ins);
         self.end();
         self.end();
+    }
+    /// After a swapped pair (both ops compiled): leave if the next tick is due, or if the runner
+    /// would take an interrupt now (`h_op` on `PAIR_END`, called only when `Ctx::irq` does not
+    /// already say none since the last helper).
+    fn pair_end(&mut self, idx: u32, next_pc: u32, count: u32) {
+        self.get(L_CTX);
+        self.mem_op(I32_LOAD, 2, OFF_IRQ);
+        self.if_();
+        self.get(L_CTX);
+        self.i32c(&PAIR_END as *const Fast as u32);
+        self.idx(idx);
+        self.i32c(next_pc);
+        self.call(F_OP);
+        self.op(0x1a); // drop
+        self.end();
+        self.check_brk(next_pc, count, false);
     }
     /// After an op that may have called the bus: leave if the next tick is due (and, between a
     /// glued pair's two instructions, keep interrupts back until the second has run).
@@ -1229,29 +1235,37 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
     let mut ended = false;
     // instructions so far (a swapped pair is two)
     let mut ins = 0u32;
+    // a dual-issue pair (`Fast::Swap`) as `exec_careful_op` runs it: its second instruction first
+    // (`Part::Tail`: never a jump, `Cpu::wasm_region`; its helpers told the second's index, so
+    // both ticks are taken), then the head (`Part::Head`: registers only, at the pc between them),
+    // then `Gen::pair_end`; no exit between the two. Neither sets flags anyone reads (`block`).
+    #[derive(PartialEq)]
+    enum Part { Whole, Tail, Head }
+    let plain = |fast, len| crate::BOp { fast, len, careful: false, pair_head: false, glue: false };
+    let mut list = Vec::with_capacity(ops.len() + 4);
     for (i, op) in ops.iter().enumerate() {
-        let idx = ins;
-        if probe && idx > 0 {
-            g.probe_point(pc, idx);
+        if let Fast::Swap { idx: sw } = op.fast {
+            let (head, tail, hlen) = g.swaps[sw as usize];
+            list.push((i, plain(tail, op.len - hlen), Part::Tail));
+            list.push((i, plain(head, hlen), Part::Head));
+        } else {
+            list.push((i, *op, Part::Whole));
         }
-        let next_pc = pc + op.len as u32;
-        ins += if matches!(op.fast, Fast::Swap { .. }) { 2 } else { 1 };
-        let count = ins;
+    }
+    for (i, op, part) in list {
+        let op = &op;
+        if probe && ins > 0 && part != Part::Head {
+            g.probe_point(pc, ins);
+        }
+        // (the tail runs before the pc moves: its next pc is the pair's end, the head's the middle)
+        let (idx, next_pc) = match part {
+            Part::Tail => (ins + 1, pc + ops[i].len as u32),
+            _ => (ins, pc + op.len as u32),
+        };
+        ins += match part { Part::Whole => 1, Part::Tail => 0, Part::Head => 2 };
+        let count = if part == Part::Tail { ins + 2 } else { ins };
         let mut bus_used = false;
         match op.fast {
-            // a dual-issue pair run second instruction first, whole, by the executor (`h_op`,
-            // told the second's index: both ticks); then out if it set brk (`check_brk` below)
-            Fast::Swap { idx: sw } => {
-                let (head, tail, hlen) = g.swaps[sw as usize];
-                let p: &'static SwapOp = Box::leak(Box::new(SwapOp { op: op.fast, head, tail, mid: pc + hlen as u32 }));
-                g.get(L_CTX);
-                g.i32c(p as *const SwapOp as u32);
-                g.idx(idx + 1);
-                g.i32c(next_pc);
-                g.call(F_OP);
-                g.op(0x1a); // drop
-                bus_used = true;
-            }
             Fast::Raw { route: 21, raw } if matches!(raw & 255, 0xd0 | 0xd8 | 0xd4 | 0xdc | 0xf8 | 0xfc | 0xfe) => {
                 let lo = ((raw >> 29) & 7) as u8 * 2;
                 let kind = raw & 255;
@@ -2095,9 +2109,20 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
         if ended {
             break;
         }
-        if bus_used && !op.fast.may_jump() {
-            g.check_brk(next_pc, count, op.glue);
-        }
+        let next_pc = match part {
+            Part::Tail => continue,
+            Part::Head => {
+                let end = pc + ops[i].len as u32;
+                g.pair_end(idx + 1, end, count);
+                end
+            }
+            Part::Whole => {
+                if bus_used && !op.fast.may_jump() {
+                    g.check_brk(next_pc, count, op.glue);
+                }
+                next_pc
+            }
+        };
         pc = next_pc;
         if let Some((te, ee, _)) = g.pred.filter(|&(te, _, _)| next_pc == te) {
             // the then-part's end: past the else part
@@ -2213,6 +2238,30 @@ pub fn int_selftest() -> u32 {
             if k != 1 || cpu.regs != want.regs || cpu.pc != want.pc || cpu.flags != want.flags {
                 let d = match fast { Fast::Un { d, .. } | Fast::Div { d, .. } => d as usize, _ => 0 };
                 fail(format!("{fast:?}"), x, y, format!("ran {k}, r{d} {:08x}, the executor {:08x}", cpu.regs[d], want.regs[d]));
+            }
+        }
+    }
+    // a swapped pair compiled inline (`block_ops`' `Part`): the second instruction reads what the
+    // head writes, so it must see the old value; then the head
+    let pairs = [(Fast::Alu3 { d: 0, a: 1, b: 2, op: crate::Op::Add }, Fast::Mov { d: 3, s: 0 }),
+        (Fast::Alu3 { d: 1, a: 1, b: 2, op: crate::Op::Xor }, Fast::Alu3 { d: 2, a: 1, b: 0, op: crate::Op::Sub })];
+    for (head, tail) in pairs {
+        let bop = crate::BOp { fast: Fast::Swap { idx: 0 }, len: 4, careful: true, pair_head: true, glue: false };
+        let m = compile::<NoBus>(&[(0, 0x0200_0000, vec![bop])], &[(head, tail, 2)], &mem, false, false);
+        let [r, w, o] = helpers::<NoBus>(false);
+        // SAFETY: as above
+        let f = unsafe { fm1_jit_compile(m.as_ptr(), m.len(), r, w, o) };
+        for _ in 0..64 {
+            let mut cpu = Cpu::new(0x0200_0000);
+            for r in 0..16 { cpu.regs[r] = rnd(); }
+            let mut want = Cpu::new(0x0200_0000);
+            want.regs = cpu.regs;
+            want.exec_fast(&mut bus, tail, 0x0200_0004);
+            want.exec_fast(&mut bus, head, 0x0200_0002);
+            // SAFETY: `f` is the module just installed, built for NoBus
+            let k = if f == 0 { 0 } else { unsafe { run::<NoBus>(f, 0, &mut cpu, &mut bus, 0, 1 << 20) } };
+            if k != 2 || cpu.regs != want.regs || cpu.pc != 0x0200_0004 {
+                fail(format!("pair {head:?} {tail:?}"), cpu.regs[0], cpu.regs[3], format!("ran {k}, regs {:08x?}, the executor {:08x?}", &cpu.regs[..4], &want.regs[..4]));
             }
         }
     }
