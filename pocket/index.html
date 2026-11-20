@@ -49,7 +49,9 @@
         window.pocketInstall = e;
         dispatchEvent(new Event("pocketinstall"));
       });
-      if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname)))
+      // the Android app (pocket/android) injects FM1Native: the emulator and the sound run natively there, so no service worker, install or sound-output options
+      if (window.FM1Native) document.documentElement.classList.add("native");
+      else if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname)))
         addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(console.warn));
       try {
         document.documentElement.dataset.skin = localStorage.getItem("fm1.skin") || "black";
@@ -57,6 +59,7 @@
     </script>
     <title>FM1.Pocket · M-VAVE FM-1 emulator</title>
     <style>
+      .native #inst, .native #instHint, .native #optSound, .native #railSound { display: none !important; }
       /* ---- skins. The first thirteen are the colours the FM-1 is sold in, as shops list them (black from a photo of
          the real one, grey is fm1-emu's drawing, the others made from their names: not measured). The rest are ours. */
       [data-skin="grey"] { --body1: #5e6166; --body2: #4a4d52; --tray: #2b2c2f; --silk: #c9c6bd; --btn1: #4b4e54; --btn2: #3b3d42; --ink: #9c9a94; --key1: #6a5557; --key2: #4f3f42; --keyline: #8f7c7e; --cap: #1e1f22; --lit: #f2a33a; --go: #62d36e; --wk: #e9e6df; --bk: #1b1b1e; }
@@ -5954,7 +5957,7 @@ registerProcessor("fm1", Fm1);
             o += 4 + SECTOR;
           }
           status("booting " + f.name + "…");
-          node.port.postMessage({ type: "boot", seq: mine, wasm: WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
+          node.port.postMessage({ type: "boot", seq: mine, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;
@@ -6026,7 +6029,7 @@ registerProcessor("fm1", Fm1);
       function onWorklet(e) {
         const m = e.data;
         if (m.seq !== seq) return;
-        if (m.type === "frame") (showFrame(m), keepUp(m));
+        if (m.type === "frame") (showFrame(m), keepUp(m), m.peak !== undefined && (peak = Math.max(peak * 0.9, m.peak)));
         else if (m.type === "booted") {
           run.base = m.base;
           Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
@@ -6038,7 +6041,58 @@ registerProcessor("fm1", Fm1);
         } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
         else if (m.type === "error") (status(m.message), toast(m.message, 4000));
       }
+      // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
+      // worklet messages (docs: pocket/android/README.md). nat is the poll timer; the object it makes stands in for the AudioWorkletNode.
+      let nat = null;
+      const b64of = (buf) => {
+        const u = new Uint8Array(buf);
+        let s = "";
+        for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+        return btoa(s);
+      };
+      function nativeMessages(buf) { // u32 count, then per message: u32 jsonLen, json, u32 blobs, each: u32 nameLen, name, u32 typeLen, type, u32 byteLen, bytes (little-endian)
+        const v = new DataView(buf), u = new Uint8Array(buf), dec = new TextDecoder(), out = [];
+        let o = 0;
+        const n32 = () => ((o += 4), v.getUint32(o - 4, true)),
+          str = () => { const l = n32(); return dec.decode(u.subarray(o, (o += l))); };
+        for (let n = n32(); n > 0; n--) {
+          const m = JSON.parse(str());
+          for (let b = n32(); b > 0; b--) {
+            const name = str(), type = str(), len = n32();
+            m[name] = new { Uint8Array, Uint16Array, Uint32Array, Float32Array }[type](buf.slice(o, (o += len)));
+          }
+          out.push(m);
+        }
+        return out;
+      }
+      function nativeNode() {
+        const N = window.FM1Native, me = { port: { onmessage: null } };
+        me.port.postMessage = (m) => {
+          if (m.type !== "boot") return N.post(JSON.stringify(m));
+          const { package: p, sectors, syx, wasm, ...rest } = m;
+          N.boot(JSON.stringify(rest), b64of(p), sectors && sectors.byteLength ? b64of(sectors) : "", syx ? b64of(syx) : "");
+        };
+        let busy = false;
+        nat = setInterval(async () => {
+          if (busy) return;
+          busy = true;
+          try {
+            for (const data of nativeMessages(await (await fetch("/native/poll")).arrayBuffer())) me.port.onmessage({ data });
+          } catch (e) {
+            console.warn("poll", e);
+          }
+          busy = false;
+        }, 16);
+        return me;
+      }
       async function powerOn() {
+        if (window.FM1Native) {
+          node = nativeNode();
+          node.port.onmessage = onWorklet;
+          powerFace();
+          send({ type: "pot", value: pot });
+          return boot();
+        }
         if (matchMedia("(pointer: coarse)").matches) document.documentElement.requestFullscreen?.().then(() => screen.orientation.lock?.("landscape")).catch(() => {}); // a phone in a browser: the whole screen, sideways where the browser allows (the installed app already has it)
         ac = new AudioContext({ sampleRate: 44100, latencyHint: latency });
         if (sink) await ac.setSinkId(sink).catch(() => ((sink = ""), toast("The FM-1's sound output is gone, so the sound plays here", 4000)));
@@ -6063,9 +6117,10 @@ registerProcessor("fm1", Fm1);
       }
       function powerOff() {
         seq++;
-        clearInterval(ac._peak);
-        ac.close();
-        ac = node = run = null;
+        if (ac) (clearInterval(ac._peak), ac.close());
+        if (nat) send({ type: "cancel-boot" }); // the native core has no AudioContext to close: this stops it (and the app lets the screen sleep)
+        clearInterval(nat);
+        ac = nat = node = run = null;
         allUp();
         dark();
         powerFace();
@@ -6082,9 +6137,9 @@ registerProcessor("fm1", Fm1);
       // hidden: ask for what the firmware has just saved (the worklet tells by itself only once a second), then stop the sound
       const flush = () => send({ type: "snapshot", seq, request: 0 });
       document.addEventListener("visibilitychange", () => {
-        if (!ac) return;
-        if (document.hidden) return flush(), setTimeout(() => document.hidden && ac && ac.suspend(), 400);
-        ac.resume();
+        if (!ac && !nat) return;
+        if (document.hidden) return flush(), ac && setTimeout(() => document.hidden && ac && ac.suspend(), 400); // (the app pauses its own audio in onPause)
+        ac && ac.resume();
         // the hidden seconds look like a slow device: do not judge them, and give the clock back if they already lowered it
         Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
         if (mhz < clock && run && node && $("#sure").hidden) sure("The clock was lowered to " + mhz + " MHz. Slide to restart " + run.f.name + " at " + clock + " MHz. What it has not saved is lost.", () => ((mhz = clock), (perf.asked = false), boot(), toast(run.f.name + " at " + clock + " MHz")));
@@ -7058,7 +7113,7 @@ registerProcessor("fm1", Fm1);
           "install unlocked: " + (realVerified() ? "yes" : "no"),
           "backup this session: " + (v ? "uid " + v.uid + " · " + (v.size >> 10) + " KiB · crc32 " + h(v.crc32) + " · chip jedec " + h(v.jedec) : "none"),
           "stored copy in the list: " + (backup ? backup.name + " (" + backup.bytes.length + " bytes)" : "none"),
-          "emulator: " + (ac ? mhz + " MHz · buffer " + latency + " (base " + Math.round(1000 * (ac.baseLatency || 0)) + " ms, output " + Math.round(1000 * (ac.outputLatency || 0)) + " ms) · load, last seconds: " + (perf.log || []).join(" ") + " · idle " + Math.round(100 * (perf.emu ? perf.idle / perf.emu : 0)) + "% · longest slice " + (perf.worst || 0).toFixed(1) + " ms · short slices " + (perf.short || 0) + " · compiler " + (perf.jit ? (perf.jit.error || "on") + ", " + perf.jit.regions + " regions, " + perf.jit.failed + " failed" : "none") + " · cores " + navigator.hardwareConcurrency : "off"),
+          "emulator: " + (ac || nat ? mhz + " MHz · buffer " + latency + " (base " + Math.round(1000 * (ac?.baseLatency || 0)) + " ms, output " + Math.round(1000 * (ac?.outputLatency || 0)) + " ms) · load, last seconds: " + (perf.log || []).join(" ") + " · idle " + Math.round(100 * (perf.emu ? perf.idle / perf.emu : 0)) + "% · longest slice " + (perf.worst || 0).toFixed(1) + " ms · short slices " + (perf.short || 0) + " · compiler " + (perf.jit ? (perf.jit.error || "on") + ", " + perf.jit.regions + " regions, " + perf.jit.failed + " failed" : "none") + " · cores " + navigator.hardwareConcurrency : "off"),
           "running here: " + (f ? f.name : "nothing") + " · screen: " + ($("#realMsg").textContent || ""),
           "flash map (from the backup this session):",
           ...(REAL.map ? [...mapLines(REAL.map).map((t) => "  " + t), ...Array.from({ length: REAL.map.sectors.length / 16 }, (_, r) => "  " + hx(r * 16 * 4096) + " " + Array.from(REAL.map.sectors.subarray(r * 16, r * 16 + 16), (u) => (u ? "#" : ".")).join(""))] : ["  none"]),
