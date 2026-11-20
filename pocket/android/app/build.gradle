@@ -1,0 +1,50 @@
+plugins { id "com.android.application" }
+
+// The page and its icons are not kept in the app: this copies them from pocket/ (run `python3 pocket/build.py` first, so index.html is current).
+def page = layout.buildDirectory.dir("page")
+def pocket = file("../..")
+tasks.register("copyPage", Copy) {
+    into page
+    from(pocket) { include "index.html", "manifest.webmanifest", "icons/**"; into "assets" }
+    from(file("../../icons/icon-192.png")) { into "res/mipmap-xxxhdpi"; rename { "ic_launcher.png" } }
+}
+preBuild.dependsOn "copyPage"
+
+android {
+    namespace "io.github.utopick.fm1pocket"
+    compileSdk 34
+    defaultConfig {
+        applicationId "io.github.utopick.fm1pocket"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+        ndk { abiFilters "arm64-v8a" }
+    }
+    sourceSets.main {
+        assets.srcDir page.map { it.dir("assets") }
+        res.srcDir page.map { it.dir("res") }
+    }
+    // a release APK is signed only when CI has the four secrets (as environment variables); otherwise there is the debug APK
+    signingConfigs {
+        release {
+            if (System.getenv("ANDROID_KEYSTORE_FILE")) {
+                storeFile file(System.getenv("ANDROID_KEYSTORE_FILE"))
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            if (System.getenv("ANDROID_KEYSTORE_FILE")) signingConfig signingConfigs.release
+        }
+    }
+    packagingOptions { jniLibs.useLegacyPackaging = true } // the .so is stored compressed and unpacked on install, as old phones expect
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies {
+    implementation "androidx.webkit:webkit:1.11.0"
+}
