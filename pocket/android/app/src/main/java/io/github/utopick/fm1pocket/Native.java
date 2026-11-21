@@ -15,6 +15,12 @@ final class Native {
     /** The native screen: fills leds (41) always and lcd (240 x 240 RGB565) when it changed; -1 while off, 1 when lcd was filled, else 0. */
     static native int face(short[] lcd, float[] leds);
     static native String version();
+    /** Keeps the calling thread on the faster cores; returns how many it may use (0: unchanged). */
+    static native int fastCores();
+    /** Emulation time over sound time in percent (100 = just real time), -1 while nothing plays. */
+    static native int load();
+    /** Whether the native JIT can get executable memory (else the emulator interprets, much slower). */
+    static native boolean jitMemory();
 
     private Native() {}
 }
