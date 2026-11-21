@@ -79,6 +79,8 @@ pub struct Shared {
     pub a_waits: AtomicU64,
     pub b_waits: AtomicU64,
     pub b_gates: AtomicU64,
+    /// instructions core 1 ran on thread B
+    pub b_insns: AtomicU64,
 }
 
 /// What B runs: raw pointers into the machine, valid from `start` to `quiesce`.
@@ -136,7 +138,16 @@ impl Shared {
             a_waits: AtomicU64::new(0),
             b_waits: AtomicU64::new(0),
             b_gates: AtomicU64::new(0),
+            b_insns: AtomicU64::new(0),
         }
+    }
+
+    /// The shared words, for a hang report.
+    pub fn dump(&self) -> String {
+        format!("gate {} want {} lock {} irq1 {:#x} paused1 {} idle {} a {} b {} b_live {} sleeping {} state {} stop {} b_insns {}",
+            self.gate.load(Relaxed), self.want.load(Relaxed), self.lock.load(Relaxed), self.irq1.load(Relaxed), self.paused1.load(Relaxed),
+            self.idle.load(Relaxed), self.a_cycles.load(Relaxed), self.b_cycles.load(Relaxed), self.b_live.load(Relaxed), self.sleeping.load(Relaxed),
+            self.state.load(Relaxed), self.stop.load(Relaxed), self.b_insns.load(Relaxed))
     }
 
     pub fn set_window(&self, cycles: u64) {
@@ -270,6 +281,16 @@ impl Shared {
         } else if let Some(t) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
             t.unpark();
         }
+        // Core 1 is on the chip at once: a firmware that waits for it to answer (386DX's start-up
+        // handshake gives up after a few ms) must not see this thread's start-up as silence.
+        let t0 = std::time::Instant::now();
+        let mut i = 0;
+        while !self.b_live.load(Acquire) && self.state.load(Acquire) == RUNNING && t0.elapsed() < Duration::from_millis(100) {
+            if !self.sleeping.load(Relaxed) && self.paused1.load(Relaxed) {
+                break; // (held: it will not go live)
+            }
+            backoff(&mut i);
+        }
     }
 
     /// Stops B and waits until it is parked, with the `Soc` and the `Cpu` as it left them.
@@ -318,9 +339,9 @@ impl Mt {
     }
 
     /// (cores 1's time in the window waits, for tuning) A's waits for B, B's for A, B's for the `Soc`
-    pub fn stats(&self) -> (u64, u64, u64) {
+    pub fn stats(&self) -> (u64, u64, u64, u64) {
         let s = &self.shared;
-        (s.a_waits.load(Relaxed), s.b_waits.load(Relaxed), s.b_gates.load(Relaxed))
+        (s.a_waits.load(Relaxed), s.b_waits.load(Relaxed), s.b_gates.load(Relaxed), s.b_insns.load(Relaxed))
     }
 }
 
@@ -495,6 +516,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
         let (k, why) = run_chunk(sh, c1, &job, a + w - b)?;
         let b = b + k;
         sh.b_cycles.store(b, Release);
+        sh.b_insns.fetch_add(k, Relaxed);
         match why {
             Why::Budget | Why::Held => calm = 0,
             Why::Idle => {

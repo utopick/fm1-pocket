@@ -474,10 +474,16 @@ pub extern "C" fn fm1_threads(threads: u32) -> u32 {
 }
 
 /// How often the threads waited for each other (tuning): `which` 0 core 0 for core 1's clock, 1 core 1
-/// for core 0's, 2 core 1 for the `Soc`.
+/// for core 0's, 2 core 1 for the `Soc`, 3 the instructions core 1 ran on its thread.
 #[no_mangle]
 pub extern "C" fn fm1_mt_stats(which: u32) -> u64 {
-    machine().and_then(|m| m.soc.mt.as_ref()).map_or(0, |mt| { let s = mt.stats(); [s.0, s.1, s.2][which as usize % 3] })
+    machine().and_then(|m| m.soc.mt.as_ref()).map_or(0, |mt| { let s = mt.stats(); [s.0, s.1, s.2, s.3][which as usize % 4] })
+}
+
+/// Prints the two-thread mode's shared words to stderr (a hang report).
+#[no_mangle]
+pub extern "C" fn fm1_mt_dump() {
+    if let Some(mt) = machine().and_then(|m| m.soc.mt.as_ref()) { eprintln!("{}", mt.shared.dump()); }
 }
 
 /// 2 when the running machine has core 1 on its own thread, else 1.
