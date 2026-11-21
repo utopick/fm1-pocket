@@ -37,6 +37,7 @@ pub mod machine;
 pub mod p33;
 pub mod periph;
 mod ram;
+pub mod mt;
 pub mod refill;
 pub mod smk;
 mod spiflash;
@@ -44,7 +45,7 @@ pub mod usb;
 
 pub use lcd::{write_bmp, Lcd};
 pub use periph::{Action, Periph, CPU_HZ, VEC_BASE};
-pub use ram::Ram;
+pub use ram::{Ram, RamView};
 pub use spiflash::{FlashPart, SpiFlash, FLASH_SIZE};
 
 pub const XIP_BASE: u32 = 0x0200_0000;
@@ -254,6 +255,8 @@ impl Board {
 }
 
 pub struct Soc {
+    /// Core 1 on its own thread (`set_threads`). First, so it is dropped (stopped) before the rest.
+    pub mt: Option<mt::Mt>,
     pub board: Board,
     /// The FM-1's flash part (its JEDEC id; `set_flash_part`): the stock Puya unless asked.
     pub flash_part: spiflash::FlashPart,
@@ -519,6 +522,7 @@ impl Soc {
             flash_part: spiflash::FlashPart::P25q80,
             bt_window: BT_WINDOW_BASE,
             xip,
+            mt: None,
             ram: Ram::new(ram_size),
             ovl: Ram::new(512 * 1024),
             sram2: Ram::new(256 * 1024),
@@ -622,6 +626,10 @@ impl Soc {
         };
         if std::env::var_os("FM1_DUAL_TRACE").is_some() || std::env::var_os("FM1_RESET_TRACE").is_some() {
             eprintln!("chip reset at {} ms ({})", self.periph.ms(), if cause == p33::P33::RST_WDT { "watchdog" } else { "PR_PWR" });
+        }
+        if let Some(mt) = &self.mt {
+            mt.shared.quiesce(); // (core 1 must not run on while the chip starts over)
+            mt.shared.reset();
         }
         self.resets += 1;
         self.periph.chip_reset();
@@ -1138,6 +1146,16 @@ impl Bus for Soc {
         }
     }
 
+    fn test_set(&mut self, addr: u32) -> u8 {
+        let o = addr.wrapping_sub(RAM_BASE) as usize;
+        if self.mt.is_some() && o < self.ram.len() {
+            return self.ram.view().test_set(o as u32);
+        }
+        let old = self.read8(addr);
+        self.write8(addr, old | 0x80);
+        old
+    }
+
     fn spin(&mut self, core: u32, addr: u32) {
         if self.cpu1_running {
             self.waits[core as usize & 1] = Some(Wait::Byte(addr));
@@ -1145,6 +1163,15 @@ impl Bus for Soc {
     }
 
     fn hw_lock(&mut self, core: u32, set: bool) -> bool {
+        if let Some(mt) = &self.mt {
+            let got = mt.shared.hw_lock(core, set);
+            if !got {
+                // core 1's thread holds it: hand it the `Soc` (it may need it to get to the unlock)
+                mt.shared.yield_soc();
+                std::thread::yield_now();
+            }
+            return got;
+        }
         match (set, self.lock_owner) {
             (true, Some(c)) if c != core => {
                 if self.cpu1_running {
@@ -1188,7 +1215,7 @@ impl Bus for Soc {
         })
     }
     fn code_writes(&self) -> Option<u64> {
-        Some(self.ram.code_writes)
+        Some(self.ram.code_writes())
     }
     fn code_mark(&mut self, lo: u32, hi: u32) {
         self.ram.mark_code(lo.wrapping_sub(RAM_BASE), hi.wrapping_sub(RAM_BASE));
@@ -1469,6 +1496,11 @@ impl Soc {
                             self.cpu1_released_once = true;
                             self.cpu1_release = true;
                             self.periph.next_due = 0;
+                        }
+                    }
+                    if core == 1 {
+                        if let Some(mt) = &self.mt {
+                            mt.shared.set_paused1(self.paused[1]);
                         }
                     }
                     self.sfr_set(addr, value & !0x14);

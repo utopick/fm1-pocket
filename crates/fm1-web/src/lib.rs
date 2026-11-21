@@ -113,6 +113,12 @@ impl Pace {
     }
 }
 
+impl Drop for Machine {
+    fn drop(&mut self) {
+        machine::settle(&self.soc); // (core 1's thread must not run on a core that is going)
+    }
+}
+
 impl Machine {
     /// `stock`: a package's flash (its chip and boot parameters come along) and board.
     fn new(image: Vec<u8>, entry: u32, mhz: u32, stock: Option<(&[u8], fm1_soc::Board)>) -> Self {
@@ -121,6 +127,7 @@ impl Machine {
         soc.periph.skip_idle = true;
         soc.lcd_timed = unsafe { LCD_TIMED };
         soc.cpu1_survives = unsafe { CPU1_SURVIVES };
+        soc.set_threads(unsafe { THREADS });
         // (before the boot: the board sets the flash chip's id from it)
         soc.set_flash_part(flash_part(unsafe { FLASH_PART }));
         let mut cpu = Cpu::new(entry);
@@ -184,7 +191,7 @@ impl Machine {
     /// fm1-live's loop: cpu0's blocks (interrupts exact at block granularity), cpu1 beside.
     fn run(&mut self, n: u32) {
         let jit = self.cpu.jit_on;
-        if let Some(c1) = self.cpu1.as_mut() { c1.profile = self.cpu.profile; }
+        if let Some(c1) = self.cpu1.as_mut() { if c1.profile != self.cpu.profile { c1.profile = self.cpu.profile; } }
         let Machine { cpu, cpu1, soc, pending_tick, .. } = self;
         if machine::run_dual(cpu1, soc, n, RAM_SIZE, jit, |soc, k| machine::run_blocks(cpu, soc, k, pending_tick)).is_err() {
             self.halted = true;
@@ -194,6 +201,8 @@ impl Machine {
 
 static mut M: Option<Machine> = None;
 static mut JIT: bool = false;
+/// `fm1_threads`: the next boot's core 1 thread (2) or not (1)
+static mut THREADS: u32 = 1;
 static mut JIT_PER_RENDER: u32 = 0;
 static mut AHEAD: u32 = 0;
 /// `fm1_lcd_timed`: the next boot's `Soc::lcd_timed`
@@ -411,6 +420,7 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
         m.audio.extend(m.soc.periph.audio.drain(..));
     }
     m.pace.end();
+    machine::settle(&m.soc); // (core 1's thread, if any, stops: nothing outside sees it mid-step)
     unsafe { INSNS += spent as u64 };
     let have = (m.audio.len() / 2).min(frames);
     #[allow(static_mut_refs)]
@@ -450,6 +460,30 @@ fn flash_part(n: u32) -> fm1_soc::FlashPart {
 pub extern "C" fn fm1_flash_part(part: u32) {
     unsafe { FLASH_PART = part };
     if let Some(m) = machine() { m.soc.set_flash_part(flash_part(part)); }
+}
+
+/// Core 1 on its own thread (`threads` = 2, from the next boot on; `Soc::set_threads`), once the
+/// firmware releases it, or both cores on one thread (1, the default and the reference: the audio
+/// is the same byte for byte every run, where two threads vary with the host's scheduler). 0 when
+/// this build cannot run threads (wasm), else the number now asked for.
+#[no_mangle]
+pub extern "C" fn fm1_threads(threads: u32) -> u32 {
+    let t = if threads >= 2 && fm1_soc::mt::AVAILABLE { 2 } else { 1 };
+    unsafe { THREADS = t };
+    if threads >= 2 && t == 1 { 0 } else { t }
+}
+
+/// How often the threads waited for each other (tuning): `which` 0 core 0 for core 1's clock, 1 core 1
+/// for core 0's, 2 core 1 for the `Soc`.
+#[no_mangle]
+pub extern "C" fn fm1_mt_stats(which: u32) -> u64 {
+    machine().and_then(|m| m.soc.mt.as_ref()).map_or(0, |mt| { let s = mt.stats(); [s.0, s.1, s.2][which as usize % 3] })
+}
+
+/// 2 when the running machine has core 1 on its own thread, else 1.
+#[no_mangle]
+pub extern "C" fn fm1_threaded() -> u32 {
+    machine().map_or(1, |m| m.soc.threaded() as u32 + 1)
 }
 
 /// Before the boot, or for the machine running.

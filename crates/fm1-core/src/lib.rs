@@ -97,6 +97,13 @@ pub trait Bus {
     /// locks: `testset b[r]; ifeq goto` back to it). A dual-core bus may hand the machine to
     /// the other core, the one that holds it.
     fn spin(&mut self, _core: u32, _addr: u32) {}
+    /// `testset`: the byte at `addr` is taken (bit 7 set); returns what it held. One atomic
+    /// step on a bus whose two cores run on two threads.
+    fn test_set(&mut self, addr: u32) -> u8 {
+        let old = self.read8(addr);
+        self.write8(addr, old | 0x80);
+        old
+    }
     /// Would the next tick be due?
     fn next_tick_due(&self) -> bool {
         true
@@ -3222,9 +3229,8 @@ impl Cpu {
                 // SDK spins with `testset; ifeq goto retry`, so "eq" must mean
                 // "was already taken". Single-core emulation: always acquired.
                 let addr = self.regs[(insn.raw & 0xf) as usize];
-                let old = bus.read8(addr);
+                let old = bus.test_set(addr);
                 self.cc = old != 0;
-                bus.write8(addr, old | 0x80);
                 // taken, with `ifeq goto` back to it next (`40 e8 fd ff`: the SDK's byte
                 // spinlock): the core spins on this byte. A try-lock, or a claim-a-job byte
                 // that is often set, takes no such loop and records no wait.
