@@ -937,6 +937,31 @@ impl Gen<'_> {
         };
         self.a.mov(w, POOL[i]);
     }
+    /// The pool register holding guest register r (loaded if it is not), to use as an operand
+    /// in place (no copy through a scratch register).
+    fn rd(&mut self, r: u8) -> Reg {
+        let r = r & 15;
+        let i = match self.slot(r) {
+            Some(i) => i,
+            None => {
+                let i = self.take_slot(r);
+                self.a.ldr(POOL[i], CPU, off_reg(r));
+                i
+            }
+        };
+        POOL[i]
+    }
+    /// The pool register to compute guest register r into (marked changed). Take it after the
+    /// operands: they are the most recently used, so it never evicts one.
+    fn wr(&mut self, r: u8) -> Reg {
+        let r = r & 15;
+        let i = match self.slot(r) {
+            Some(i) => i,
+            None => self.take_slot(r),
+        };
+        self.rc.dirty[i] = true;
+        POOL[i]
+    }
     /// guest register r = w (see `RegCache`)
     fn st_reg(&mut self, w: Reg, r: u8) {
         let r = r & 15;
@@ -1019,6 +1044,52 @@ impl Gen<'_> {
             Op::Shl => a.lslv(0, 0, 1),
             Op::Shr => a.lsrv(0, 0, 1),
             Op::Sar => a.asrv(0, 0, 1),
+        }
+    }
+    /// d = op(x, y)
+    fn alu3(&mut self, op: Op, d: Reg, x: Reg, y: Reg) {
+        let a = &mut self.a;
+        match op {
+            Op::Add => a.add(d, x, y),
+            Op::Sub => a.sub(d, x, y),
+            Op::RSub => a.sub(d, y, x),
+            Op::And => a.and(d, x, y),
+            Op::AndNot => a.bic(d, x, y),
+            Op::Or => a.orr(d, x, y),
+            Op::Xor => a.eor(d, x, y),
+            Op::Mul => a.mul(d, x, y),
+            Op::Shl => a.lslv(d, x, y),
+            Op::Shr => a.lsrv(d, x, y),
+            Op::Sar => a.asrv(d, x, y),
+        }
+    }
+    /// d = op(x, imm): a small add or subtract is one instruction, the rest through w1
+    fn alu3i(&mut self, op: Op, d: Reg, x: Reg, v: u32) {
+        match op {
+            Op::Add => self.add_imm(d, x, v),
+            Op::Sub => self.add_imm(d, x, v.wrapping_neg()),
+            _ => {
+                self.a.mov32(1, v);
+                self.alu3(op, d, x, 1);
+            }
+        }
+    }
+    /// The register of an A4/BitBr right-hand side (see `rhs`): a guest register in place, else w1
+    fn rhs_reg(&mut self, rk: u8, rv: u32) -> Reg {
+        if rk == 0 {
+            self.rd(rv as u8)
+        } else {
+            self.rhs(rk, rv);
+            1
+        }
+    }
+    /// Flags for a compare of w(x) with an immediate.
+    fn cmp_i(&mut self, x: Reg, v: u32) {
+        if v < 4096 {
+            self.a.cmp_imm(x, v);
+        } else {
+            self.a.mov32(1, v);
+            self.a.cmp(x, 1);
         }
     }
     /// w1 = an A4/BitBr right-hand side: rk 0 register, 1 immediate, 2 `1 << reg`
@@ -1145,6 +1216,10 @@ impl Gen<'_> {
 
     /// store(width) of w1 at guest address w0. Inline RAM, else the bus.
     fn store(&mut self, w: u8, idx: u32) {
+        self.store_from(1, w, idx);
+    }
+    /// `store` of w(src) (not w0, w2 or w3)
+    fn store_from(&mut self, src: Reg, w: u8, idx: u32) {
         let (slow, done) = (self.a.label(), self.a.label());
         let mem = *self.mem;
         if w == 2 {
@@ -1161,13 +1236,13 @@ impl Gen<'_> {
             self.a.cbnz(2, slow);
         }
         match w {
-            4 => self.a.str_u(1, RAM, 3),
-            2 => self.a.strh_u(1, RAM, 3),
-            _ => self.a.strb_u(1, RAM, 3),
+            4 => self.a.str_u(src, RAM, 3),
+            2 => self.a.strh_u(src, RAM, 3),
+            _ => self.a.strb_u(src, RAM, 3),
         }
         self.a.b(done);
         self.a.bind(slow);
-        self.a.mov(2, 1);
+        self.a.mov(2, src);
         self.a.mov(1, 0);
         self.a.mov_x(0, CTX);
         self.a.add_imm(3, DONE, idx);
@@ -1332,84 +1407,84 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
     match fast {
         Fast::Nop => {}
         Fast::MovI { d, v } => {
-            g.a.mov32(0, v);
-            g.st_reg(0, d);
+            let x = g.wr(d);
+            g.a.mov32(x, v);
         }
         Fast::Mov { d, s } => {
-            g.ld_reg(0, s);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            if x != y {
+                g.a.mov(y, x);
+            }
         }
         Fast::AddRI { d, s, v } => {
-            g.ld_reg(0, s);
-            g.add_imm(0, 0, v);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            g.add_imm(y, x, v);
         }
         Fast::ShlI { d, s, n } => {
-            g.ld_reg(0, s);
-            g.a.lsl_imm(0, 0, n as u32 & 31);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            g.a.lsl_imm(y, x, n as u32 & 31);
         }
         Fast::SarI { d, s, n } => {
-            g.ld_reg(0, s);
-            g.a.asr_imm(0, 0, n as u32 & 31);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            g.a.asr_imm(y, x, n as u32 & 31);
         }
         Fast::Alu3 { d, a, b, op } => {
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(a);
+            let y = g.rd(b);
+            let z = g.wr(d);
+            g.alu3(op, z, x, y);
         }
         Fast::Alu3I { d, a, v, op } => {
-            g.ld_reg(0, a);
-            g.a.mov32(1, v);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(a);
+            let z = g.wr(d);
+            g.alu3i(op, z, x, v);
         }
         Fast::Alu2 { d, b, op } => {
-            g.ld_reg(0, d);
-            g.ld_reg(1, b);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(d);
+            let y = g.rd(b);
+            let z = g.wr(d);
+            g.alu3(op, z, x, y);
         }
         Fast::Alu2I { d, v, op } => {
-            g.ld_reg(0, d);
-            g.a.mov32(1, v);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(d);
+            let z = g.wr(d);
+            g.alu3i(op, z, x, v);
         }
         Fast::A4 { d, s, op, rk, rv } => {
-            g.rhs(rk, rv);
-            g.ld_reg(0, s);
-            g.alu(op);
-            g.st_reg(0, d);
+            let y = g.rhs_reg(rk, rv);
+            let x = g.rd(s);
+            let z = g.wr(d);
+            g.alu3(op, z, x, y);
         }
         Fast::Ext { d, s, part, signed } => {
-            g.ld_reg(0, s);
+            let x = g.rd(s);
+            let y = g.wr(d);
             match (part, signed) {
-                (0, false) => g.a.ubfx(0, 0, 0, 8),
-                (0, true) => g.a.sbfx(0, 0, 0, 8),
-                (1, false) => g.a.ubfx(0, 0, 0, 16),
-                (1, true) => g.a.sbfx(0, 0, 0, 16),
-                (_, false) => g.a.ubfx(0, 0, 16, 16),
-                (_, true) => g.a.sbfx(0, 0, 16, 16),
+                (0, false) => g.a.ubfx(y, x, 0, 8),
+                (0, true) => g.a.sbfx(y, x, 0, 8),
+                (1, false) => g.a.ubfx(y, x, 0, 16),
+                (1, true) => g.a.sbfx(y, x, 0, 16),
+                (_, false) => g.a.ubfx(y, x, 16, 16),
+                (_, true) => g.a.sbfx(y, x, 16, 16),
             }
-            g.st_reg(0, d);
         }
         Fast::MinMax { d, a, b, kind } => {
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
-            g.a.cmp(0, 1);
+            let x = g.rd(a);
+            let y = g.rd(b);
+            let z = g.wr(d);
+            g.a.cmp(x, y);
             let c = match kind { 0 => AC::Lt, 1 => AC::Gt, 2 => AC::Lo, _ => AC::Hi };
-            g.a.csel(0, 0, 1, c);
-            g.st_reg(0, d);
+            g.a.csel(z, x, y, c);
         }
         // ---- branches (always a block's last op)
         Fast::BrI { a, v, cond, target } => {
             let t = g.a.label();
-            g.ld_reg(0, a);
-            g.a.mov32(1, v);
-            g.a.cmp(0, 1);
+            let x = g.rd(a);
+            g.cmp_i(x, v);
             g.a.b_cond(acond(cond), t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1417,9 +1492,8 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BrIEq { a, v, target } | Fast::BrINe { a, v, target } => {
             let t = g.a.label();
-            g.ld_reg(0, a);
-            g.a.mov32(1, v);
-            g.a.cmp(0, 1);
+            let x = g.rd(a);
+            g.cmp_i(x, v);
             g.a.b_cond(if matches!(fast, Fast::BrIEq { .. }) { AC::Eq } else { AC::Ne }, t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1427,9 +1501,9 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BrR { a, b, cond, target } => {
             let t = g.a.label();
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
-            g.cmp(cond.is_float(), 0, 1);
+            let x = g.rd(a);
+            let y = g.rd(b);
+            g.cmp(cond.is_float(), x, y);
             g.a.b_cond(acond(cond), t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1437,9 +1511,9 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BitBr { r, mk, ne, mv, target } => {
             let t = g.a.label();
-            g.rhs(mk, mv);
-            g.ld_reg(0, r);
-            g.a.tst(0, 1);
+            let y = g.rhs_reg(mk, mv);
+            let x = g.rd(r);
+            g.a.tst(x, y);
             g.a.b_cond(if ne { AC::Ne } else { AC::Eq }, t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1447,11 +1521,10 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::DecBr { r, cond, v, target } => {
             let t = g.a.label();
-            g.ld_reg(0, r);
-            g.a.sub_imm(0, 0, 1);
-            g.st_reg(0, r);
-            g.a.mov32(1, v);
-            g.a.cmp(0, 1);
+            let x = g.rd(r);
+            let z = g.wr(r);
+            g.a.sub_imm(z, x, 1);
+            g.cmp_i(z, v);
             g.a.b_cond(acond(cond), t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1512,17 +1585,22 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         // ---- memory
         Fast::Ld { d, b, off, w, signed } => {
             match b {
-                Base::Reg(r) => g.ld_reg(0, r),
-                Base::Sp => g.a.ldr(0, CPU, off_sp()),
+                Base::Reg(r) => {
+                    let x = g.rd(r);
+                    g.add_imm(0, x, off);
+                }
+                Base::Sp => {
+                    g.a.ldr(0, CPU, off_sp());
+                    g.add_imm(0, 0, off);
+                }
             }
-            g.add_imm(0, 0, off);
             g.load(w, signed, idx);
             g.st_reg(0, d);
             bus_used = true;
         }
         Fast::LdW { d, b, off } => {
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, off);
+            let x = g.rd(b);
+            g.add_imm(0, x, off);
             g.load(4, false, idx);
             g.st_reg(0, d);
             bus_used = true;
@@ -1535,27 +1613,32 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             bus_used = true;
         }
         Fast::LdBu { d, b, off } => {
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, off);
+            let x = g.rd(b);
+            g.add_imm(0, x, off);
             g.load(1, false, idx);
             g.st_reg(0, d);
             bus_used = true;
         }
         Fast::St { s, b, off, w } => {
             match b {
-                Base::Reg(r) => g.ld_reg(0, r),
-                Base::Sp => g.a.ldr(0, CPU, off_sp()),
+                Base::Reg(r) => {
+                    let x = g.rd(r);
+                    g.add_imm(0, x, off);
+                }
+                Base::Sp => {
+                    g.a.ldr(0, CPU, off_sp());
+                    g.add_imm(0, 0, off);
+                }
             }
-            g.add_imm(0, 0, off);
-            g.ld_reg(1, s);
-            g.store(w, idx);
+            let v = g.rd(s);
+            g.store_from(v, w, idx);
             bus_used = true;
         }
         Fast::StW { s, b, off } => {
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, off);
-            g.ld_reg(1, s);
-            g.store(4, idx);
+            let x = g.rd(b);
+            g.add_imm(0, x, off);
+            let v = g.rd(s);
+            g.store_from(v, 4, idx);
             bus_used = true;
         }
         Fast::StWSp { s, off } => {
@@ -1566,37 +1649,39 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             bus_used = true;
         }
         Fast::LdIdx { d, b, i, sh, w, signed } => {
-            g.ld_reg(0, b);
-            g.ld_reg(1, i);
-            g.a.add_lsl(0, 0, 1, sh as u32 & 31);
+            let x = g.rd(b);
+            let y = g.rd(i);
+            g.a.add_lsl(0, x, y, sh as u32 & 31);
             g.load(w, signed, idx);
             g.st_reg(0, d);
             bus_used = true;
         }
         Fast::StIdx { s, b, i, sh, w } => {
-            g.ld_reg(0, b);
-            g.ld_reg(1, i);
-            g.a.add_lsl(0, 0, 1, sh as u32 & 31);
-            g.ld_reg(1, s);
-            g.store(w, idx);
+            let x = g.rd(b);
+            let y = g.rd(i);
+            g.a.add_lsl(0, x, y, sh as u32 & 31);
+            let v = g.rd(s);
+            g.store_from(v, w, idx);
             bus_used = true;
         }
         Fast::LdPost { d, b, w, signed, inc } => {
-            g.ld_reg(0, b);
+            let x = g.rd(b);
+            g.a.mov(0, x);
             g.load(w, signed, idx);
             g.st_reg(0, d);
-            g.ld_reg(0, b); // (after the load wrote d, as the interpreter)
-            g.add_imm(0, 0, inc);
-            g.st_reg(0, b);
+            let x = g.rd(b); // (after the load wrote d, as the interpreter)
+            let z = g.wr(b);
+            g.add_imm(z, x, inc);
             bus_used = true;
         }
         Fast::StPost { s, b, w, inc } => {
-            g.ld_reg(0, b);
-            g.ld_reg(1, s);
-            g.store(w, idx);
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, inc);
-            g.st_reg(0, b);
+            let x = g.rd(b);
+            g.a.mov(0, x);
+            let v = g.rd(s);
+            g.store_from(v, w, idx);
+            let x = g.rd(b);
+            let z = g.wr(b);
+            g.add_imm(z, x, inc);
             bus_used = true;
         }
         // (i 16: the immediate increment; else register i's)
