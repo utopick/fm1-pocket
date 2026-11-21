@@ -78,6 +78,56 @@ pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_face(env: 
     got
 }
 
+/// Whether the native JIT can get its memory here: the read-write-execute mapping fm1-core's code
+/// cache asks for (jit.rs `CodeCache::new`); without it the emulator quietly interprets, several times slower.
+pub fn jit_memory() -> bool {
+    extern "C" {
+        fn mmap(addr: *mut std::ffi::c_void, len: usize, prot: i32, flags: i32, fd: i32, off: i64) -> *mut std::ffi::c_void;
+        fn munmap(addr: *mut std::ffi::c_void, len: usize) -> i32;
+    }
+    let p = unsafe { mmap(std::ptr::null_mut(), 4096, 7, 0x02 | 0x20, -1, 0) };
+    if p as isize == -1 || p.is_null() { return false; }
+    unsafe { munmap(p, 4096) };
+    true
+}
+
+/// Keeps the calling thread off the slowest cores: those whose top clock is the lowest, when the
+/// phone mixes kinds (big.LITTLE). Android places threads by load, and a thread that sleeps in each
+/// audio write can stay on a little core that is several times slower. Returns the cores allowed.
+pub fn fast_cores() -> u32 {
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    {
+        extern "C" { fn sched_setaffinity(pid: i32, size: usize, mask: *const u64) -> i32; }
+        let freq: Vec<(usize, u64)> = (0..64)
+            .filter_map(|c| std::fs::read_to_string(format!("/sys/devices/system/cpu/cpu{c}/cpufreq/cpuinfo_max_freq")).ok()
+                .and_then(|t| t.trim().parse().ok()).map(|f| (c, f)))
+            .collect();
+        let Some(low) = freq.iter().map(|f| f.1).min() else { return 0 };
+        let mut mask = [0u64; 16]; // a cpu_set_t: 1024 bits
+        let mut n = 0;
+        for &(c, f) in &freq { if f > low { mask[c / 64] |= 1 << (c % 64); n += 1; } }
+        if n == 0 || unsafe { sched_setaffinity(0, std::mem::size_of_val(&mask), mask.as_ptr()) } != 0 { return 0; }
+        n
+    }
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    0
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_fastCores(_env: *mut JNIEnv, _c: jclass) -> jint {
+    catch_unwind(fast_cores).unwrap_or(0) as jint
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_load(_env: *mut JNIEnv, _c: jclass) -> jint {
+    catch_unwind(|| with(|h| h.load())).unwrap_or(-1)
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_jitMemory(_env: *mut JNIEnv, _c: jclass) -> jboolean {
+    catch_unwind(jit_memory).unwrap_or(false) as jboolean
+}
+
 #[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_version(env: *mut JNIEnv, _c: jclass) -> jstring {
     let s = CString::new(version()).unwrap();

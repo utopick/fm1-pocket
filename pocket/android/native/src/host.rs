@@ -56,6 +56,7 @@ pub struct Host {
     flash_changed_at: f64,
     last_snapshot: f64,
     peak: f32, // the largest absolute sample since the last frame
+    load: f64, // emulation time over sound time, smoothed over about a second (1 = just real time)
 }
 
 impl Host {
@@ -63,7 +64,7 @@ impl Host {
         Host { t0: Instant::now(), active: false, queue: vec![], snapshots: vec![], seq: None, mhz: 0.0, ahead: 0.0, budget: 0.0,
             playing: false, paused: false, board: 0, last_timing: None, lcd_revision: None, face_revision: None, report_frames: 0, report_calls: 0,
             short: 0, busy: 0.0, worst: 0.0, timed_ms: 0.0, timed_idle: 0.0, timed_starved: 0.0, flash_revision: 0,
-            observed_revision: 0, flash_changed_at: 0.0, last_snapshot: 0.0, peak: 0.0 }
+            observed_revision: 0, flash_changed_at: 0.0, last_snapshot: 0.0, peak: 0.0, load: 0.0 }
     }
 
     fn now(&self) -> f64 { self.t0.elapsed().as_secs_f64() * 1000.0 }
@@ -307,6 +308,8 @@ impl Host {
         self.queue.retain(|m| !m.json.starts_with("{\"type\":\"frame\""));
         self.push(text, blobs);
         let took = self.now() - t0;
+        let sound_ms = self.report_frames as f64 * 1000.0 / SAMPLE_RATE;
+        if playing && sound_ms > 0.0 { self.load += ((self.busy + took) / sound_ms - self.load) * 0.1; }
         self.last_timing = Some(Timing { busy: self.busy + took, worst: if playing { self.worst.max(took) } else { self.worst },
             emulated: ms - self.timed_ms, idle: idle - self.timed_idle, starved: starved - self.timed_starved,
             quanta: self.report_calls as f64, frames: self.report_frames as f64 / self.report_calls as f64 });
@@ -330,6 +333,9 @@ impl Host {
         lcd.copy_from_slice(unsafe { std::slice::from_raw_parts(w::fm1_lcd(), LCD_PIXELS) });
         1
     }
+
+    /// For the native screen: the load in percent, -1 while nothing plays.
+    pub fn load(&self) -> i32 { if self.active && self.playing { (self.load * 100.0).round() as i32 } else { -1 } }
 
     /// The `/native/poll` response body: see the bridge in the spec (little-endian).
     pub fn poll(&mut self) -> Vec<u8> {
