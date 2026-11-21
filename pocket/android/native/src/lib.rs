@@ -124,6 +124,11 @@ pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_load(_env:
 }
 
 #[no_mangle]
+pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_peakLoad(_env: *mut JNIEnv, _c: jclass) -> jint {
+    catch_unwind(|| with(|h| h.take_peak_load())).unwrap_or(0)
+}
+
+#[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_jitMemory(_env: *mut JNIEnv, _c: jclass) -> jboolean {
     catch_unwind(jit_memory).unwrap_or(false) as jboolean
 }
