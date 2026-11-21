@@ -1547,26 +1547,28 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         // (the multiply-accumulates 7 / 8 read d too, and the rounding conversions other than
         // trunc have no single A64 instruction here: through the interpreter's executor)
         Fast::FOp { d, a, b, op } if matches!(op, 0..=6 | 0x1f | 0x5f | 0x8f | 0x9f) => {
-            g.ld_reg(0, a);
+            let x = g.rd(a);
             match op {
                 0x1f | 0x5f => {
-                    g.a.fmov_s_w(0, 0);
-                    if op == 0x1f { g.a.fcvtzs(0, 0) } else { g.a.fcvtzu(0, 0) }
+                    g.a.fmov_s_w(0, x);
+                    let z = g.wr(d);
+                    if op == 0x1f { g.a.fcvtzs(z, 0) } else { g.a.fcvtzu(z, 0) }
                 }
                 0x8f | 0x9f => {
-                    if op == 0x8f { g.a.scvtf(0, 0) } else { g.a.ucvtf(0, 0) }
-                    g.a.fmov_w_s(0, 0);
+                    if op == 0x8f { g.a.scvtf(0, x) } else { g.a.ucvtf(0, x) }
+                    let z = g.wr(d);
+                    g.a.fmov_w_s(z, 0);
                 }
                 _ => {
-                    g.ld_reg(1, b);
-                    g.a.fmov_s_w(0, 0);
-                    g.a.fmov_s_w(1, 1);
+                    let y = g.rd(b);
+                    g.a.fmov_s_w(0, x);
+                    g.a.fmov_s_w(1, y);
                     let opc = match op { 0 => 0x1e20_2800, 1 => 0x1e20_3800, 2 => 0x1e20_0800, 3 => 0x1e20_1800, 5 => 0x1e20_7800, _ => 0x1e20_6800 };
                     g.a.fop(opc, 0, 0, 1);
-                    g.a.fmov_w_s(0, 0);
+                    let z = g.wr(d);
+                    g.a.fmov_w_s(z, 0);
                 }
             }
-            g.st_reg(0, d);
         }
         Fast::Rts => {
             g.a.ldr(9, CPU, off_rets());
@@ -1775,8 +1777,16 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             g.a.ldr(0, CPU, off_sp()); g.add_imm(0, 0, v); g.st_reg(0, d);
         }
         Fast::Mov2 { dh, dl, sh, sl } => {
-            g.ld_reg(0, sh); g.ld_reg(1, sl);
-            g.st_reg(0, dh); g.st_reg(1, dl);
+            let (x, y) = (g.rd(sh), g.rd(sl));
+            let (zh, zl) = (g.wr(dh), g.wr(dl));
+            // (a source may be the other half's destination: the copies go through w0 / w1)
+            if zh == y || zl == x {
+                g.a.mov(0, x); g.a.mov(1, y);
+                g.a.mov(zh, 0); g.a.mov(zl, 1);
+            } else {
+                if zh != x { g.a.mov(zh, x); }
+                if zl != y { g.a.mov(zl, y); }
+            }
         }
         Fast::Mov2I { dh, dl, v } => {
             g.a.mov32(0, v); g.st_reg(0, dl);
@@ -1784,11 +1794,12 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BitExt { d, s, p, l, signed } => {
             let (p, l) = (p as u32 & 31, l as u32 & 31);
-            g.ld_reg(0, s); g.a.lsr_imm(0, 0, p);
+            let x = g.rd(s);
+            let z = g.wr(d);
+            g.a.lsr_imm(z, x, p);
             if l != 0 {
-                if signed { g.a.sbfx(0, 0, 0, l); } else { g.a.ubfx(0, 0, 0, l); }
+                if signed { g.a.sbfx(z, z, 0, l); } else { g.a.ubfx(z, z, 0, l); }
             }
-            g.st_reg(0, d);
         }
         Fast::BitIns { d, s, p, l } => {
             let (p, l) = (p as u32 & 31, l as u32 & 31);
@@ -1846,6 +1857,21 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             g.a.str(0, CPU, off_sp());
             g.ind_brk(KEEP, count, true);
         }
+        Fast::Un { d, s, k } if k <= 4 => {
+            let x = g.rd(s);
+            let z = g.wr(d);
+            match k {
+                0 => g.a.mvn(z, x),
+                1 => g.a.neg(z, x),
+                // (i32::MIN stays i32::MIN, as wrapping_abs)
+                2 => {
+                    g.a.cmp_imm(x, 0);
+                    g.a.cneg(z, x, AC::Lt);
+                }
+                3 => g.a.rev(z, x),
+                _ => g.a.clz(z, x),
+            }
+        }
         Fast::Un { d, s, k } => {
             g.ld_reg(0, s);
             match k {
@@ -1879,19 +1905,19 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         Fast::Div { d, a, b, k } => {
             // sdiv / udiv give 0 for a divisor of 0 and i32::MIN for i32::MIN / -1, as the
             // interpreter; a remainder is a - q * b, and 0 for a divisor of 0
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
+            let (x, y) = (g.rd(a), g.rd(b));
             if k == 0 || k == 2 {
-                g.a.sdiv(2, 0, 1);
+                g.a.sdiv(2, x, y);
             } else {
-                g.a.udiv(2, 0, 1);
+                g.a.udiv(2, x, y);
             }
             if k >= 2 {
-                g.a.msub(2, 2, 1, 0);
-                g.a.cmp_imm(1, 0);
+                g.a.msub(2, 2, y, x);
+                g.a.cmp_imm(y, 0);
                 g.a.csel(2, ZR, 2, AC::Eq);
             }
-            g.st_reg(2, d);
+            let z = g.wr(d);
+            g.a.mov(z, 2);
         }
         // (`sti` opens the bus's interrupt window: a helper of its own, `h_sti`)
         Fast::SetIe { on: false } if off_ie() < 4096 => g.a.strb(ZR, CPU, off_ie()),
