@@ -1383,8 +1383,23 @@ impl Cpu {
         self.jit.as_ref()?.body(id as usize - 1)
     }
 
-    #[inline(never)]
+    /// `build_block_once`, built again if another core wrote to code while it read (two threads:
+    /// every instruction's words are marked before they are read, so a write after the read is
+    /// counted; one that came between the marks and the end shows in the count).
     fn build_block<B: Bus>(&mut self, bus: &mut B, pc: u32) -> Result<Option<(usize, u32, u32)>, CoreError> {
+        let ram = !(0x0200_0000..0x0400_0000).contains(&pc);
+        for _ in 0..16 {
+            let v0 = bus.code_writes();
+            let r = self.build_block_once(bus, pc);
+            if !ram || v0.is_none() || bus.code_writes() == v0 {
+                return r;
+            }
+        }
+        self.build_block_once(bus, pc)
+    }
+
+    #[inline(never)]
+    fn build_block_once<B: Bus>(&mut self, bus: &mut B, pc: u32) -> Result<Option<(usize, u32, u32)>, CoreError> {
         if self.bmap.is_empty() {
             self.bmap = vec![0; ICACHE_LINES];
         }
@@ -1413,6 +1428,9 @@ impl Cpu {
         // (a glued pair's second instruction always joins its head's block)
         let mut glued = false;
         while ((self.bops.len() as u32 - start) < 32 || glued) && code(bus, p) {
+            if !xip {
+                bus.code_mark(p, p + 6); // (before the read: a write after it is counted)
+            }
             let slot = self.fetch_at(bus, p)?;
             let l = self.icache[slot];
             let Some(f) = l.fast else { break };
@@ -1421,6 +1439,9 @@ impl Cpu {
             glued = false;
             // (a head whose flags are read later keeps the careful path: the JITs do not set them)
             if l.pair_head && !l.flags_live && !f.may_jump() && !matches!(f, Fast::IfBlk { .. }) && code(bus, q) {
+                if !xip {
+                    bus.code_mark(q, q + 6);
+                }
                 let ts = self.fetch_at(bus, q)?;
                 let t = self.icache[ts];
                 if let (Some(tf), false, false) = (t.fast, t.pair_head, t.careful) {
