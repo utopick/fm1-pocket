@@ -2228,8 +2228,9 @@ mod tests {
         soc.write32(0x01c7_fff8, XIP_BASE + cpu0.len() as u32);
         soc.write32(0x10008, 8);
         let (mut c1, mut t) = (None, false);
-        for _ in 0..slices {
-            run_dual(&mut c1, &mut soc, SLICE, 1 << 20, jit, |s, k| run_blocks(&mut cpu, s, k, &mut t)).unwrap();
+        for _ in 0..slices / 20 {
+            // (20 slices a call: starting and stopping the thread takes a scheduler's wake-up each)
+            run_dual(&mut c1, &mut soc, 20 * SLICE, 1 << 20, jit, |s, k| run_blocks(&mut cpu, s, k, &mut t)).unwrap();
             settle(&soc);
             assert!(soc.cpu1_fault.is_none());
         }

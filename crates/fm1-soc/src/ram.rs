@@ -3,7 +3,9 @@
 //! Every access goes through relaxed atomics on the bytes, so the two-thread mode (`mt.rs`) can
 //! have core 1's thread read and write the same memory as core 0's (as both cores do on the chip)
 //! without a data race in Rust's terms. On the hosts we build for (aarch64, x86, wasm) an aligned
-//! relaxed atomic is the plain load or store, so the one-thread path costs nothing.
+//! atomic load or store is the plain one on x86; on AArch64 the two-thread mode needs acquire loads
+//! and release stores (core 1 must see a flag only after the data it guards), so every access is
+//! `ldar` / `stlr` there, which the one-thread path pays too (measured: see mt.rs).
 
 use std::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, AtomicU8, Ordering::*};
 
@@ -93,16 +95,16 @@ impl RamView {
 
     #[inline(always)]
     pub fn read8(&self, a: u32) -> u8 {
-        self.at(a as usize).load(Relaxed)
+        self.at(a as usize).load(Acquire)
     }
 
     #[inline(always)]
     pub fn read16(&self, a: u32) -> u16 {
         let a = a as usize;
         if a & 1 == 0 {
-            self.half(a).load(Relaxed)
+            self.half(a).load(Acquire)
         } else {
-            u16::from_le_bytes([self.at(a).load(Relaxed), self.at(a + 1).load(Relaxed)])
+            u16::from_le_bytes([self.at(a).load(Acquire), self.at(a + 1).load(Acquire)])
         }
     }
 
@@ -110,15 +112,15 @@ impl RamView {
     pub fn read32(&self, a: u32) -> u32 {
         let a = a as usize;
         if a & 3 == 0 {
-            self.word(a).load(Relaxed)
+            self.word(a).load(Acquire)
         } else {
-            u32::from_le_bytes([self.at(a).load(Relaxed), self.at(a + 1).load(Relaxed), self.at(a + 2).load(Relaxed), self.at(a + 3).load(Relaxed)])
+            u32::from_le_bytes([self.at(a).load(Acquire), self.at(a + 1).load(Acquire), self.at(a + 2).load(Acquire), self.at(a + 3).load(Acquire)])
         }
     }
 
     #[inline(always)]
     pub fn write8(&self, a: u32, v: u8) {
-        self.at(a as usize).store(v, Relaxed);
+        self.at(a as usize).store(v, Release);
         self.wrote(a as usize);
     }
 
@@ -126,11 +128,11 @@ impl RamView {
     pub fn write16(&self, a: u32, v: u16) {
         let a = a as usize;
         if a & 1 == 0 {
-            self.half(a).store(v, Relaxed);
+            self.half(a).store(v, Release);
         } else {
             let b = v.to_le_bytes();
-            self.at(a).store(b[0], Relaxed);
-            self.at(a + 1).store(b[1], Relaxed);
+            self.at(a).store(b[0], Release);
+            self.at(a + 1).store(b[1], Release);
         }
         self.wrote(a);
     }
@@ -139,10 +141,10 @@ impl RamView {
     pub fn write32(&self, a: u32, v: u32) {
         let a = a as usize;
         if a & 3 == 0 {
-            self.word(a).store(v, Relaxed);
+            self.word(a).store(v, Release);
         } else {
             for (i, b) in v.to_le_bytes().into_iter().enumerate() {
-                self.at(a + i).store(b, Relaxed);
+                self.at(a + i).store(b, Release);
             }
         }
         self.wrote(a);
