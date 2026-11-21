@@ -130,6 +130,10 @@ impl Asm {
     pub fn sub(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x4b00_0000 | rm << 16 | rn << 5 | rd); }
     pub fn sub_lsl(&mut self, rd: Reg, rn: Reg, rm: Reg, sh: u32) { self.e(0x4b00_0000 | rm << 16 | sh << 10 | rn << 5 | rd); }
     pub fn subs(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x6b00_0000 | rm << 16 | rn << 5 | rd); }
+    pub fn adds(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x2b00_0000 | rm << 16 | rn << 5 | rd); }
+    /// add / subtract with the carry flag, setting the flags (a + b + C, a + !b + C)
+    pub fn adcs(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x3a00_0000 | rm << 16 | rn << 5 | rd); }
+    pub fn sbcs(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x7a00_0000 | rm << 16 | rn << 5 | rd); }
     pub fn cmp(&mut self, rn: Reg, rm: Reg) { self.subs(ZR, rn, rm); }
     pub fn cmp_x(&mut self, rn: Reg, rm: Reg) { self.e(0xeb00_0000 | rm << 16 | rn << 5 | ZR); }
     pub fn neg(&mut self, rd: Reg, rm: Reg) { self.sub(rd, ZR, rm); }

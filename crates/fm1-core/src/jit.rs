@@ -52,6 +52,27 @@ pub struct JitMem {
     pub xip_len: u32,
 }
 
+/// Does the compiler take this op (it need not be run by the careful path)? A careful op that is
+/// so only for its flags (`BOp::flags_only`) is, on AArch64, when `Gen::flag_op` sets them.
+fn plain(o: &crate::BOp) -> bool {
+    !o.careful || (cfg!(target_arch = "aarch64") && o.flags_only() && flag_shape(&o.fast))
+}
+
+/// The ops `Gen::flag_op` compiles with the flags the interpreter leaves.
+#[cfg(target_arch = "aarch64")]
+fn flag_shape(f: &Fast) -> bool {
+    use crate::Op::{Add, RSub, Sub};
+    match f {
+        Fast::Alu3 { op, .. } | Fast::Alu3I { op, .. } | Fast::Alu2 { op, .. } | Fast::Alu2I { op, .. } | Fast::A4 { op, .. } => matches!(op, Add | Sub | RSub),
+        Fast::AddRI { .. } | Fast::AddC { .. } => true,
+        _ => false,
+    }
+}
+#[cfg(not(target_arch = "aarch64"))]
+fn flag_shape(_: &Fast) -> bool {
+    false
+}
+
 /// Per-call context the helpers use (field offsets are used by generated code).
 #[repr(C)]
 pub struct Ctx {
@@ -321,7 +342,7 @@ impl Jit {
                     .iter()
                     .take_while(|o| match o.fast {
                         Fast::Swap { idx } => !swaps[idx as usize].1.may_jump(),
-                        _ => !o.careful,
+                        _ => plain(o),
                     })
                     .count();
                 // an if-else block ending it (careful: interpreted, else) with its then-part
@@ -742,6 +763,12 @@ struct RegCache {
 fn off_reg(r: u8) -> u32 {
     (std::mem::offset_of!(Cpu, regs) + 4 * (r & 15) as usize) as u32
 }
+fn off_flags() -> u32 {
+    std::mem::offset_of!(Cpu, flags) as u32
+}
+fn off_psr() -> u32 {
+    (std::mem::offset_of!(Cpu, sreg_store) + 4 * 5) as u32
+}
 fn off_sp() -> u32 {
     std::mem::offset_of!(Cpu, sp) as u32
 }
@@ -817,6 +844,85 @@ impl Gen<'_> {
         } else {
             self.a.cmp(x, y);
         }
+    }
+    /// The flags of the last `adds` / `adcs` / `subs` / `sbcs` into `Cpu::flags` (N 1, C 2, Z 4, V 8).
+    /// Uses w2 and w3.
+    fn store_flags(&mut self) {
+        let a = &mut self.a;
+        a.cset(2, AC::Mi);
+        a.cset(3, AC::Hs);
+        a.orr_lsl(2, 2, 3, 1);
+        a.cset(3, AC::Eq);
+        a.orr_lsl(2, 2, 3, 2);
+        a.cset(3, AC::Vs);
+        a.orr_lsl(2, 2, 3, 3);
+        a.str(2, CPU, off_flags());
+    }
+    /// An add or subtract that sets the flags the way the interpreter does (`add_flags`: a
+    /// subtract is a + !b + 1, so the host's carry is the guest's, and so are N, Z and V); false:
+    /// not one of them, nothing emitted.
+    fn flag_op(&mut self, f: Fast) -> bool {
+        let (d, sub, rev) = match f {
+            Fast::Alu3 { d, a, b, op } if matches!(op, Op::Add | Op::Sub | Op::RSub) => {
+                self.ld_reg(0, a);
+                self.ld_reg(1, b);
+                (d, !matches!(op, Op::Add), matches!(op, Op::RSub))
+            }
+            Fast::Alu3I { d, a, v, op } if matches!(op, Op::Add | Op::Sub | Op::RSub) => {
+                self.ld_reg(0, a);
+                self.a.mov32(1, v);
+                (d, !matches!(op, Op::Add), matches!(op, Op::RSub))
+            }
+            Fast::Alu2 { d, b, op } if matches!(op, Op::Add | Op::Sub | Op::RSub) => {
+                self.ld_reg(0, d);
+                self.ld_reg(1, b);
+                (d, !matches!(op, Op::Add), matches!(op, Op::RSub))
+            }
+            Fast::Alu2I { d, v, op } if matches!(op, Op::Add | Op::Sub | Op::RSub) => {
+                self.ld_reg(0, d);
+                self.a.mov32(1, v);
+                (d, !matches!(op, Op::Add), matches!(op, Op::RSub))
+            }
+            Fast::A4 { d, s, op, rk, rv } if matches!(op, Op::Add | Op::Sub | Op::RSub) => {
+                self.rhs(rk, rv);
+                self.ld_reg(0, s);
+                (d, !matches!(op, Op::Add), matches!(op, Op::RSub))
+            }
+            Fast::AddRI { d, s, v } => {
+                self.ld_reg(0, s);
+                self.a.mov32(1, v);
+                (d, false, false)
+            }
+            Fast::AddC { d, a, b, sub } => {
+                self.ld_reg(0, a);
+                self.ld_reg(1, b);
+                // (the host's carry from the guest's: C is set when w2 - 1 does not borrow)
+                self.a.ldr(2, CPU, off_flags());
+                self.a.ubfx(2, 2, 1, 1);
+                self.a.cmp_imm(2, 1);
+                if sub { self.a.sbcs(0, 0, 1) } else { self.a.adcs(0, 0, 1) }
+                self.store_flags();
+                self.st_reg(0, d);
+                return true;
+            }
+            _ => return false,
+        };
+        match (sub, rev) {
+            (false, _) => self.a.adds(0, 0, 1),
+            (true, false) => self.a.subs(0, 0, 1),
+            (true, true) => self.a.subs(0, 1, 0),
+        }
+        self.store_flags();
+        self.st_reg(0, d);
+        true
+    }
+    /// `R = psr`: the stored register without its flag bits, and the flags.
+    fn psr_rd(&mut self, d: u8) {
+        self.a.ldr(0, CPU, off_psr());
+        self.a.and_mask(0, 0, 28, 4);
+        self.a.ldr(1, CPU, off_flags());
+        self.a.orr(0, 0, 1);
+        self.st_reg(0, d);
     }
     /// w = guest register r (see `RegCache`)
     fn ld_reg(&mut self, w: Reg, r: u8) {
@@ -1192,6 +1298,29 @@ impl Gen<'_> {
         self.exit_imm(next_pc, count);
         self.a.bind(go);
     }
+}
+
+/// `other` through the interpreter's own executor (`h_op`); true: the bus may have been used.
+#[cfg(target_arch = "aarch64")]
+fn emit_helper<B: Bus>(g: &mut Gen, other: Fast, idx: u32, next_pc: u32, profile: bool) -> bool {
+    let count = idx + 1;
+    let p: &'static Fast = Box::leak(Box::new(other));
+    g.a.mov_x(0, CTX);
+    g.a.ldr_lit_x(1, p as *const Fast as u64);
+    g.idx_w2(idx);
+    g.a.mov32(3, next_pc);
+    g.call(op_helper::<B>(&other, profile));
+    let fall = g.a.label();
+    g.a.tbz(0, 32, fall); // bit 32: jumped (x0)
+    g.ind_brk(0, count, true);
+    g.a.bind(fall);
+    if other.may_jump() {
+        // a jump through the interpreter (`pop` with pc in its mask) that fell
+        // through: leave first if the next tick is due, as after any bus access
+        g.check_brk(next_pc, count, 0);
+        g.chain(next_pc, count);
+    }
+    true
 }
 
 /// Native code for one plain micro-op, instruction `idx` of its block (the helpers' tick index),
@@ -1759,25 +1888,7 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             bus_used = true;
         }
         // ---- everything else: the interpreter's executor for this one op
-        other => {
-            let p: &'static Fast = Box::leak(Box::new(other));
-            g.a.mov_x(0, CTX);
-            g.a.ldr_lit_x(1, p as *const Fast as u64);
-            g.idx_w2(idx);
-            g.a.mov32(3, next_pc);
-            g.call(op_helper::<B>(&other, profile));
-            let fall = g.a.label();
-            g.a.tbz(0, 32, fall); // bit 32: jumped (x0)
-            g.ind_brk(0, count, true);
-            g.a.bind(fall);
-            bus_used = true;
-            if other.may_jump() {
-                // a jump through the interpreter (`pop` with pc in its mask) that fell
-                // through: leave first if the next tick is due, as after any bus access
-                g.check_brk(next_pc, count, 0);
-                g.chain(next_pc, count);
-            }
-        }
+        other => bus_used = emit_helper::<B>(g, other, idx, next_pc, profile),
     }
     bus_used
 }
@@ -1837,7 +1948,20 @@ fn emit_ops<B: Bus>(g: &mut Gen, ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)],
             ins = j;
             break;
         }
-        let bus_used = emit_op::<B>(g, op.fast, ins, next_pc, profile);
+        // (an add or subtract whose flags are read later, or `AddC`: the flags are set here)
+        let bus_used = if op.flags_only() || matches!(op.fast, Fast::AddC { .. }) {
+            if g.flag_op(op.fast) {
+                false
+            } else {
+                // (a careful op with no inline form: the executor keeps the flags)
+                emit_helper::<B>(g, op.fast, ins, next_pc, profile)
+            }
+        } else if let Fast::PsrRd { d } = op.fast {
+            g.psr_rd(d);
+            false
+        } else {
+            emit_op::<B>(g, op.fast, ins, next_pc, profile)
+        };
         if bus_used && !op.fast.may_jump() {
             let rest = insns(ops) - (ins + 1);
             if op.glue {
@@ -2386,6 +2510,57 @@ mod tests {
     /// Blocks of several ops over all 16 registers (more than the AArch64 code keeps in host
     /// registers, so some are given up and taken again mid-block), loads and stores among them,
     /// against the interpreter running the same ops one after another.
+    /// Adds and subtracts whose flags are read later (careful for that only), `AddC` and `R = psr`
+    /// compile inline: the flags they leave, the carry they take and the `psr` they read are the
+    /// interpreter's, over edge values and the four flag combinations, alone and two to a block.
+    #[test]
+    fn flag_ops_match_the_interpreter() {
+        use crate::Op;
+        let mut seed = 0x1234_5678_9abc_def1u64;
+        let mut rnd = move || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed as u32 };
+        let edge = [0u32, 1, 2, 0x7fff_ffff, 0x8000_0000, 0x8000_0001, 0xffff_ffff, 0xffff_fffe];
+        let mut cases: Vec<Vec<BOp>> = vec![];
+        let flagged = |fast| BOp { fast, len: 2, careful: true, pair_head: false, glue: false };
+        for op in [Op::Add, Op::Sub, Op::RSub] {
+            cases.push(vec![flagged(Fast::Alu3 { d: 0, a: 1, b: 2, op })]);
+            cases.push(vec![flagged(Fast::Alu3 { d: 1, a: 1, b: 1, op })]);
+            cases.push(vec![flagged(Fast::Alu3I { d: 0, a: 1, v: 0xffff_fff3, op })]);
+            cases.push(vec![flagged(Fast::Alu2 { d: 3, b: 2, op })]);
+            cases.push(vec![flagged(Fast::Alu2I { d: 3, v: 0x8000_0000, op })]);
+            for rk in 0..3 { cases.push(vec![flagged(Fast::A4 { d: 4, s: 5, op, rk, rv: if rk == 1 { 0x8000_0001 } else { 6 } })]); }
+            // (a 64-bit add or subtract: the carry from the low half into the high, then the flags read)
+            cases.push(vec![flagged(Fast::Alu3 { d: 4, a: 0, b: 2, op }), self::op(Fast::AddC { d: 5, a: 1, b: 3, sub: !matches!(op, Op::Add) }), self::op(Fast::PsrRd { d: 6 })]);
+        }
+        cases.push(vec![flagged(Fast::AddRI { d: 0, s: 1, v: 0xffff_ffff })]);
+        cases.push(vec![flagged(Fast::AddRI { d: 0, s: 1, v: 1 })]);
+        for sub in [false, true] {
+            cases.push(vec![self::op(Fast::AddC { d: 0, a: 1, b: 2, sub })]);
+            cases.push(vec![self::op(Fast::AddC { d: 1, a: 1, b: 1, sub })]);
+        }
+        cases.push(vec![self::op(Fast::PsrRd { d: 3 })]);
+        let mut jit = Jit::new(false).unwrap();
+        for (j, ops) in cases.iter().enumerate() {
+            for round in 0..40u32 {
+                let mut bus = Memory::new();
+                let mem = bus.jit_mem().unwrap();
+                let mut cpu = Cpu::new(0);
+                for r in 0..8 { cpu.regs[r] = if rnd() % 2 == 0 { edge[rnd() as usize % edge.len()] } else { rnd() }; }
+                cpu.flags = round & 0xf;
+                cpu.sreg_store[5] = rnd();
+                let mut expected = Cpu::new(0);
+                expected.regs = cpu.regs;
+                expected.flags = cpu.flags;
+                expected.sreg_store = cpu.sreg_store;
+                let mut reference = Memory::new();
+                let mut next = 0;
+                for o in ops { next += o.len as u32; expected.exec_fast(&mut reference, o.fast, next); }
+                let code = hot(&mut jit, j * 40 + round as usize, 0, ops, &mem);
+                assert_eq!(unsafe { run(code, &mut cpu, &mut bus, &mem, 0, ops.len() as u32, false) }.0, ops.len() as u32);
+                assert_eq!((cpu.regs, cpu.flags), (expected.regs, expected.flags), "case {j} round {round}: {ops:?}");
+            }
+        }
+    }
+
     #[test]
     fn compiled_blocks_match_interpreter() {
         use crate::Op;
