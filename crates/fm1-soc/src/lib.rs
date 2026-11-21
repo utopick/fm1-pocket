@@ -23,6 +23,9 @@
 //! never silently swallowed. The access log is the reverse-engineering
 //! roadmap.
 
+// the threaded wasm build only (nightly): the wait a Worker sleeps in
+#![cfg_attr(target_feature = "atomics", feature(stdarch_wasm_atomic_wait))]
+
 use fm1_core::Bus;
 
 pub mod script;

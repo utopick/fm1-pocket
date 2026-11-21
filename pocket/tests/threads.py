@@ -43,12 +43,16 @@ def play(d, want, why):
     mode = js("return FM1Threads.mode")
     assert mode == want, "%s: mode %s, wanted %s (%s)" % (why, mode, want, js("return FM1Threads.why"))
     if want == "threads":
-        a = js("return FM1Threads.beats"); time.sleep(1.5); b = js("return FM1Threads.beats")
-        assert b > a >= 0, "%s: core 1's Worker is not beating (%s -> %s, %s)" % (why, a, b, js("return FM1Threads.why"))
+        time.sleep(3); a = js("return FM1Threads.insns"); time.sleep(3); b = js("return FM1Threads.insns")
+        assert js("return FM1Threads.started") == 2 and b > a > 0, "%s: core 1 does not run in the Worker (started %s, instructions %s -> %s, %s)" % (why, js("return FM1Threads.started"), a, b, js("return FM1Threads.why"))
     j = js("return FM1Threads.jit")
     assert j["regions"] > 0 and j["failed"] == 0, "%s: the wasm JIT does not work here: %s" % (why, j)
-    print(why, "beats", js("return FM1Threads.beats"), "jit regions", j["regions"])
-    js("peak = 0; midiIn([0x90, 60, 110])"); time.sleep(2); assert js("return peak") > 0.005, why + ": no sound"
+    print(why, "core 1 insns in the Worker", js("return FM1Threads.insns"), "jit regions", j["regions"])
+    if want == "threads":
+        j1 = js("return FM1Threads.jit1")
+        assert j1 and j1["regions"] > 0 and j1["failed"] == 0, "%s: the wasm JIT does not work on core 1's side: %s" % (why, j1)
+        print("  core 1's JIT:", j1)
+    js("peak = 0; midiIn([0x90, 60, 110])"); time.sleep(2); pk = js("return peak"); assert pk > 0.005, why + ": no sound"; print("  peak", round(pk, 3))
     assert js("return __errs") == [], js("return __errs")
 
 d = browser()
