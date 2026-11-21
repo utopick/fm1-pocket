@@ -19,6 +19,9 @@ FAKE = """
 window.__calls = []; window.__queue = []; window.__polls = 0; window.__errs = [];
 addEventListener('error', e => __errs.push(String(e.message)));
 window.FM1Native = { post: j => __calls.push(['post', j]), boot: (j, p, s, x) => __calls.push(['boot', j, p.length, s, x]), version: () => 'fake', page: () => __calls.push(['page']) };
+delete Navigator.prototype.requestMIDIAccess; // as in a WebView
+window.__sent = []; window.FM1Midi = { started: 0, list: () => JSON.stringify([{id: '7:i:0', name: 'FM-1', manufacturer: 'x', type: 'input'}, {id: '7:o:0', name: 'FM-1', manufacturer: 'x', type: 'output'}]),
+  start: () => FM1Midi.started++, send: (id, b) => __sent.push([id, b]) };
 // the poll's answer: u32 count, then per message u32 jsonLen, json, u32 blobs, each u32 nameLen, name, u32 typeLen, type, u32 byteLen, bytes
 window.pack = (msgs) => {
   const parts = [], enc = new TextEncoder(), u32 = n => new Uint8Array(new Uint32Array([n]).buffer), str = s => [u32(enc.encode(s).length), enc.encode(s)];
@@ -40,6 +43,16 @@ try:
     d.get("http://127.0.0.1:%d/index.html" % srv.server_address[1]); time.sleep(1.5)
     assert js("return document.documentElement.classList.contains('native')"), "the page does not know it is in the app"
     assert js("return ['inst', 'optSound', 'railSound'].every(i => getComputedStyle(document.getElementById(i)).display === 'none')"), "browser-only options are still shown"
+    # Web MIDI through the app's FM1Midi: whole messages out of bytes that come in pieces (a SysEx split, running status, a clock inside a SysEx)
+    got = js("""return navigator.requestMIDIAccess({ sysex: true }).then(a => {
+      const i = a.inputs.get('7:i:0'), seen = [];
+      i.onmidimessage = (e) => seen.push([...e.data]);
+      const feed = (bytes) => __fm1MidiIn('7:i:0', btoa(String.fromCharCode(...bytes)));
+      feed([0xf0, 0x7d, 1]); feed([2, 0xf8, 3, 0xf7, 0x90, 60]); feed([100, 62, 0]);
+      a.outputs.get('7:o:0').send([0xf0, 1, 2, 0xf7]);
+      return navigator.permissions.query({ name: 'midi', sysex: true }).then(p => [a.sysexEnabled, FM1Midi.started, seen, __sent, p.state]);
+    })""")
+    assert got == [True, 1, [[0xf8], [0xf0, 0x7d, 1, 2, 3, 0xf7], [0x90, 60, 100], [0x90, 62, 0]], [["7:o:0", "8AEC9w=="]], "granted"], got
     pkg = open(os.path.join(ROOT, "vendor", "tether.fwsc"), "rb").read()
     js("FIRMWARES[0].bytes = Uint8Array.from(atob(arguments[0]), c => c.charCodeAt(0)); document.querySelector('#fw').value = FIRMWARES[0].id", base64.b64encode(pkg).decode())
     js("document.querySelector('#power').click()")
