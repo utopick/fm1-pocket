@@ -4,9 +4,14 @@
 > put firmwares on a real FM-1.
 > **Open it: https://utopick.github.io/fm1-pocket/pocket/**
 >
+> There is also an **Android app** ([`pocket/android/`](pocket/android/README.md)), which runs the emulator as native code
+> and plays even the heaviest firmwares at the real FM-1's 240 MHz. Download the APK from the
+> [FM1.Pocket for Android release](https://github.com/utopick/fm1-pocket/releases/tag/android-v1.0).
+>
 > [![FM1.Pocket running Tether](pocket/docs/tether-screen.png)](https://utopick.github.io/fm1-pocket/pocket/)
 >
-> His emulator is used unchanged, and everything below is his own README.
+> Everything below is his own README. His emulator is used as he wrote it, apart from speed work for phones: a faster
+> native JIT on arm64, and the FM-1's second core on a thread of its own (`crates/fm1-soc/src/mt.rs`).
 
 # FM-1 emulator
 

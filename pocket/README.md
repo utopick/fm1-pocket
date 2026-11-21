@@ -42,6 +42,18 @@ opens full screen.
 
 If your phone can't keep up and the sound stutters, the app will offer to run the firmware a little slower.
 
+## On Android
+
+FM1.Pocket is also an Android app. It is the same app, but the emulator runs as native code instead of in the browser,
+so it is much faster: on a Galaxy S23 it plays even 386DX, the heaviest firmware we know, at the real FM-1's 240 MHz, with no breaks in the
+sound and no delay on the keys. It also runs the FM-1's second core on a second core of the phone, which the heaviest
+firmwares, such as 386DX, need. MIDI keyboards and a real FM-1 over USB work as they do in Chrome, and with Tether the
+app plays through the FM-1's own output.
+
+Download the APK from the [FM1.Pocket for Android release](https://github.com/utopick/fm1-pocket/releases/tag/android-v1.0),
+open it on the phone, and allow your browser or file manager to install apps when Android asks. It needs a 64-bit phone
+with Android 7.0 or newer. How it is built and how it works are in [`android/README.md`](android/README.md).
+
 ## Using a real FM-1
 
 If you own an FM-1, you can connect it with a USB cable and put a firmware on it from OPTIONS, under REAL FM-1. This
