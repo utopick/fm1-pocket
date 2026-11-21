@@ -89,6 +89,8 @@ pub struct Shared {
     b_wake_at: AtomicU64,
     a_wake_at: AtomicU64,
     a_sleeping: AtomicBool,
+    /// core 0 is retrying a `lockset` core 1 holds: B may run on past the window, to its unlock
+    a_blocked: AtomicBool,
     a_thread: Mutex<Option<Thread>>,
 }
 
@@ -167,6 +169,7 @@ impl Shared {
             b_wake_at: AtomicU64::new(u64::MAX),
             a_wake_at: AtomicU64::new(u64::MAX),
             a_sleeping: AtomicBool::new(false),
+            a_blocked: AtomicBool::new(false),
             a_thread: Mutex::new(None),
         }
     }
@@ -200,20 +203,27 @@ impl Shared {
             return true;
         }
         let f = &self.fails[core as usize & 1];
-        for _ in 0..64 {
+        // (long enough to span a critical section of the other core's: it is running, not waiting)
+        for _ in 0..1000 {
             match self.lock.compare_exchange(0, me, Acquire, Relaxed) {
                 Ok(_) => {
                     f.store(0, Relaxed);
+                    if core == 0 {
+                        self.a_blocked.store(false, Relaxed);
+                    }
                     return true;
                 }
                 Err(owner) if owner == me => return true,
                 Err(_) => std::hint::spin_loop(),
             }
         }
-        // (core 0 hands the Soc to core 1 first: it may need it to get to its unlock)
-        if core == 0 {
-            self.yield_soc();
+        if core == 1 {
+            return false; // (B's thread waits for the unlock where it can: `Why::Blocked`)
         }
+        // core 0 hands the Soc to core 1 first (it may need it to get to its unlock), and its
+        // clock runs on while it retries, so B may run on past the window to the unlock
+        self.a_blocked.store(true, Relaxed);
+        self.yield_soc();
         let mut i = f.load(Relaxed);
         backoff(&mut i);
         f.store(i, Relaxed);
@@ -542,6 +552,8 @@ enum Why {
     Reset,
     /// A wants it stopped or paused
     Held,
+    /// `lockset` found the lock held by core 0
+    Blocked,
 }
 
 /// Core 1's thread, from `start` to `quiesce`.
@@ -576,7 +588,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
         }
         let b = sh.b_cycles.load(Relaxed);
         let w = sh.window.load(Relaxed);
-        if b >= a + w {
+        if b >= a + w && !sh.a_blocked.load(Relaxed) {
             if i == 0 {
                 sh.b_waits.fetch_add(1, Relaxed);
             }
@@ -598,6 +610,17 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
         sh.b_insns.fetch_add(k, Relaxed);
         match why {
             Why::Budget | Why::Held => calm = 0,
+            Why::Blocked => {
+                // core 0 holds the lock: no clock of its own to hold A back meanwhile
+                calm = 0;
+                sh.b_live.store(false, Release);
+                sh.wake_a(u64::MAX);
+                live = false;
+                let mut j = 0;
+                while sh.lock.load(Acquire) == 1 && !sh.stop.load(Acquire) && !sh.paused1.load(Acquire) {
+                    backoff(&mut j);
+                }
+            }
             Why::Idle => {
                 calm = 0;
                 sh.idle.store(true, Release);
@@ -682,6 +705,10 @@ unsafe fn run_chunk(sh: &Shared, c1: &mut Cpu, job: &Job, cycles: u64) -> Result
             why = Why::Idle;
             break;
         }
+        if bus.blocked {
+            why = Why::Blocked;
+            break;
+        }
         if c1.pc == probe.0 && c1.sp == probe.2 && c1.regs == probe.1 {
             why = Why::Poll;
             break;
@@ -706,11 +733,12 @@ struct Core1Mt<'a> {
     budget: u64,
     idle: bool,
     reset: bool,
+    blocked: bool,
 }
 
 impl<'a> Core1Mt<'a> {
     fn new(sh: &'a Shared, job: &Job) -> Self {
-        Core1Mt { sh, soc: job.soc, ram: job.ram, mem: job.mem, xip: job.xip, xip_len: job.xip_len, ram_len: job.ram.len(), budget: 0, idle: false, reset: false }
+        Core1Mt { sh, soc: job.soc, ram: job.ram, mem: job.mem, xip: job.xip, xip_len: job.xip_len, ram_len: job.ram.len(), budget: 0, idle: false, reset: false, blocked: false }
     }
 
     /// `f` on the `Soc`, when A has handed it over; then what B must know of what it did.
@@ -862,8 +890,9 @@ impl Bus for Core1Mt<'_> {
     fn hw_lock(&mut self, core: u32, set: bool) -> bool {
         let got = self.sh.hw_lock(core, set);
         if !got {
-            // the other thread holds it: let it run, and look at what is asked of this one
+            // the other thread holds it: look at what is asked of this one, and wait for the unlock
             self.budget = self.budget.min(1);
+            self.blocked = true;
         }
         got
     }
