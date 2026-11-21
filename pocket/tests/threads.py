@@ -42,9 +42,10 @@ def play(d, want, why):
     else: raise AssertionError(why + ": the screen stayed blank")
     mode = js("return FM1Threads.mode")
     assert mode == want, "%s: mode %s, wanted %s (%s)" % (why, mode, want, js("return FM1Threads.why"))
+    js("setKey(12, true)"); time.sleep(0.3); js("setKey(12, false)")  # PLAY: 386DX's song, which is what keeps its core 1 busy
     if want == "threads":
         time.sleep(3); a = js("return FM1Threads.insns"); time.sleep(3); b = js("return FM1Threads.insns")
-        assert js("return FM1Threads.started") == 2 and b > a > 0, "%s: core 1 does not run in the Worker (started %s, instructions %s -> %s, %s)" % (why, js("return FM1Threads.started"), a, b, js("return FM1Threads.why"))
+        assert js("return FM1Threads.started") == 2 and b - a > 20e6, "%s: core 1 does not do its share in the Worker (386DX's runs about 40 million instructions a second) (started %s, instructions %s -> %s, %s)" % (why, js("return FM1Threads.started"), a, b, js("return FM1Threads.why"))
     j = js("return FM1Threads.jit")
     assert j["regions"] > 0 and j["failed"] == 0, "%s: the wasm JIT does not work here: %s" % (why, j)
     print(why, "core 1 insns in the Worker", js("return FM1Threads.insns"), "jit regions", j["regions"])

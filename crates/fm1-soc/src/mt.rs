@@ -206,6 +206,9 @@ pub struct Mt {
 /// loaded phone) must not cost this thread's core as well (386DX at W=16, on a busy host: 27 s of CPU for 12 s of sound with yield loops).
 const SPINS: u32 = 300;
 
+/// How long (ms of the wall clock) core 0 on a thread that cannot sleep waits for core 1 to come within the window.
+const A_SPIN_MS: u64 = 20;
+
 /// How many backoffs a thread that cannot sleep waits for its partner (about a tenth of a second on wasm).
 const PATIENCE: u32 = 1 << 25;
 
@@ -419,16 +422,19 @@ impl Shared {
             if i < SPINS {
                 backoff(&mut i);
             } else {
+                if !sys::can_block() {
+                    // The audio thread cannot sleep, so it spins, but not for ever: after a while it runs on and core 1 catches
+                    // up. It must wait for a start-up core 1, though: 386DX's handshake gives up after a few ms of FM-1 time.
+                    if t0.elapsed() > Duration::from_millis(A_SPIN_MS) {
+                        self.a_sleeps.fetch_add(1, Relaxed);
+                        break;
+                    }
+                    sys::yield_now();
+                    continue;
+                }
                 // asleep until B has caught up by half a window (its `wake_a`), or a millisecond
                 self.a_wake_at.store(a.saturating_sub(w / 2), SeqCst);
                 self.a_sleeping.store(true, SeqCst);
-                if !sys::can_block() {
-                    // the audio thread does not wait for core 1: it runs on, and core 1 catches up (or the locks make them meet)
-                    self.a_sleeping.store(false, SeqCst);
-                    self.a_wake_at.store(u64::MAX, Relaxed);
-                    self.a_sleeps.fetch_add(1, Relaxed);
-                    break;
-                }
                 if behind() {
                     sys::park_timeout(Duration::from_millis(1));
                 }
