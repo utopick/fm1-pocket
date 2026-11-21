@@ -209,6 +209,14 @@ impl Ram {
         self.len == 0
     }
 
+    /// `n` bytes from offset `addr`, when they all lie inside (a DMA source). (Core 1's thread may
+    /// write meanwhile: a DMA reads what is there, as on the chip.)
+    pub fn bytes(&self, addr: u32, n: u32) -> Option<&[u8]> {
+        let end = (addr as usize).checked_add(n as usize)?;
+        // SAFETY: inside the buffer, which lives as long as `self`
+        (end <= self.len).then(|| unsafe { std::slice::from_raw_parts((self.data.as_ptr() as *const u8).add(addr as usize), n as usize) })
+    }
+
     #[inline(always)]
     pub fn read8(&self, addr: u32) -> u8 {
         self.view().read8(addr)

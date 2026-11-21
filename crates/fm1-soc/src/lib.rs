@@ -1032,14 +1032,17 @@ impl Soc {
                 let adr = self.sfr_get(0x11d0c);
                 let n = value.min(0x40000);
                 // the DMA source is a bus address (RAM, SRAM or XIP)
-                let bytes: Vec<u8> = (0..n).map(|i| self.read8(adr.wrapping_add(i))).collect();
-                match self.lcd_dc() {
-                    Some(dc) => {
-                        for b in bytes {
-                            self.lcd.feed(b, dc);
+                let dc = self.lcd_dc();
+                match (dc, self.ram.bytes(adr.wrapping_sub(RAM_BASE), n)) {
+                    // (from RAM: the bytes straight from it, no copy)
+                    (Some(dc), Some(bytes)) => self.lcd.feed_slice(bytes, dc),
+                    _ => {
+                        let bytes: Vec<u8> = (0..n).map(|i| self.read8(adr.wrapping_add(i))).collect();
+                        match dc {
+                            Some(dc) => self.lcd.feed_slice(&bytes, dc),
+                            None => self.periph.smk.pad_frame(&bytes),
                         }
                     }
-                    None => self.periph.smk.pad_frame(&bytes),
                 }
                 self.sfr_set(addr, 0);
                 self.spi1_done(n);

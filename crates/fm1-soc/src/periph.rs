@@ -846,6 +846,15 @@ impl Periph {
             || self.usb_sof_irq || self.usb_ctrl_irq
     }
 
+    /// `any_pending` without the audio link's pending bits while its interrupt is off (386DX
+    /// leaves them set): what `pending_irq_for` can still find something for.
+    #[inline(always)]
+    fn irq_possible(&self) -> bool {
+        self.t5_pending || (self.alnk_pend & 0xf0 != 0 && self.alnk_con0 & 0x800 != 0) || self.ilat != 0 || self.tick_pending || self.spi1_pending || self.exc_pending
+            || self.tmr.iter().any(|t| t.pending) || self.adc_irq || self.spi2_pending || self.uart_irq
+            || self.usb_sof_irq || self.usb_ctrl_irq
+    }
+
     pub(crate) fn set_usb_irqs(&mut self, (sof, ctrl): (bool, bool)) {
         if (sof && !self.usb_sof_irq) || (ctrl && !self.usb_ctrl_irq) {
             self.next_due = 0;
@@ -869,7 +878,7 @@ impl Periph {
     pub fn pending_irq_for(&self, core: u32) -> Option<(u8, u8)> {
         let bank = if core == 0 { &self.icfg } else { &self.icfg1 };
         let icfg = |n: u8| bank[(n >> 3) as usize];
-        if !self.any_pending() {
+        if !self.irq_possible() {
             return None;
         }
         let mut best: Option<(u8, u8)> = None;
