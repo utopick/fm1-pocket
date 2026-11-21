@@ -6,9 +6,11 @@
 onmessage = async ({ data: d }) => {
   let x;
   try {
-    let next;
+    let next, regions = 0, failed = 0;
     const env = {
       memory: d.memory,
+      fm1_now_us: () => performance.now() * 1000,
+      fm1_core1_spawn() {},               // (only the audio thread's machine asks)
       fm1_jit_compile(ptr, len, hRead, hWrite, hOp) {
         try {
           const table = x.__indirect_function_table;
@@ -16,15 +18,16 @@ onmessage = async ({ data: d }) => {
           const run = new WebAssembly.Instance(new WebAssembly.Module(bytes), { env: { memory: d.memory, h_read: table.get(hRead), h_write: table.get(hWrite), h_op: table.get(hOp) } }).exports.run;
           if (next === undefined || next >= table.length) { next = table.length; table.grow(256); }
           table.set(next, run);
+          if (++regions % 4 === 1) postMessage({ type: "jit", regions, failed });   // (this thread has no timer: it tells as it compiles)
           return next++;
-        } catch { return 0; }
+        } catch { postMessage({ type: "jit", regions, failed: ++failed }); return 0; }
       },
     };
     x = (await WebAssembly.instantiate(d.wasm, { env })).instance.exports;
     x.__stack_pointer.value = d.sp;   // not the audio thread's stack
     x.__wasm_init_tls(d.tls);
     postMessage({ type: "up" });
-    x.fm1_core1_run();                // returns when the page stops it
+    x.fm1_core1_run(d.ptr);           // core 1's thread: returns when the machine is dropped
   } catch (err) {
     postMessage({ type: "error", message: String(err) });
   }

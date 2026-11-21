@@ -22,16 +22,82 @@
 //! The one-thread scheduler (`machine::run_dual_from`) is the default and the reference: this
 //! mode runs only after `Soc::set_threads(2)`, and its output varies with the host's scheduler.
 //!
-//! wasm: `std::thread::spawn` panics on wasm32-unknown-unknown, so `Soc::set_threads` refuses
-//! there; enabling it takes a build with atomics and shared memory, and the spawn replaced by a
-//! Worker (see `spawn`, the only place that creates a thread).
+//! wasm: `std::thread::spawn` panics on wasm32-unknown-unknown, so the build with atomics and
+//! shared memory (web/build-threads.sh) asks the page for a Worker instead (`Mt::new`, `worker_main`),
+//! and `sys` swaps what a thread sleeps, wakes and times with.
 
 use crate::{Soc, RAM_BASE, VEC_BASE, XIP_BASE};
 use fm1_core::{Bus, Cpu, JitMem};
 use std::sync::atomic::{fence, AtomicBool, AtomicU32, AtomicU64, Ordering::*};
 use std::sync::{Arc, Mutex};
-use std::thread::{self, JoinHandle, Thread};
 use std::time::Duration;
+use sys::{Th, Tm};
+
+/// What the two threads need of the host to sleep, wake and tell time. On a computer it is std's.
+/// On wasm (the build with atomics) there is no thread to spawn, no clock and no sleep: the page's
+/// Worker runs `worker_main`, a sleep is `memory.atomic.wait32` and may only be done by the Worker
+/// (the audio thread must never block, so there it is a spin, and `backoff` gives up after a while
+/// rather than hang the sound), and the clock is an import of the host.
+#[cfg(not(target_arch = "wasm32"))]
+mod sys {
+    use std::time::Duration;
+    pub use std::thread::{park, yield_now, Thread as Th};
+    pub use std::time::Instant as Tm;
+    pub fn current() -> Th { std::thread::current() }
+    pub fn unpark(t: &Th) { t.unpark() }
+    pub fn park_timeout(d: Duration) { std::thread::park_timeout(d) }
+    pub fn can_block() -> bool { true }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod sys {
+    use std::cell::Cell;
+    use std::sync::atomic::{AtomicU32, Ordering::*};
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    #[link(wasm_import_module = "env")]
+    extern "C" {
+        /// microseconds on the calling thread's clock (only differences are used)
+        fn fm1_now_us() -> f64;
+        /// asks the host to start core 1's Worker, which calls `fm1_core1_run(ptr)`
+        pub fn fm1_core1_spawn(ptr: u32);
+    }
+
+    /// a thread's sleep word: 1 when it has been woken
+    pub struct Parker(AtomicU32);
+    pub type Th = Arc<Parker>;
+    thread_local! {
+        static ME: Th = Arc::new(Parker(AtomicU32::new(0)));
+        static BLOCK: Cell<bool> = const { Cell::new(false) };
+    }
+    pub fn current() -> Th { ME.with(Clone::clone) }
+    pub fn unpark(t: &Th) {
+        t.0.store(1, SeqCst);
+        unsafe { core::arch::wasm32::memory_atomic_notify(t.0.as_ptr() as *mut i32, 1) };
+    }
+    /// the Worker may sleep, the audio thread may not
+    pub fn can_block() -> bool { BLOCK.with(Cell::get) }
+    pub fn allow_blocking() { BLOCK.with(|b| b.set(true)) }
+    /// sleeps until woken (true) or `d` has passed; the audio thread only spins
+    fn wait(d: Duration) -> bool {
+        if !can_block() { std::hint::spin_loop(); return false; }
+        ME.with(|me| {
+            if me.0.swap(0, SeqCst) == 1 { return true; }
+            let r = unsafe { core::arch::wasm32::memory_atomic_wait32(me.0.as_ptr() as *mut i32, 0, d.as_nanos().min(i64::MAX as u128) as i64) };
+            me.0.swap(0, SeqCst) == 1 || r == 0
+        })
+    }
+    pub fn park_timeout(d: Duration) { wait(d); }
+    pub fn park() { while !wait(Duration::from_secs(3600)) {} }
+    pub fn yield_now() { std::hint::spin_loop() }
+    #[derive(Clone, Copy)]
+    pub struct Tm(f64);
+    impl Tm {
+        pub fn now() -> Tm { Tm(unsafe { fm1_now_us() }) }
+        pub fn elapsed(&self) -> Duration { Duration::from_micros((Tm::now().0 - self.0).max(0.0) as u64) }
+    }
+}
 
 /// How far (in cycles) the cores may drift apart: 256 slices, about 1.1 ms of FM-1 time. 386DX, 15 s
 /// unpaced on an M4: wall 3.54 s at 64 slices, 3.41 at 256, 3.31 at 1024 (one thread: 4.0), and
@@ -88,7 +154,10 @@ pub struct Shared {
     fault: Mutex<Option<String>>,
     fault_flag: AtomicBool,
     job: Mutex<Option<Job>>,
-    thread: Mutex<Option<Thread>>,
+    thread: Mutex<Option<Th>>,
+    /// wasm: the Worker has entered `worker_main`, and has left it
+    pub up: AtomicBool,
+    pub done: AtomicBool,
     /// times A waited for B's clock, B for A's, B for the gate (tuning: `Mt::stats`)
     pub a_waits: AtomicU64,
     pub b_waits: AtomicU64,
@@ -108,7 +177,7 @@ pub struct Shared {
     a_sleeping: AtomicBool,
     /// core 0 is retrying a `lockset` core 1 holds: B may run on past the window, to its unlock
     a_blocked: AtomicBool,
-    a_thread: Mutex<Option<Thread>>,
+    a_thread: Mutex<Option<Th>>,
     /// the fallback's watch (`machine::run_dual_mt`): the clock and gate count at its last look, and the stretches over the limit in a row
     pub watch: Mutex<(u64, u64, u32)>,
 }
@@ -130,20 +199,27 @@ unsafe impl Send for Job {}
 /// The two-thread mode's state, owned by the `Soc`.
 pub struct Mt {
     pub shared: Arc<Shared>,
-    handle: Option<JoinHandle<()>>,
+    handle: Option<Handle>,
 }
 
 /// A short spin, a few yields, then sleeps that grow to 200 us: a partner that is not running (a
 /// loaded phone) must not cost this thread's core as well (386DX at W=16, on a busy host: 27 s of CPU for 12 s of sound with yield loops).
 const SPINS: u32 = 300;
 
+/// How many backoffs a thread that cannot sleep waits for its partner (about a tenth of a second on wasm).
+const PATIENCE: u32 = 1 << 25;
+
 fn backoff(i: &mut u32) {
     if *i < SPINS {
         std::hint::spin_loop();
     } else if *i < SPINS + 4 {
-        thread::yield_now();
+        sys::yield_now();
     } else {
-        thread::park_timeout(Duration::from_micros(20 + 10 * (*i - SPINS - 4).min(18) as u64));
+        if !sys::can_block() && *i > PATIENCE {
+            // shortcut: a thread that cannot sleep and whose partner never answers (the Worker died) would hang the sound; a trap is reported instead
+            panic!("two threads: core 1 does not answer");
+        }
+        sys::park_timeout(Duration::from_micros(20 + 10 * (*i - SPINS - 4).min(18) as u64));
     }
     *i = i.saturating_add(1);
 }
@@ -152,7 +228,7 @@ fn backoff(i: &mut u32) {
 /// a scheduler's latency, so yields come first, and only a late one costs a sleep.
 fn backoff_woken(i: &mut u32) {
     if *i < SPINS + 400 {
-        if *i < SPINS { std::hint::spin_loop() } else { thread::yield_now() }
+        if *i < SPINS { std::hint::spin_loop() } else { sys::yield_now() }
         *i += 1;
     } else {
         backoff(i);
@@ -162,6 +238,8 @@ fn backoff_woken(i: &mut u32) {
 impl Shared {
     fn new() -> Shared {
         Shared {
+            up: AtomicBool::new(false),
+            done: AtomicBool::new(false),
             gate: AtomicU32::new(GATE_A),
             want: AtomicU32::new(0),
             lock: AtomicU32::new(0),
@@ -214,7 +292,7 @@ impl Shared {
     fn wake(&self) {
         if self.sleeping.load(SeqCst) {
             if let Some(t) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-                t.unpark();
+                sys::unpark(t);
             }
         }
     }
@@ -285,7 +363,7 @@ impl Shared {
     fn b_gate(&self) {
         self.want.fetch_add(1, SeqCst);
         self.b_gates.fetch_add(1, Relaxed);
-        let t0 = std::time::Instant::now();
+        let t0 = Tm::now();
         let mut i = 0;
         while self.gate.compare_exchange(GATE_FREE, GATE_B, Acquire, Relaxed).is_err() {
             backoff(&mut i);
@@ -331,7 +409,7 @@ impl Shared {
         self.yield_soc();
         let w = self.window.load(Relaxed);
         let mut i = 0;
-        let t0 = std::time::Instant::now();
+        let t0 = Tm::now();
         let behind = || self.b_live.load(Acquire) && self.state.load(Acquire) == RUNNING && a > self.b_cycles.load(Acquire) + w;
         while behind() {
             if i == 0 {
@@ -344,8 +422,15 @@ impl Shared {
                 // asleep until B has caught up by half a window (its `wake_a`), or a millisecond
                 self.a_wake_at.store(a.saturating_sub(w / 2), SeqCst);
                 self.a_sleeping.store(true, SeqCst);
+                if !sys::can_block() {
+                    // the audio thread does not wait for core 1: it runs on, and core 1 catches up (or the locks make them meet)
+                    self.a_sleeping.store(false, SeqCst);
+                    self.a_wake_at.store(u64::MAX, Relaxed);
+                    self.a_sleeps.fetch_add(1, Relaxed);
+                    break;
+                }
                 if behind() {
-                    thread::park_timeout(Duration::from_millis(1));
+                    sys::park_timeout(Duration::from_millis(1));
                 }
                 self.a_sleeping.store(false, SeqCst);
                 self.a_wake_at.store(u64::MAX, Relaxed);
@@ -361,7 +446,7 @@ impl Shared {
     fn wake_a(&self, b: u64) {
         if b >= self.a_wake_at.load(SeqCst) && self.a_sleeping.load(SeqCst) {
             if let Some(t) = self.a_thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-                t.unpark();
+                sys::unpark(t);
             }
         }
     }
@@ -376,14 +461,14 @@ impl Shared {
     }
 
     /// Starts (or resumes) B on `job`, from the clock `a`.
-    fn start(self: &Arc<Self>, job: Job, soc: &Soc, handle: &mut Option<JoinHandle<()>>) {
+    fn start(self: &Arc<Self>, job: Job, soc: &Soc, handle: &mut Option<Handle>) {
         if self.state.load(Acquire) == RUNNING {
             // (the same machine, or the runner would have quiesced: a different one is a bug)
             return;
         }
         let a = soc.periph.cycles;
         *self.job.lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
-        *self.a_thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(thread::current());
+        *self.a_thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(sys::current());
         self.a_cycles.store(a, Relaxed);
         self.b_cycles.store(a, Relaxed);
         self.b_live.store(false, Relaxed);
@@ -394,14 +479,18 @@ impl Shared {
         self.state.store(RUNNING, Release);
         if handle.is_none() {
             let h = spawn(Arc::clone(self));
-            *self.thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(h.thread().clone());
+            if let Some(t) = h.thread() {
+                *self.thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(t);
+            }
             *handle = Some(h);
-        } else if let Some(t) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-            t.unpark();
+        }
+        // (a thread that has just been spawned sees the state itself; one that was parked, or the Worker, must be woken)
+        if let Some(t) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+            sys::unpark(t);
         }
         // Core 1 is on the chip at once: a firmware that waits for it to answer (386DX's start-up
         // handshake gives up after a few ms) must not see this thread's start-up as silence.
-        let t0 = std::time::Instant::now();
+        let t0 = Tm::now();
         let mut i = 0;
         while !self.b_live.load(Acquire) && self.state.load(Acquire) == RUNNING && t0.elapsed() < Duration::from_millis(100) {
             if !self.sleeping.load(Relaxed) && self.paused1.load(Relaxed) {
@@ -418,9 +507,16 @@ impl Shared {
         }
         self.stop.store(true, Release);
         let mut i = 0;
+        let t0 = Tm::now();
         while self.state.load(Acquire) != PARKED {
+            if cfg!(target_arch = "wasm32") && !self.up.load(Acquire) && t0.elapsed() > Duration::from_millis(100) {
+                // the Worker never started: nothing runs core 1, and nothing will take the job
+                *self.job.lock().unwrap_or_else(|e| e.into_inner()) = None;
+                self.state.store(PARKED, Release);
+                break;
+            }
             if let Some(t) = self.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-                t.unpark();
+                sys::unpark(t);
             }
             self.yield_soc();
             backoff_woken(&mut i);
@@ -463,7 +559,10 @@ impl Mt {
         if let Some(n) = std::env::var("FM1_MT_WINDOW").ok().and_then(|v| v.parse::<u64>().ok()) {
             sh.set_window(n * crate::machine::SLICE as u64);
         }
-        Mt { shared: Arc::new(sh), handle: None }
+        let shared = Arc::new(sh);
+        #[cfg(target_arch = "wasm32")]
+        unsafe { sys::fm1_core1_spawn(Arc::into_raw(Arc::clone(&shared)) as u32) };
+        Mt { shared, handle: None }
     }
 
     /// Has core 1's thread been started (the firmware released the core)?
@@ -485,29 +584,73 @@ impl Drop for Mt {
         s.stop.store(true, Release);
         // (the Soc is being dropped by A: whatever B was waiting for it for, it may have)
         s.gate.store(GATE_FREE, Release);
+        *s.job.lock().unwrap_or_else(|e| e.into_inner()) = None;
         if let Some(h) = self.handle.take() {
-            while !h.is_finished() {
-                s.gate.store(GATE_FREE, Release);
-                h.thread().unpark();
-                thread::yield_now();
-            }
-            let _ = h.join();
+            h.join(s);
+        } else if cfg!(target_arch = "wasm32") {
+            // (a Worker that was started but never given a job: it leaves when it sees `quit`)
+            if let Some(t) = s.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() { sys::unpark(t); }
         }
     }
 }
 
+/// Core 1's thread: std's on a computer.
 #[cfg(not(target_arch = "wasm32"))]
-fn spawn(sh: Arc<Shared>) -> JoinHandle<()> {
-    thread::Builder::new().name("fm1-core1".into()).spawn(move || worker(sh)).expect("core 1's thread")
+struct Handle(std::thread::JoinHandle<()>);
+#[cfg(not(target_arch = "wasm32"))]
+impl Handle {
+    fn thread(&self) -> Option<Th> { Some(self.0.thread().clone()) }
+    fn join(self, s: &Shared) {
+        while !self.0.is_finished() {
+            s.gate.store(GATE_FREE, Release);
+            self.0.thread().unpark();
+            sys::yield_now();
+        }
+        let _ = self.0.join();
+    }
+}
+#[cfg(not(target_arch = "wasm32"))]
+fn spawn(sh: Arc<Shared>) -> Handle {
+    Handle(std::thread::Builder::new().name("fm1-core1".into()).spawn(move || worker(sh)).expect("core 1's thread"))
 }
 
+/// On wasm the Worker is asked for when the machine is made (`Mt::new`) and runs `worker_main`
+/// by itself: a start only wakes it.
 #[cfg(target_arch = "wasm32")]
-fn spawn(_: Arc<Shared>) -> JoinHandle<()> {
-    unreachable!("`Soc::set_threads` refuses on wasm32")
+struct Handle;
+#[cfg(target_arch = "wasm32")]
+impl Handle {
+    fn thread(&self) -> Option<Th> { None }
+    /// leaves when the Worker has: a bounded wait, because the audio thread must not hang on a dead Worker
+    fn join(self, s: &Shared) {
+        let t0 = Tm::now();
+        while s.up.load(Acquire) && !s.done.load(Acquire) && t0.elapsed() < Duration::from_millis(100) {
+            s.gate.store(GATE_FREE, Release);
+            if let Some(t) = s.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() { sys::unpark(t); }
+            sys::yield_now();
+        }
+    }
+}
+#[cfg(target_arch = "wasm32")]
+fn spawn(_: Arc<Shared>) -> Handle { Handle }
+
+/// The page's Worker, once the host has started it with the address `fm1_core1_spawn` gave: runs
+/// core 1's thread until the machine is dropped. The caller has set up this thread's stack and
+/// thread-local block in the shared memory.
+///
+/// SAFETY: `ptr` is what `Mt::new` passed to `fm1_core1_spawn`.
+#[cfg(target_arch = "wasm32")]
+pub unsafe fn worker_main(ptr: u32) {
+    let sh = Arc::from_raw(ptr as *const Shared);
+    sys::allow_blocking();
+    *sh.thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(sys::current());
+    sh.up.store(true, Release);
+    worker(Arc::clone(&sh));
+    sh.done.store(true, Release);
 }
 
 /// Where the two-thread mode can run at all in this build.
-pub const AVAILABLE: bool = cfg!(not(target_arch = "wasm32"));
+pub const AVAILABLE: bool = cfg!(any(not(target_arch = "wasm32"), target_feature = "atomics"));
 
 impl Soc {
     /// `threads` = 2 runs core 1 on its own thread once the firmware releases it (see `mt.rs`;
@@ -558,7 +701,7 @@ fn worker(sh: Arc<Shared>) {
             if sh.quit.load(Acquire) {
                 return;
             }
-            thread::park();
+            sys::park();
         }
         let job = sh.job.lock().unwrap_or_else(|e| e.into_inner()).take();
         if let Some(job) = job {
@@ -590,7 +733,7 @@ fn sleep_until(sh: &Shared, done: impl Fn() -> bool) {
             sh.sleeping.store(false, SeqCst);
             break;
         }
-        thread::park_timeout(Duration::from_millis(1));
+        sys::park_timeout(Duration::from_millis(1));
         sh.sleeping.store(false, SeqCst);
     }
 }
@@ -617,7 +760,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
     let mut live = false;
     let mut calm = 0u32;
     let mut i = 0u32;
-    let mut wt: Option<std::time::Instant> = None;
+    let mut wt: Option<Tm> = None;
     loop {
         if sh.stop.load(Acquire) {
             return Ok(());
@@ -645,7 +788,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
         if b >= a + w && !sh.a_blocked.load(Relaxed) {
             if i == 0 {
                 sh.b_waits.fetch_add(1, Relaxed);
-                wt = Some(std::time::Instant::now());
+                wt = Some(Tm::now());
             }
             if i < SPINS {
                 backoff(&mut i);

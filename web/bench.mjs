@@ -3,22 +3,47 @@
 // FM1_BENCH_NOKEYS=1 disables the default chord; FM1_WARMUP_MS=1000 separates warm-up.
 // FM1_WASM selects an A/B build. FM1_BENCH_JSON writes machine-readable results.
 // FM1_LCD_TIMED=1: the LCD's transfers take their time, as on an FM-1 (fm1_lcd_timed; default at once).
+// FM1_MT_WASM=fm1_web_mt.wasm (web/build-threads.sh): the two-thread mode, core 1 on a worker_threads Worker on the shared memory
+// (as the page does it); the summary then adds the instructions core 1 ran there.
 // The page's audio schedule (web/worklet.js): FM1_AHEAD=frames run ahead (fm1_ahead; default as
 // the page, 0 off), FM1_CAP=0 keeps the boot budget of 20 ms of emulated time per quantum after
 // audio starts (the page caps it to 1.5 quanta when it runs ahead). "over" counts steady quanta that took longer
 // than the 2.9 ms they stand for: at 1x those are where a device of this speed drops out.
 import { readFileSync, writeFileSync } from "node:fs";
 import { jitImports } from "./jit.js";
+import { Worker } from "node:worker_threads";
 const mhz = +(process.argv[2] || 240), secs = +(process.argv[3] || 6);
 const warmup = +(process.env.FM1_WARMUP_MS || 1000);
 if (![mhz, secs].every(v => Number.isFinite(v) && v > 0) || !Number.isFinite(warmup) || warmup < 0 || warmup >= secs * 1000) {
   throw new Error("positive MHz/seconds required; warm-up must be within the run");
 }
-const wasm = readFileSync(process.env.FM1_WASM || new URL("../target/wasm/wasm32-unknown-unknown/release/fm1_web.wasm", import.meta.url));
+const MT = process.env.FM1_MT_WASM;
+const wasm = MT ? readFileSync(MT) : readFileSync(process.env.FM1_WASM || new URL("../target/wasm/wasm32-unknown-unknown/release/fm1_web.wasm", import.meta.url));
 let x;
 const stats = { regions: 0, failed: 0, compileMs: 0, compileMaxMs: 0, bytes: 0 };
-const { instance } = await WebAssembly.instantiate(wasm, { env: jitImports(() => x, stats) });
-x = instance.exports;
+let core1;
+if (MT) {
+  const memory = new WebAssembly.Memory({ initial: 256, maximum: 8192, shared: true });
+  let pending;
+  const env = { memory, ...jitImports(() => x, stats), fm1_now_us: () => performance.now() * 1000, fm1_core1_spawn: (ptr) => (pending = ptr) };
+  const { instance } = await WebAssembly.instantiate(wasm, { env });
+  x = { ...instance.exports, memory };
+  const block = () => { const n = x.__tls_size.value + x.__tls_align.value; return (x.fm1_alloc(n) + x.__tls_align.value - 1) & -x.__tls_align.value; };
+  x.__wasm_init_tls(block());
+  const STACK = 1 << 20, sp = x.fm1_alloc(STACK) + STACK, tls = block();
+  x.fm1_threads(2);
+  x.fm1_core1_spawn_now = () => {
+    return new Promise((ok) => {
+      core1 = new Worker(new URL("./bench-mt-worker.mjs", import.meta.url));
+      core1.on("message", (m) => m.type === "up" && ok());
+      core1.postMessage({ wasm, memory, sp, tls, ptr: pending });
+    });
+  };
+  x.fm1_core1_pending = () => pending;
+} else {
+  const { instance } = await WebAssembly.instantiate(wasm, { env: jitImports(() => x, stats) });
+  x = instance.exports;
+}
 if (!process.env.FM1_NO_JIT) x.fm1_jit(1, +(process.env.FM1_JIT_PER || 16));
 if (process.env.FM1_LCD_TIMED) {
   if (!x.fm1_lcd_timed) throw new Error("this build has no fm1_lcd_timed");
@@ -43,6 +68,7 @@ if (x.fm1_bench_script) {
   new Uint8Array(x.memory.buffer, ptr, bytes.length).set(bytes);
   if (x.fm1_bench_script(ptr, bytes.length)) throw new Error("input script failed");
 } else if (script) throw new Error("this build lacks scheduled inputs; use FM1_BENCH_NOKEYS=1 for old builds");
+if (MT) await x.fm1_core1_spawn_now();   // (the machine's Mt asked for the Worker when it booted)
 if (process.env.FM1_PROFILE) x.fm1_profile(1);
 const out = process.argv[4] ? [] : null;
 const durations = [], steady = [];
@@ -102,4 +128,6 @@ console.log(`${(emulatedMs / 1000).toFixed(3)} s emulated at ${mhz} MHz in ${wal
   `(${real} real frames, ${short} short quanta); steady quanta p50 ${ms(result.steadyRenderMs.p50)} p99 ${ms(result.steadyRenderMs.p99)} ` +
   `max ${ms(result.steadyRenderMs.max)} ms, ${over} of ${steady.length} over ${quantumMs.toFixed(1)} ms` +
   (idleMs === null ? "" : `; ${Math.round(100 * result.idleShare)}% of the time idle skipped`));
+if (MT) console.log(`two threads: core 1 ran ${x.fm1_mt_stats(3)} instructions in the Worker (started ${x.fm1_core1_thread()}); core 0 waited for it ${x.fm1_mt_stats(0)} times, core 1 for core 0 ${x.fm1_mt_stats(1)}, for the chip ${x.fm1_mt_stats(2)}`);
 console.log(JSON.stringify(result));
+if (core1) await core1.terminate();

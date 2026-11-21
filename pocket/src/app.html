@@ -1207,14 +1207,15 @@
       // Two threads: where the page is cross-origin isolated (sw.js adds the headers from the second visit on) and the threaded
       // core (vendor/fm1_web_mt.wasm, web/build-threads.sh) is there, the audio thread's instance runs on a shared memory and
       // core 1 runs in a Worker on it. Anywhere else, or if anything here fails, the one-thread core plays as before.
-      // window.FM1Threads says which: mode "threads" or "single", and core 1's heartbeat count.
-      const thr = (window.FM1Threads = { mode: "single", beats: 0, why: "" });
-      let mtBytes, mtMem = null, core1 = null;
+      // window.FM1Threads says which: mode "threads" or "single", the instructions core 1 has run in the Worker (insns), whether the
+      // firmware has released core 1 (started), and why it is on one thread when it is (why).
+      const thr = (window.FM1Threads = { mode: "single", insns: 0, started: 1, why: "" });
+      let mtBytes, mtMem = null, core1 = null, core1Timer = 0, noMt = false;
       async function threadedCore() {
         if (mtBytes === undefined) {
           mtBytes = null;
           try {
-            if (!window.crossOriginIsolated || typeof SharedArrayBuffer === "undefined" || /[?&]threads=0/.test(location.search)) throw Error("this page is not cross-origin isolated");
+            if (noMt || !window.crossOriginIsolated || typeof SharedArrayBuffer === "undefined" || /[?&]threads=0/.test(location.search)) throw Error("this page is not cross-origin isolated");
             const r = await fetch("vendor/fm1_web_mt.wasm");
             if (!r.ok) throw Error("no threaded core (" + r.status + ")");
             mtBytes = await r.arrayBuffer();
@@ -1230,17 +1231,27 @@
         }
       }
       function stopCore1() {
+        clearTimeout(core1Timer);
         core1?.terminate();
         core1 = null;
+      }
+      function core1Failed(why) { // the Worker would not start or died: this visit goes on with one thread
+        thr.why = why;
+        if (noMt) return;
+        noMt = true;
+        stopCore1();
+        boot();
       }
       function startCore1(m) { // the audio thread set up core 1's stack and thread-local block in the shared memory: its Worker runs on it
         stopCore1();
         const url = URL.createObjectURL(new Blob([$("#core1worker").textContent], { type: "text/javascript" }));
         core1 = new Worker(url);
         URL.revokeObjectURL(url);
-        core1.onmessage = (e) => e.data.type === "error" && (thr.why = "core 1: " + e.data.message);
-        core1.onerror = (e) => (thr.why = "core 1: " + e.message);
-        core1.postMessage({ wasm: mtBytes, memory: mtMem, sp: m.sp, tls: m.tls });
+        const mine = m.seq;
+        core1.onmessage = (e) => (e.data.type === "jit" ? (thr.jit1 = e.data) : e.data.type === "up" ? (clearTimeout(core1Timer), node?.port.postMessage({ type: "core1-up", seq: mine })) : core1Failed("core 1: " + e.data.message));
+        core1.onerror = (e) => core1Failed("core 1: " + e.message);
+        core1Timer = setTimeout(() => core1Failed("core 1's thread did not start"), 5000); // the audio waits for it
+        core1.postMessage({ wasm: mtBytes, memory: mtMem, sp: m.sp, tls: m.tls, ptr: m.ptr });
       }
       async function boot(fresh) {
         const f = current(),
@@ -1341,7 +1352,7 @@
         if (m.seq !== seq) return;
         if (m.type === "core1") startCore1(m);
         else if (m.type === "note") thr.why = m.message;
-        else if (m.type === "frame") (thr.beats = m.core1, thr.jit = m.jit, showFrame(m), keepUp(m), m.peak !== undefined && (peak = Math.max(peak * 0.9, m.peak)));
+        else if (m.type === "frame") ((thr.insns = m.core1, thr.started = m.started), thr.jit = m.jit, showFrame(m), keepUp(m), m.peak !== undefined && (peak = Math.max(peak * 0.9, m.peak)));
         else if (m.type === "booted") {
           run.base = m.base;
           thr.mode = m.threaded ? "threads" : "single";

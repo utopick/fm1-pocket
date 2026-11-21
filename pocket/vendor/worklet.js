@@ -93,6 +93,7 @@ class Fm1 extends AudioWorkletProcessor {
           this.flushSnapshots();
         } else if (m.type === "cancel-snapshot") this.snapshots = this.snapshots.filter(r => r.request !== m.request);
         else if (m.type === "resume") this.paused = false;
+        else if (m.type === "core1-up") this.waitCore1 = false;
         else if (m.type === "key") this.x.fm1_key(m.id, m.down ? 1 : 0);
         else if (m.type === "enc") this.x.fm1_enc(m.enc, m.clicks);
         else if (m.type === "pot") this.x.fm1_pot(m.value);
@@ -115,13 +116,16 @@ class Fm1 extends AudioWorkletProcessor {
       try {
         this.mtModule ??= await WebAssembly.compile(m.mt.wasm);
         const memory = m.mt.memory;
-        x = { ...(await WebAssembly.instantiate(this.mtModule, { env: { memory, ...jitImports(() => x, this.jit) } })).exports, memory };
+        x = { ...(await WebAssembly.instantiate(this.mtModule, { env: { memory, ...jitImports(() => x, this.jit),
+          fm1_now_us: () => Date.now() * 1000,   // (this scope has no performance.now)
+          fm1_core1_spawn: (ptr) => this.port.postMessage({ type: "core1", seq: m.seq, ptr, ...this.core1 }) } })).exports, memory };
         // this thread's thread-local block, and the Worker's with its own stack (a stack pointer is per instance)
         const block = () => { const n = x.__tls_size.value + x.__tls_align.value, p = x.fm1_alloc(n); return (p + x.__tls_align.value - 1) & -x.__tls_align.value; };
         x.__wasm_init_tls(block());
         const STACK = 1 << 20;
         this.core1 = { sp: x.fm1_alloc(STACK) + STACK, tls: block() };
-        threaded = true;
+        threaded = x.fm1_threads(2) === 2;   // core 1 on the Worker the page starts, once the firmware releases it
+        if (!threaded) throw new Error("this build has no two-thread mode");
       } catch (err) {
         x = null;
         this.port.postMessage({ type: "note", seq: m.seq, message: `threaded core unavailable: ${err}` });
@@ -158,6 +162,7 @@ class Fm1 extends AudioWorkletProcessor {
     if (m.script?.byteLength && (!x.fm1_bench_script || x.fm1_bench_script(copy(m.script), m.script.byteLength) !== 0)) {
       throw new Error("the input script did not load");
     }
+    this.waitCore1 = threaded;          // no emulating until the page says core 1's Worker is up
     this.x = x;                         // (a reboot replaces the whole instance)
     this.mhz = m.mhz;
     this.ahead = ahead;
@@ -184,7 +189,6 @@ class Fm1 extends AudioWorkletProcessor {
     this.flashChangedAt = this.lastSnapshot = now();
     const base = new Uint8Array(x.memory.buffer, x.fm1_flash_base(), x.fm1_flash_len()).slice();
     const flash = new Uint8Array(x.memory.buffer, x.fm1_flash(), x.fm1_flash_len()).slice();
-    if (threaded) this.port.postMessage({ type: "core1", seq: m.seq, ...this.core1 });   // the page starts the Worker
     this.port.postMessage({ type: "booted", seq: m.seq, threaded, board: this.board, revision: this.flashRevision, base, flash }, [base.buffer, flash.buffer]);
   }
 
@@ -228,7 +232,7 @@ class Fm1 extends AudioWorkletProcessor {
   process(_inputs, outputs) {
     const out = outputs[0];
     const x = this.x;
-    if (!x || this.paused) return true;
+    if (!x || this.paused || this.waitCore1) return true;
     const n = out[0].length;
     const playing = this.playing;       // (the worst quantum: of those once audio played)
     const t0 = now();
@@ -279,7 +283,7 @@ class Fm1 extends AudioWorkletProcessor {
         short: this.short, halted: x.fm1_halted(), jit: this.jit, pads, playing: this.playing,
         busy: this.lastTiming?.busy ?? 0, worst: this.lastTiming?.worst ?? 0,
         emulated: this.lastTiming?.emulated ?? 0, idle: this.lastTiming?.idle ?? 0, starved: this.lastTiming?.starved ?? 0,
-        core1: x.fm1_core1_beats?.() ?? -1, quanta: this.lastTiming?.quanta ?? 0, frames: this.lastTiming?.frames ?? n }, transfer);
+        core1: Number(x.fm1_mt_stats?.(3) ?? -1), started: x.fm1_core1_thread?.() ?? 1, quanta: this.lastTiming?.quanta ?? 0, frames: this.lastTiming?.frames ?? n }, transfer);
       const took = now() - t0;
       // busy: ms of wall clock the interval's quanta took; emulated: ms of emulated time they ran,
       // idle: of which idle skipping jumped over (cost nothing); starved: audio blocks the firmware
