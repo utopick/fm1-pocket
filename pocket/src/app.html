@@ -1311,7 +1311,9 @@
       }
       // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
       // worklet messages (docs: pocket/android/README.md). nat is the poll timer; the object it makes stands in for the AudioWorkletNode.
-      let nat = null;
+      let nat = null,
+        natEvery = 0; // ms between polls: as often as the timer runs, or every 250 ms while the app's native play screen covers the page
+      window.nativeSlow = (on) => (natEvery = on ? 250 : 0);
       const b64of = (buf) => {
         const u = new Uint8Array(buf);
         let s = "";
@@ -1340,10 +1342,11 @@
           const { package: p, sectors, syx, wasm, ...rest } = m;
           N.boot(JSON.stringify(rest), b64of(p), sectors && sectors.byteLength ? b64of(sectors) : "", syx ? b64of(syx) : "");
         };
-        let busy = false;
+        let busy = false, last = 0;
         nat = setInterval(async () => {
-          if (busy) return;
+          if (busy || performance.now() - last < natEvery) return;
           busy = true;
+          last = performance.now();
           try {
             for (const data of nativeMessages(await (await fetch("/native/poll")).arrayBuffer())) me.port.onmessage({ data });
           } catch (e) {

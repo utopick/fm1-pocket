@@ -42,6 +42,7 @@ pub struct Host {
     board: u32,
     last_timing: Option<Timing>,
     lcd_revision: Option<u32>,
+    face_revision: Option<u32>, // the native screen's own: it reads the LCD apart from the page's frames
     report_frames: usize,
     report_calls: usize,
     short: u32,
@@ -60,7 +61,7 @@ pub struct Host {
 impl Host {
     pub fn new() -> Host {
         Host { t0: Instant::now(), active: false, queue: vec![], snapshots: vec![], seq: None, mhz: 0.0, ahead: 0.0, budget: 0.0,
-            playing: false, paused: false, board: 0, last_timing: None, lcd_revision: None, report_frames: 0, report_calls: 0,
+            playing: false, paused: false, board: 0, last_timing: None, lcd_revision: None, face_revision: None, report_frames: 0, report_calls: 0,
             short: 0, busy: 0.0, worst: 0.0, timed_ms: 0.0, timed_idle: 0.0, timed_starved: 0.0, flash_revision: 0,
             observed_revision: 0, flash_changed_at: 0.0, last_snapshot: 0.0, peak: 0.0 }
     }
@@ -161,6 +162,7 @@ impl Host {
         self.playing = false;
         self.last_timing = None;
         self.lcd_revision = None;
+        self.face_revision = None;
         self.report_frames = 0;
         self.report_calls = 0;
         self.short = 0;
@@ -278,7 +280,9 @@ impl Host {
         }
         self.flush_snapshots();
         let revision = w::fm1_lcd_revision();
-        let lcd = (Some(revision) != self.lcd_revision)
+        // the frame this one replaces may have carried a new LCD the page never fetched: send it again
+        let dropped_lcd = self.queue.iter().any(|m| m.json.starts_with("{\"type\":\"frame\"") && m.blobs.iter().any(|b| b.name == "lcd"));
+        let lcd = (Some(revision) != self.lcd_revision || dropped_lcd)
             .then(|| u16s(unsafe { std::slice::from_raw_parts(w::fm1_lcd(), LCD_PIXELS) }));
         self.lcd_revision = Some(revision);
         let leds = f32s(unsafe { std::slice::from_raw_parts(w::fm1_leds(), 41) });
@@ -313,6 +317,18 @@ impl Host {
         self.worst = 0.0;
         self.report_frames = 0;
         self.report_calls = 0;
+    }
+
+    /// The native screen (FaceView): the 41 LED levels always, the LCD only when it changed since
+    /// its last call. -1 while no firmware runs, else 1 when `lcd` was filled, 0 when not.
+    pub fn face(&mut self, lcd: &mut [u16], leds: &mut [f32]) -> i32 {
+        if !self.active { return -1; }
+        leds.copy_from_slice(unsafe { std::slice::from_raw_parts(w::fm1_leds(), 41) });
+        let revision = w::fm1_lcd_revision();
+        if Some(revision) == self.face_revision { return 0; }
+        self.face_revision = Some(revision);
+        lcd.copy_from_slice(unsafe { std::slice::from_raw_parts(w::fm1_lcd(), LCD_PIXELS) });
+        1
     }
 
     /// The `/native/poll` response body: see the bridge in the spec (little-endian).
