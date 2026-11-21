@@ -70,6 +70,15 @@ pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_poll(env: 
 }
 
 #[no_mangle]
+pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_face(env: *mut JNIEnv, _c: jclass, lcd: jshortArray, leds: jfloatArray) -> jint {
+    let (mut px, mut lv) = ([0u16; 240 * 240], [0f32; 41]);
+    let got = catch_unwind(AssertUnwindSafe(|| with(|h| h.face(&mut px, &mut lv)))).unwrap_or(-1);
+    if got >= 0 { (**env).SetFloatArrayRegion.unwrap()(env, leds, 0, 41, lv.as_ptr()); }
+    if got == 1 { (**env).SetShortArrayRegion.unwrap()(env, lcd, 0, (240 * 240) as jsize, px.as_ptr() as *const jshort); }
+    got
+}
+
+#[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_version(env: *mut JNIEnv, _c: jclass) -> jstring {
     let s = CString::new(version()).unwrap();
     (**env).NewStringUTF.unwrap()(env, s.as_ptr() as *const c_char)
