@@ -459,9 +459,24 @@ pub(crate) unsafe fn link(slot: *mut u64, body: *const u8) {
 ///
 /// # Safety
 /// `code` must come from `Jit::entry` for this bus type and the memory `mem` describes.
+#[cfg(test)]
 pub(crate) unsafe fn run<B: Bus>(code: *const u8, cpu: &mut Cpu, bus: &mut B, mem: &JitMem, extra: u32, cap: u32, inside: bool) -> (u32, *mut u64, bool) {
+    unsafe { run_fit(code, cpu, bus, mem, extra, cap, inside, 0) }
+}
+
+/// `run` for a prefix of `need` instructions: one that cannot fit the call's limit would only
+/// enter the code to leave again at once (the code's first check), so it is not entered (a
+/// slice's or a timer's end came a block early about three times in a thousand instructions).
+///
+/// # Safety
+/// As `run`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe fn run_fit<B: Bus>(code: *const u8, cpu: &mut Cpu, bus: &mut B, mem: &JitMem, extra: u32, cap: u32, inside: bool, need: u32) -> (u32, *mut u64, bool) {
     // instructions this call may run: their ticks ((k - 1) + extra) must all fit tick_room
     let limit = (bus.tick_room() + 1).saturating_sub(extra as u64).min(1 << 30).min(cap as u64) as u32;
+    if need > limit {
+        return (0, std::ptr::null_mut(), false);
+    }
     let mut ctx = Ctx {
         cpu: cpu as *mut Cpu,
         bus: bus as *mut B as *mut (),

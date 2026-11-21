@@ -811,7 +811,7 @@ impl Cpu {
                         let cap = if inside { (limit - n).min(insns) } else if open { budget - n } else { limit - n };
                         let entry = pc;
                         // SAFETY: code was compiled for this bus type and memory map
-                        let (k, slot, stop) = unsafe { jit::run(code, self, bus, &mem, extra, cap, inside) };
+                        let (k, slot, stop) = unsafe { jit::run_fit(code, self, bus, &mem, extra, cap, inside, insns) };
                         if self.profile { self.jit_entries += 1; self.jit_insns += k as u64; }
                         if k > 0 {
                             n += k;
