@@ -1816,6 +1816,47 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             g.call(h_sti::<B> as *const () as u64);
             bus_used = true;
         }
+        // 64-bit register-pair shifts, rotates and multiplies (exec_raw's route 21, d0 d8 d4 dc
+        // f8 fc fe: what the DSP code of 386DX's core 1 runs most), in x registers; every
+        // source is read before either half of the pair is written
+        Fast::Raw { route: 21, raw } if matches!(raw & 255, 0xd0 | 0xd8 | 0xd4 | 0xdc | 0xf8 | 0xfc | 0xfe) => {
+            let lo = ((raw >> 29) & 7) as u8 * 2;
+            let kind = raw & 255;
+            if matches!(kind, 0xf8 | 0xfc | 0xfe) {
+                g.ld_reg(0, ((raw >> 20) & 15) as u8);
+                g.ld_reg(1, ((raw >> 24) & 15) as u8);
+                if raw & (1 << 28) != 0 { g.a.smull(0, 0, 1) } else { g.a.umull(0, 0, 1) }
+                if kind != 0xf8 {
+                    g.ld_reg(2, lo);
+                    g.ld_reg(3, lo + 1);
+                    g.a.add_x_lsl(2, 2, 3, 32);
+                    if kind == 0xfc { g.a.add_x(0, 2, 0) } else { g.a.sub_x(0, 2, 0) }
+                }
+            } else {
+                let by_reg = matches!(kind, 0xd8 | 0xdc);
+                g.ld_reg(0, lo);
+                g.ld_reg(1, lo + 1);
+                g.a.add_x_lsl(0, 0, 1, 32);
+                // (the amount modulo 64 is what the host's variable shifts take, as `& 63`)
+                if by_reg {
+                    g.ld_reg(2, ((raw >> 24) & 15) as u8);
+                } else {
+                    g.a.mov32(2, (raw >> 16) & 15 | ((raw >> 24) & 3) << 4);
+                }
+                if matches!(kind, 0xd4 | 0xdc) {
+                    g.a.rorv_x(0, 0, 2);
+                } else {
+                    match if by_reg { (raw >> 16) & 3 } else { (raw >> 26) & 3 } {
+                        0 | 1 => g.a.lslv_x(0, 0, 2),
+                        2 => g.a.lsrv_x(0, 0, 2),
+                        _ => g.a.asrv_x(0, 0, 2),
+                    }
+                }
+            }
+            g.a.lsr_imm_x(1, 0, 32);
+            g.st_reg(0, lo);
+            g.st_reg(1, lo + 1);
+        }
         // rev8 / rev16 / revs (exec_raw's route 22: d bits 28-31, the source 24-27, the form
         // 22-23; popcnt, form 3, stays with the executor)
         Fast::Raw { route: 22, raw } if (raw >> 22) & 3 != 3 => {
@@ -2006,13 +2047,13 @@ fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate
         rc: RegCache::default(),
         probe_copy: None,
     };
-    // a block a probe copy can serve: plain ops one instruction each (no pair, glue or
-    // if-else), so every instruction after the first has a point to stop at
+    // a block a probe copy can serve: plain ops one instruction each or swapped pairs (no
+    // glue or if-else), so every instruction after the first has a point to stop at
     // and that ends where the runner's block from the stop would: at a jump, or short of the
     // 32 ops a block holds (`Cpu::build_block`), else the block from the stop runs on past
     // this one's end, and its checks come at another instruction
     let probe_ok = stops == Some(true) && ops.len() > 1 && then.is_empty()
-        && ops.iter().all(|o| !o.glue && !o.pair_head && !matches!(o.fast, Fast::Swap { .. } | Fast::IfBlk { has_else: true, .. }))
+        && ops.iter().all(|o| !o.glue && (!o.pair_head || matches!(o.fast, Fast::Swap { .. })) && !matches!(o.fast, Fast::IfBlk { has_else: true, .. }))
         && (ops.len() < 32 || ops.last().is_some_and(|o| o.fast.may_jump()));
     let probe_l = probe_ok.then(|| g.a.label());
     // prologue (entry from Rust); chained blocks enter at the body
@@ -2131,18 +2172,21 @@ fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate
         g.probe_copy = Some(insns(ops));
         let start = g.a.label();
         g.a.ldr(9, CPU, off_stop_pc());
-        let mut q = pc0;
-        for (i, op) in ops.iter().enumerate() {
-            if i > 0 {
+        // (`STOPI` is the instruction's number, a swapped pair being two: a stop between its two
+        // has no check, and leaves before the block)
+        let (mut q, mut ins) = (pc0, 0u32);
+        for op in ops {
+            if ins > 0 {
                 let next = g.a.label();
                 g.a.mov32(10, q);
                 g.a.cmp(9, 10);
                 g.a.b_cond(AC::Ne, next);
-                g.a.movz(STOPI, i as u32, 0);
+                g.a.movz(STOPI, ins, 0);
                 g.a.b(start);
                 g.a.bind(next);
             }
             q += op.len as u32;
+            ins += if matches!(op.fast, Fast::Swap { .. }) { 2 } else { 1 };
         }
         g.exit_imm(pc0, 0);
         g.a.bind(start);
@@ -2672,6 +2716,45 @@ mod tests {
         assert_eq!(go(to, 32, 1, 100, 0), (2, 36, 42));
         cpu.stop_pc = 0; cpu.stop_io = 0;
     }
+    /// A block with a swapped pair in it has a probe copy too: a stretch whose stop pc lies at an
+    /// instruction after the first leaves there when the registers are the probe's, and before
+    /// the block when it lies between the pair's two instructions.
+    #[test]
+    fn a_swapped_pair_in_a_stretch_block_has_a_probe_point() {
+        let mut bus = Memory::new(); let mem = bus.jit_mem().unwrap();
+        let mut cpu = Cpu::new(0); let mut j = Jit::new(false).unwrap();
+        j.stops = true;
+        // 0: goto 32; 32: r0 = 42, then a pair at 34 (head r3 = r0 + 1, 2 bytes; tail r4 = r3, 2
+        // bytes, which reads what the head writes), then r1 = 7 at 38 (it ends at 40)
+        let (head, tail) = (Fast::AddRI { d: 3, s: 0, v: 1 }, Fast::Mov { d: 4, s: 3 });
+        let swaps = [(head, tail, 2u8)];
+        let pair = BOp { fast: Fast::Swap { idx: 0 }, len: 4, careful: true, pair_head: true, glue: false };
+        let block = [op(Fast::MovI { d: 0, v: 42 }), pair, op(Fast::MovI { d: 1, v: 7 })];
+        let from = hot(&mut j, 0, 0, &[op(Fast::Goto { target: 32 })], &mem);
+        for _ in 0..HOT { j.entry::<Memory>(1, &block, &swaps, None, 32, &mem, true, false); }
+        assert!(j.entry::<Memory>(1, &block, &swaps, None, 32, &mem, true, false).is_some_and(|p| p.whole));
+        let (_, slot, _) = unsafe { run(from, &mut cpu, &mut bus, &mem, 0, 100, false) };
+        unsafe { link(slot, j.body(1).unwrap()); }
+        let mut go = |stop_pc: u32, probe: [u32; 17]| {
+            cpu.regs = [0; 16]; cpu.stop_pc = stop_pc; cpu.stop_io = 0; cpu.probe = probe;
+            let k = unsafe { run(from, &mut cpu, &mut bus, &mem, 0, 100, false) }.0;
+            (k, cpu.pc, cpu.regs[3], cpu.regs[4])
+        };
+        let mut at = |r0: u32, r3: u32| { let mut p = [0; 17]; p[0] = r0; p[3] = r3; p };
+        // no stop in the block, or registers other than the probe's: through the block
+        assert_eq!(go(0x1000, at(0, 0)), (5, 40, 43, 0));
+        assert_eq!(go(34, at(0, 0)), (5, 40, 43, 0));
+        // at the pair's start with the probe's registers (r0 only is set by then): out before it
+        assert_eq!(go(34, at(42, 0)), (2, 34, 0, 0));
+        // after the pair (r3 and r4 set): out there
+        let mut p = at(42, 43);
+        assert_eq!(go(38, p), (4, 38, 43, 0));
+        p[4] = 5;
+        assert_eq!(go(38, p), (5, 40, 43, 0));
+        // between the pair's two instructions there is no check: out before the block
+        assert_eq!(go(36, at(42, 0)), (1, 32, 0, 0));
+        cpu.stop_pc = 0;
+    }
     #[test]
     fn a_block_cut_at_32_ops_has_no_probe_copy() {
         // 32 plain ops from 32 (the most a block holds, not ended by a jump): the runner's
@@ -2851,6 +2934,13 @@ mod tests {
             Fast::SetIe { on: false }, Fast::SetIe { on: true }, Fast::IcfgRd { d: 3 }, Fast::IcfgWr { s: 4 }]);
         // (route 22: rev8, rev16, revs inline, popcnt through the executor; into another and the same register)
         for form in 0..4u32 { for d in [0u32, 1] { cases.push(Fast::Raw { route: 22, raw: d << 28 | 1 << 24 | form << 22 | 0xe070 }); } }
+        // (route 21: the 64-bit shifts, rotates and multiplies inline; random fields, so every pair,
+        // signedness, amount and register, aliased ones among them)
+        for kind in [0xd0u32, 0xd8, 0xd4, 0xdc, 0xf8, 0xfc, 0xfe] {
+            for _ in 0..12 { cases.push(Fast::Raw { route: 21, raw: (rnd() & 0xffff_ff00) | kind }); }
+            // (the multiplies' sources and the amount inside the pair's own registers)
+            cases.push(Fast::Raw { route: 21, raw: 1 << 29 | 2 << 20 | 3 << 24 | 0x1000_0000 | kind });
+        }
         let mut jit = Jit::new(false).unwrap();
         for (j, mut fast) in cases.into_iter().enumerate() {
             for round in 0..24 {

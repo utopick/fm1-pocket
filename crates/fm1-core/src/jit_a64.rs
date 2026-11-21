@@ -128,6 +128,7 @@ impl Asm {
     pub fn add_x_lsl(&mut self, rd: Reg, rn: Reg, rm: Reg, sh: u32) { self.e(0x8b00_0000 | rm << 16 | sh << 10 | rn << 5 | rd); }
     pub fn eor_lsr(&mut self, rd: Reg, rn: Reg, rm: Reg, sh: u32) { self.e(0x4a40_0000 | rm << 16 | sh << 10 | rn << 5 | rd); }
     pub fn sub(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x4b00_0000 | rm << 16 | rn << 5 | rd); }
+    pub fn sub_x(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0xcb00_0000 | rm << 16 | rn << 5 | rd); }
     pub fn sub_lsl(&mut self, rd: Reg, rn: Reg, rm: Reg, sh: u32) { self.e(0x4b00_0000 | rm << 16 | sh << 10 | rn << 5 | rd); }
     pub fn subs(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x6b00_0000 | rm << 16 | rn << 5 | rd); }
     pub fn adds(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x2b00_0000 | rm << 16 | rn << 5 | rd); }
@@ -174,7 +175,10 @@ impl Asm {
     pub fn lslv(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x1ac0_2000 | rm << 16 | rn << 5 | rd); }
     pub fn lsrv(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x1ac0_2400 | rm << 16 | rn << 5 | rd); }
     pub fn asrv(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x1ac0_2800 | rm << 16 | rn << 5 | rd); }
+    pub fn lslv_x(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x9ac0_2000 | rm << 16 | rn << 5 | rd); }
     pub fn lsrv_x(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x9ac0_2400 | rm << 16 | rn << 5 | rd); }
+    pub fn asrv_x(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x9ac0_2800 | rm << 16 | rn << 5 | rd); }
+    pub fn rorv_x(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x9ac0_2c00 | rm << 16 | rn << 5 | rd); }
     pub fn mul(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x1b00_7c00 | rm << 16 | rn << 5 | rd); }
     pub fn umull(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x9ba0_7c00 | rm << 16 | rn << 5 | rd); }
     pub fn smull(&mut self, rd: Reg, rn: Reg, rm: Reg) { self.e(0x9b20_7c00 | rm << 16 | rn << 5 | rd); }
