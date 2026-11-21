@@ -54,6 +54,7 @@ fn plays_a_song() {
     let mut raw = Vec::new();
     let mut cpu = std::time::Duration::ZERO;
     let mut buf = vec![0f32; 256]; // one quantum of 128 frames, interleaved
+    let (mut px, mut lv, mut face_ok) = (vec![0u16; 240 * 240], [0f32; 41], false);
     while w::fm1_ms() < 15_000 {
         let t = cpu_time();
         let n = with(|h| h.render(&mut buf));
@@ -61,6 +62,12 @@ fn plays_a_song() {
         assert_eq!(n, 128);
         for s in &buf { raw.extend_from_slice(&((*s * 32768.0).round() as i16).to_le_bytes()); }
         frames += n;
+        if frames % (128 * 10) == 0 { // the native screen, about 34 times a second
+            if with(|h| h.face(&mut px, &mut lv)) == 1 {
+                face_ok |= px.iter().any(|p| *p != px[0]);
+                assert_eq!(with(|h| h.face(&mut px, &mut lv)), 0, "an LCD that did not change came again");
+            }
+        }
         for m in decode(&with(|h| h.poll())) {
             if m.json.contains("\"type\":\"booted\"") { booted = true; }
             if m.json.contains("\"type\":\"frame\"") {
@@ -80,4 +87,5 @@ fn plays_a_song() {
     assert!(booted, "no booted message");
     assert!(frame_msgs > 0 && lcd_ok, "the LCD stayed blank");
     assert!(peak > 0.0, "silence");
+    assert!(face_ok, "the native screen's LCD stayed blank");
 }

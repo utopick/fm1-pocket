@@ -67,6 +67,12 @@ try:
     js("setKey(0, true)")
     time.sleep(0.3)
     assert any(c[0] == "post" and '"key"' in c[1] for c in js("return __calls")), "a key did not go through FM1Native.post: %s" % js("return __calls.map(c => c[1])")
+    # the app's native play screen covers the page: it polls about 4 times a second, then as often as before
+    js("nativeSlow(true)"); time.sleep(0.3); n = js("return __polls"); time.sleep(1)
+    slow = js("return __polls") - n
+    js("nativeSlow(false)"); n = js("return __polls"); time.sleep(1)
+    fast = js("return __polls") - n
+    assert 2 <= slow <= 6 and fast > 20, (slow, fast)
     js("document.querySelector('#power').click()")
     time.sleep(0.3); n = js("return __polls"); time.sleep(0.5)
     assert js("return __polls") == n, "the poll goes on after power off"

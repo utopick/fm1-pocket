@@ -12,6 +12,8 @@ final class Native {
     static native int render(float[] interleavedStereo);
     /** The queue of messages for the page, in the format of pocket/android/README.md. */
     static native byte[] poll();
+    /** The native screen: fills leds (41) always and lcd (240 x 240 RGB565) when it changed; -1 while off, 1 when lcd was filled, else 0. */
+    static native int face(short[] lcd, float[] leds);
     static native String version();
 
     private Native() {}
