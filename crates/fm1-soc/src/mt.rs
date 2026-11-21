@@ -33,12 +33,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use sys::{Th, Tm};
 
-/// What the two threads need of the host to sleep, wake and tell time. On a computer it is std's.
+/// What the two threads need of the host to sleep, wake and tell time. On a computer it is std's (also in the
+/// one-thread wasm build, which never starts core 1's thread and so must not import the host's clock).
 /// On wasm (the build with atomics) there is no thread to spawn, no clock and no sleep: the page's
 /// Worker runs `worker_main`, a sleep is `memory.atomic.wait32` and may only be done by the Worker
 /// (the audio thread must never block, so there it is a spin, and `backoff` gives up after a while
 /// rather than hang the sound), and the clock is an import of the host.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
 mod sys {
     use std::time::Duration;
     pub use std::thread::{park, yield_now, Thread as Th};
@@ -49,7 +50,7 @@ mod sys {
     pub fn can_block() -> bool { true }
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 mod sys {
     use std::cell::Cell;
     use std::sync::atomic::{AtomicU32, Ordering::*};
@@ -515,7 +516,7 @@ impl Shared {
         let mut i = 0;
         let t0 = Tm::now();
         while self.state.load(Acquire) != PARKED {
-            if cfg!(target_arch = "wasm32") && !self.up.load(Acquire) && t0.elapsed() > Duration::from_millis(100) {
+            if cfg!(all(target_arch = "wasm32", target_feature = "atomics")) && !self.up.load(Acquire) && t0.elapsed() > Duration::from_millis(100) {
                 // the Worker never started: nothing runs core 1, and nothing will take the job
                 *self.job.lock().unwrap_or_else(|e| e.into_inner()) = None;
                 self.state.store(PARKED, Release);
@@ -566,7 +567,7 @@ impl Mt {
             sh.set_window(n * crate::machine::SLICE as u64);
         }
         let shared = Arc::new(sh);
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
         unsafe { sys::fm1_core1_spawn(Arc::into_raw(Arc::clone(&shared)) as u32) };
         Mt { shared, handle: None }
     }
@@ -593,7 +594,7 @@ impl Drop for Mt {
         *s.job.lock().unwrap_or_else(|e| e.into_inner()) = None;
         if let Some(h) = self.handle.take() {
             h.join(s);
-        } else if cfg!(target_arch = "wasm32") {
+        } else if cfg!(all(target_arch = "wasm32", target_feature = "atomics")) {
             // (a Worker that was started but never given a job: it leaves when it sees `quit`)
             if let Some(t) = s.thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() { sys::unpark(t); }
         }
@@ -601,9 +602,9 @@ impl Drop for Mt {
 }
 
 /// Core 1's thread: std's on a computer.
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
 struct Handle(std::thread::JoinHandle<()>);
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
 impl Handle {
     fn thread(&self) -> Option<Th> { Some(self.0.thread().clone()) }
     fn join(self, s: &Shared) {
@@ -615,16 +616,16 @@ impl Handle {
         let _ = self.0.join();
     }
 }
-#[cfg(not(target_arch = "wasm32"))]
+#[cfg(not(all(target_arch = "wasm32", target_feature = "atomics")))]
 fn spawn(sh: Arc<Shared>) -> Handle {
     Handle(std::thread::Builder::new().name("fm1-core1".into()).spawn(move || worker(sh)).expect("core 1's thread"))
 }
 
 /// On wasm the Worker is asked for when the machine is made (`Mt::new`) and runs `worker_main`
 /// by itself: a start only wakes it.
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 struct Handle;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 impl Handle {
     fn thread(&self) -> Option<Th> { None }
     /// leaves when the Worker has: a bounded wait, because the audio thread must not hang on a dead Worker
@@ -637,7 +638,7 @@ impl Handle {
         }
     }
 }
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 fn spawn(_: Arc<Shared>) -> Handle { Handle }
 
 /// The page's Worker, once the host has started it with the address `fm1_core1_spawn` gave: runs
@@ -645,7 +646,7 @@ fn spawn(_: Arc<Shared>) -> Handle { Handle }
 /// thread-local block in the shared memory.
 ///
 /// SAFETY: `ptr` is what `Mt::new` passed to `fm1_core1_spawn`.
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", target_feature = "atomics"))]
 pub unsafe fn worker_main(ptr: u32) {
     let sh = Arc::from_raw(ptr as *const Shared);
     sys::allow_blocking();
