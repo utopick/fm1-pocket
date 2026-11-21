@@ -94,6 +94,7 @@ while (x.fm1_ms() < secs * 1000) {
     for (let i = 0; i < have; i++) out.push(Math.round(l[i] * 32768), Math.round(r[i] * 32768));
   }
   real += have;
+  if (MT && process.env.FM1_MT_TRACE && x.fm1_ms() - (globalThis.__tr ?? 0) >= 1000) { globalThis.__tr = x.fm1_ms(); const q = x.fm1_mt_report(), b = new Uint8Array(x.memory.buffer); console.error(x.fm1_ms(), new TextDecoder().decode(b.subarray(q, b.indexOf(0, q)))); }
   if (x.fm1_halted()) throw new Error(`halted at ${x.fm1_ms()} ms`);
   if (x.fm1_ms() === beforeMs && have === 0) throw new Error("emulation made no progress");
   if (performance.now() - t0 > Math.max(60_000, secs * 1000 * 100)) throw new Error("benchmark timed out");
@@ -128,6 +129,7 @@ console.log(`${(emulatedMs / 1000).toFixed(3)} s emulated at ${mhz} MHz in ${wal
   `(${real} real frames, ${short} short quanta); steady quanta p50 ${ms(result.steadyRenderMs.p50)} p99 ${ms(result.steadyRenderMs.p99)} ` +
   `max ${ms(result.steadyRenderMs.max)} ms, ${over} of ${steady.length} over ${quantumMs.toFixed(1)} ms` +
   (idleMs === null ? "" : `; ${Math.round(100 * result.idleShare)}% of the time idle skipped`));
+if (MT) console.log(`stats ${[0,1,2,3,4,5,6,7].map(i => x.fm1_mt_stats(i))} threaded ${x.fm1_threaded()} core1_thread ${x.fm1_core1_thread()} cpu1_fault ${x.fm1_cpu1_fault?.()}`);
 if (MT) console.log(`two threads: core 1 ran ${x.fm1_mt_stats(3)} instructions in the Worker (started ${x.fm1_core1_thread()}); core 0 waited for it ${x.fm1_mt_stats(0)} times, core 1 for core 0 ${x.fm1_mt_stats(1)}, for the chip ${x.fm1_mt_stats(2)}`);
 console.log(JSON.stringify(result));
 if (core1) await core1.terminate();

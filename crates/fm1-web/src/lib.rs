@@ -488,6 +488,19 @@ pub extern "C" fn fm1_mt_dump() {
     if let Some(mt) = machine().and_then(|m| m.soc.mt.as_ref()) { eprintln!("{}", mt.shared.dump()); }
 }
 
+static mut MT_REPORT: Vec<u8> = Vec::new();
+/// `fm1_mt_dump`'s text as a NUL-ended string in memory (a browser has no stderr).
+#[no_mangle]
+pub extern "C" fn fm1_mt_report() -> *const u8 {
+    let t = machine().and_then(|m| m.soc.mt.as_ref()).map_or_else(String::new, |mt| mt.shared.dump());
+    #[allow(static_mut_refs)]
+    unsafe {
+        MT_REPORT = t.into_bytes();
+        MT_REPORT.push(0);
+        MT_REPORT.as_ptr()
+    }
+}
+
 /// 2 once core 1 runs on its own thread (the firmware released it), else 1.
 #[no_mangle]
 pub extern "C" fn fm1_core1_thread() -> u32 {
