@@ -12,6 +12,9 @@
 //! imports `env.fm1_jit_compile`, which compiles a block's module and installs it in the exported
 //! function table (web/jit.js; a host without it passes a stub that returns 0).
 
+// the threaded build only (nightly): the wait a wasm thread sleeps in
+#![cfg_attr(target_feature = "atomics", feature(stdarch_wasm_atomic_wait))]
+
 use fm1_core::{Bus, Cpu};
 use fm1_soc::{machine, Action, Soc};
 use std::collections::VecDeque;
@@ -1009,4 +1012,30 @@ mod pace_tests {
             }
         }
     }
+}
+
+/// The threaded build (web/build-threads.sh): the page's Worker runs a second instance of this
+/// module on the audio thread's memory and calls `fm1_core1_run`, because wasm32 cannot spawn a thread.
+#[cfg(target_feature = "atomics")]
+mod mt {
+    use std::sync::atomic::{AtomicU32, Ordering::*};
+    static BEATS: AtomicU32 = AtomicU32::new(0);
+    static STOP: AtomicU32 = AtomicU32::new(0);
+    static WAKE: AtomicU32 = AtomicU32::new(0);
+
+    /// The Worker's entry, for now a handshake: count a beat every 10 ms until `fm1_core1_stop`.
+    #[no_mangle]
+    pub extern "C" fn fm1_core1_run() {
+        STOP.store(0, SeqCst);
+        while STOP.load(Acquire) == 0 {
+            BEATS.fetch_add(1, Relaxed);
+            // sleeps until woken or 10 ms (the one blocking call a wasm thread has)
+            unsafe { core::arch::wasm32::memory_atomic_wait32(WAKE.as_ptr() as *mut i32, 0, 10_000_000) };
+        }
+    }
+    #[no_mangle]
+    pub extern "C" fn fm1_core1_stop() { STOP.store(1, SeqCst); }
+    /// How many beats the Worker has counted: the page shows that core 1's thread is alive.
+    #[no_mangle]
+    pub extern "C" fn fm1_core1_beats() -> u32 { BEATS.load(Relaxed) }
 }
