@@ -9,6 +9,7 @@ use fm1_web as w;
 fn song(pkg: &[u8], threads: u32, secs: u32) -> Vec<f32> {
     with(|h| h.boot(&format!("{{\"seq\":1,\"mhz\":240,\"threads\":{threads}}}"), pkg, &[], &[]));
     assert_eq!(w::fm1_threaded(), threads, "the machine's thread mode");
+    assert_eq!(w::fm1_core1_thread(), 1, "core 1 has no thread before the firmware releases it");
     let script = b"2000:PLAY";
     let p = w::fm1_alloc(script.len() as u32);
     unsafe { std::ptr::copy_nonoverlapping(script.as_ptr(), p, script.len()) };
@@ -18,10 +19,13 @@ fn song(pkg: &[u8], threads: u32, secs: u32) -> Vec<f32> {
         with(|h| h.render(&mut buf));
         out.extend(buf.chunks(2).map(|f| (f[0] + f[1]) / 2.0));
     }
+    assert!(threads == 1 || w::fm1_core1_thread() == 2 || !CORE1_OPTIONAL.load(std::sync::atomic::Ordering::Relaxed), "core 1's thread");
     assert_eq!(w::fm1_halted(), 0, "the machine halted ({threads} threads)");
     assert_eq!(w::fm1_cpu1_fault(), 0, "core 1 faulted ({threads} threads)");
     out
 }
+
+static CORE1_OPTIONAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 fn rms(x: &[f32]) -> f64 { (x.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / x.len().max(1) as f64).sqrt() }
 
@@ -58,5 +62,22 @@ fn two_threads_play_the_song_as_one_does() {
         let db = 10.0 * (b / a).log10();
         println!("{hz:>6} Hz: {db:+.2} dB");
         assert!(db.abs() < 2.0, "{hz} Hz differs by {db} dB");
+    }
+}
+
+/// Other firmwares (FM1_FWSCS=a.fwsc,b.fwsc; FM1_SECONDS, 10 by default): neither fault, halt nor
+/// fall silent with two threads, whether or not they release core 1, and keep their level.
+#[test]
+fn two_threads_leave_other_firmwares_working() {
+    let Ok(list) = std::env::var("FM1_FWSCS") else { eprintln!("FM1_FWSCS not set: skipped"); return };
+    let secs = std::env::var("FM1_SECONDS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
+    CORE1_OPTIONAL.store(true, std::sync::atomic::Ordering::Relaxed);
+    for path in list.split(',') {
+        let pkg = std::fs::read(path).unwrap();
+        let one = song(&pkg, 1, secs);
+        let two = song(&pkg, 2, secs);
+        let (r1, r2) = (rms(&one), rms(&two));
+        println!("{path}: level one thread {r1:.4}, two {r2:.4}, core 1 thread {}, core 1 ran {}M instructions", w::fm1_core1_thread(), w::fm1_mt_stats(3) / 1_000_000);
+        if r1 > 0.001 { assert!(r2 > 0.001 && (r2 / r1 - 1.0).abs() < 0.25, "{path}: the level differs: {r1} against {r2}"); }
     }
 }

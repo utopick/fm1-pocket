@@ -33,8 +33,10 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle, Thread};
 use std::time::Duration;
 
-/// How far (in cycles) the cores may drift apart: 16 slices. `Soc::mt_window` overrides it.
-pub const WINDOW: u64 = 16 * crate::machine::SLICE as u64;
+/// How far (in cycles) the cores may drift apart: 64 slices, about 0.27 ms of FM-1 time. Fewer slices
+/// make the threads wait for each other more (386DX: 16 slices, 14k waits in 15 s; 64, 3k; 256, 0.7k);
+/// more let a firmware's start-up handshakes see the drift. FM1_MT_WINDOW (in slices) overrides it.
+pub const WINDOW: u64 = 64 * crate::machine::SLICE as u64;
 
 // who holds the `Soc`
 const GATE_A: u32 = 0;
@@ -336,6 +338,11 @@ impl Mt {
             sh.set_window(n * crate::machine::SLICE as u64);
         }
         Mt { shared: Arc::new(sh), handle: None }
+    }
+
+    /// Has core 1's thread been started (the firmware released the core)?
+    pub fn started(&self) -> bool {
+        self.handle.is_some()
     }
 
     /// (cores 1's time in the window waits, for tuning) A's waits for B, B's for A, B's for the `Soc`
