@@ -9,6 +9,8 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -27,7 +29,6 @@ public class MainActivity extends Activity {
     private WebView web;
     private AudioThread audio;
     private FaceView face;
-    private MidiBridge midi;
     private boolean running; // a firmware is on (the page booted one and has not turned it off)
 
     /** window.FM1Native: the page's way to the native core. Its methods run on a WebView binder thread. */
@@ -101,8 +102,18 @@ public class MainActivity extends Activity {
                 return loader.shouldInterceptRequest(u);
             }
         });
+        web.setWebChromeClient(new WebChromeClient() {
+            // Web MIDI with SysEx (the real FM-1: Tether, backups, installing): a WebView refuses it unless the app grants it.
+            // Only that, and only to the app's own page.
+            @Override public void onPermissionRequest(PermissionRequest r) {
+                boolean ours = HOST.equals(r.getOrigin().getHost());
+                for (String res : r.getResources()) {
+                    if (!ours || !PermissionRequest.RESOURCE_MIDI_SYSEX.equals(res)) { r.deny(); return; }
+                }
+                r.grant(new String[] {PermissionRequest.RESOURCE_MIDI_SYSEX});
+            }
+        });
         web.addJavascriptInterface(new Bridge(), "FM1Native");
-        web.addJavascriptInterface(midi = new MidiBridge(this, web), "FM1Midi");
         web.loadUrl("https://" + HOST + "/assets/index.html");
     }
 
@@ -116,7 +127,6 @@ public class MainActivity extends Activity {
     @Override protected void onResume() { super.onResume(); if (audio != null) audio.setPaused(false); }
     @Override protected void onDestroy() {
         if (audio != null) audio.finish();
-        midi.close();
         web.destroy();
         super.onDestroy();
     }
