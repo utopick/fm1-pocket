@@ -61,6 +61,11 @@ impl Ram {
         self.data.is_empty()
     }
 
+    /// `n` bytes from offset `addr`, when they all lie inside (a DMA source).
+    pub fn bytes(&self, addr: u32, n: u32) -> Option<&[u8]> {
+        self.data.get(addr as usize..(addr as usize).checked_add(n as usize)?)
+    }
+
     pub fn read8(&self, addr: u32) -> u8 {
         self.data[addr as usize]
     }
