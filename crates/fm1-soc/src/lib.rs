@@ -37,6 +37,7 @@ pub mod machine;
 pub mod p33;
 pub mod periph;
 mod ram;
+pub mod mt;
 pub mod refill;
 pub mod smk;
 mod spiflash;
@@ -44,7 +45,7 @@ pub mod usb;
 
 pub use lcd::{write_bmp, Lcd};
 pub use periph::{Action, Periph, CPU_HZ, VEC_BASE};
-pub use ram::Ram;
+pub use ram::{Ram, RamView};
 pub use spiflash::{FlashPart, SpiFlash, FLASH_SIZE};
 
 pub const XIP_BASE: u32 = 0x0200_0000;
@@ -254,6 +255,10 @@ impl Board {
 }
 
 pub struct Soc {
+    /// Core 1 on its own thread (`set_threads`). First, so it is dropped (stopped) before the rest.
+    pub mt: Option<mt::Mt>,
+    /// the two-thread mode gave up (core 1 does too much I/O for it) and the runner goes on in one thread
+    pub mt_retry: bool,
     pub board: Board,
     /// The FM-1's flash part (its JEDEC id; `set_flash_part`): the stock Puya unless asked.
     pub flash_part: spiflash::FlashPart,
@@ -519,6 +524,8 @@ impl Soc {
             flash_part: spiflash::FlashPart::P25q80,
             bt_window: BT_WINDOW_BASE,
             xip,
+            mt: None,
+            mt_retry: false,
             ram: Ram::new(ram_size),
             ovl: Ram::new(512 * 1024),
             sram2: Ram::new(256 * 1024),
@@ -622,6 +629,10 @@ impl Soc {
         };
         if std::env::var_os("FM1_DUAL_TRACE").is_some() || std::env::var_os("FM1_RESET_TRACE").is_some() {
             eprintln!("chip reset at {} ms ({})", self.periph.ms(), if cause == p33::P33::RST_WDT { "watchdog" } else { "PR_PWR" });
+        }
+        if let Some(mt) = &self.mt {
+            mt.shared.quiesce(); // (core 1 must not run on while the chip starts over)
+            mt.shared.reset();
         }
         self.resets += 1;
         self.periph.chip_reset();
@@ -1024,14 +1035,17 @@ impl Soc {
                 let adr = self.sfr_get(0x11d0c);
                 let n = value.min(0x40000);
                 // the DMA source is a bus address (RAM, SRAM or XIP)
-                let bytes: Vec<u8> = (0..n).map(|i| self.read8(adr.wrapping_add(i))).collect();
-                match self.lcd_dc() {
-                    Some(dc) => {
-                        for b in bytes {
-                            self.lcd.feed(b, dc);
+                let dc = self.lcd_dc();
+                match (dc, self.ram.bytes(adr.wrapping_sub(RAM_BASE), n)) {
+                    // (from RAM: the bytes straight from it, no copy)
+                    (Some(dc), Some(bytes)) => self.lcd.feed_slice(bytes, dc),
+                    _ => {
+                        let bytes: Vec<u8> = (0..n).map(|i| self.read8(adr.wrapping_add(i))).collect();
+                        match dc {
+                            Some(dc) => self.lcd.feed_slice(&bytes, dc),
+                            None => self.periph.smk.pad_frame(&bytes),
                         }
                     }
-                    None => self.periph.smk.pad_frame(&bytes),
                 }
                 self.sfr_set(addr, 0);
                 self.spi1_done(n);
@@ -1138,6 +1152,20 @@ impl Bus for Soc {
         }
     }
 
+    fn ordered(&self) -> bool {
+        self.mt.is_some()
+    }
+
+    fn test_set(&mut self, addr: u32) -> u8 {
+        let o = addr.wrapping_sub(RAM_BASE) as usize;
+        if self.mt.is_some() && o < self.ram.len() {
+            return self.ram.view().test_set(o as u32);
+        }
+        let old = self.read8(addr);
+        self.write8(addr, old | 0x80);
+        old
+    }
+
     fn spin(&mut self, core: u32, addr: u32) {
         if self.cpu1_running {
             self.waits[core as usize & 1] = Some(Wait::Byte(addr));
@@ -1145,6 +1173,9 @@ impl Bus for Soc {
     }
 
     fn hw_lock(&mut self, core: u32, set: bool) -> bool {
+        if let Some(mt) = &self.mt {
+            return mt.shared.hw_lock(core, set);
+        }
         match (set, self.lock_owner) {
             (true, Some(c)) if c != core => {
                 if self.cpu1_running {
@@ -1188,7 +1219,7 @@ impl Bus for Soc {
         })
     }
     fn code_writes(&self) -> Option<u64> {
-        Some(self.ram.code_writes)
+        Some(self.ram.code_writes())
     }
     fn code_mark(&mut self, lo: u32, hi: u32) {
         self.ram.mark_code(lo.wrapping_sub(RAM_BASE), hi.wrapping_sub(RAM_BASE));
@@ -1469,6 +1500,11 @@ impl Soc {
                             self.cpu1_released_once = true;
                             self.cpu1_release = true;
                             self.periph.next_due = 0;
+                        }
+                    }
+                    if core == 1 {
+                        if let Some(mt) = &self.mt {
+                            mt.shared.set_paused1(self.paused[1]);
                         }
                     }
                     self.sfr_set(addr, value & !0x14);

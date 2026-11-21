@@ -57,6 +57,54 @@ impl Lcd {
         }
     }
 
+    /// Bytes on the bus, as `feed` takes them one by one; a run of pixel data goes a row at a time.
+    pub fn feed_slice(&mut self, bytes: &[u8], data: bool) {
+        let mut i = 0;
+        if data && matches!(self.phase, Phase::Cmd | Phase::Pixel) {
+            if self.pixel_hi.is_some() && i < bytes.len() {
+                self.pixel_byte(bytes[i]);
+                i += 1;
+            }
+            while i + 1 < bytes.len() {
+                let (x0, _, x1, y1) = self.window;
+                let (cx, cy) = (self.cursor.0 as usize, self.cursor.1 as usize);
+                let (wy0, wy1) = (self.window.1, y1);
+                // the common case: the cursor inside the window and the screen, a row to fill
+                if x0 > x1 || wy0 > wy1 || cx >= W || cy >= H || self.cursor.0 > x1 {
+                    self.pixel_byte(bytes[i]);
+                    self.pixel_byte(bytes[i + 1]);
+                    i += 2;
+                    continue;
+                }
+                let m = ((bytes.len() - i) / 2).min(x1 as usize - cx + 1);
+                let row = &mut self.fb[cy * W + cx..cy * W + cx + m];
+                let mut changed = 0u32;
+                for (px, b) in row.iter_mut().zip(bytes[i..i + 2 * m].chunks_exact(2)) {
+                    let v = ((b[0] as u16) << 8) | b[1] as u16;
+                    changed += (*px != v) as u32;
+                    *px = v;
+                }
+                self.revision = self.revision.wrapping_add(changed);
+                self.pixels_in_window += m as u64;
+                i += 2 * m;
+                if self.cursor.0 as usize + m > x1 as usize {
+                    self.cursor.0 = x0;
+                    if self.cursor.1 >= y1 {
+                        self.cursor.1 = wy0;
+                        self.frames += 1;
+                    } else {
+                        self.cursor.1 = self.cursor.1.saturating_add(1);
+                    }
+                } else {
+                    self.cursor.0 += m as u16;
+                }
+            }
+        }
+        for &b in &bytes[i..] {
+            self.feed(b, data);
+        }
+    }
+
     /// One byte on the bus. `data` = D/C pin high.
     pub fn feed(&mut self, byte: u8, data: bool) {
         #[allow(unreachable_patterns)]
@@ -221,6 +269,38 @@ fn lcd_trace_on() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn feed_slice_matches_feed() {
+        let mut seed = 12345u32;
+        let mut rnd = move || { seed = seed.wrapping_mul(1664525).wrapping_add(1013904223); (seed >> 16) as u8 };
+        for round in 0..300 {
+            let (mut a, mut b) = (Lcd::new(), Lcd::new());
+            for _ in 0..8 {
+                let kind = rnd() % 4;
+                let bytes: Vec<u8> = match kind {
+                    // window commands with small or odd values
+                    0 => vec![0x2a, 0, rnd() % 5, 0, 10 + rnd() % 3 + (round % 3) as u8 * 230],
+                    1 => vec![0x2b, 0, rnd() % 5, 0, 10 + rnd() % 3],
+                    2 => vec![0x2c],
+                    _ => (0..rnd() as usize * 5).map(|_| rnd() % 4).collect(),
+                };
+                for (j, &x) in bytes.iter().enumerate() {
+                    // a command's arguments are data bytes, its first byte alone is a command
+                    let data = kind == 3 || (kind < 2 && j > 0);
+                    a.feed(x, data);
+                }
+                if kind == 3 {
+                    b.feed_slice(&bytes, true);
+                } else {
+                    for (j, &x) in bytes.iter().enumerate() {
+                        b.feed_slice(&[x], kind < 2 && j > 0);
+                    }
+                }
+                assert!(a.fb == b.fb && (a.revision, a.frames, a.pixels_in_window, a.cursor) == (b.revision, b.frames, b.pixels_in_window, b.cursor), "round {round} kind {kind}");
+            }
+        }
+    }
+
     #[test]
     fn revision_tracks_partial_updates_and_reset() {
         let mut lcd = Lcd::new();

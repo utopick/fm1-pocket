@@ -43,7 +43,9 @@ fn cpu_time() -> std::time::Duration {
 fn plays_a_song() {
     let Ok(path) = std::env::var("FM1_FWSC") else { eprintln!("FM1_FWSC not set: skipped"); return };
     let pkg = std::fs::read(path).unwrap();
-    with(|h| h.boot("{\"seq\":1,\"mhz\":240}", &pkg, &[], &[]));
+    // (FM1_THREADS=2: core 1 on its own thread; its audio then differs from the reference run to run)
+    let threads = std::env::var("FM1_THREADS").unwrap_or_else(|_| "1".into());
+    with(|h| h.boot(&format!("{{\"seq\":1,\"mhz\":240,\"threads\":{threads}}}"), &pkg, &[], &[]));
     // PLAY at 2 s of emulated time, the script bench.mjs takes too (the page sends keys as messages)
     let script = b"2000:PLAY";
     let p = w::fm1_alloc(script.len() as u32);

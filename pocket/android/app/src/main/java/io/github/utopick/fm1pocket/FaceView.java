@@ -197,7 +197,7 @@ final class FaceView extends View implements Choreographer.FrameCallback {
             if (load == -2 || peak == -2) lastStat = 0; // busy: the next frame asks again
             else {
                 String st = load < 0 ? (jit ? "JIT" : "NO JIT") : load + "% max " + peak + "%",
-                    st2 = load < 0 ? "" : (jit ? "JIT " : "NO JIT ") + Math.round(AudioThread.bufferFrames / 44.1f) + " ms";
+                    st2 = load < 0 ? "" : (jit ? "JIT " : "NO JIT ") + (Native.threads() > 1 ? "2 THREADS " : "") + Math.round(AudioThread.bufferFrames / 44.1f) + " ms";
                 statMoved = !st.equals(stat) || !st2.equals(stat2);
                 stat = st;
                 stat2 = st2;

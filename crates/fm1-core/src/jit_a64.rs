@@ -209,6 +209,13 @@ impl Asm {
     pub fn str_u(&mut self, rt: Reg, rn: Reg, wm: Reg) { self.e(0xb820_4800 | wm << 16 | rn << 5 | rt); }
     pub fn strh_u(&mut self, rt: Reg, rn: Reg, wm: Reg) { self.e(0x7820_4800 | wm << 16 | rn << 5 | rt); }
     pub fn strb_u(&mut self, rt: Reg, rn: Reg, wm: Reg) { self.e(0x3820_4800 | wm << 16 | rn << 5 | rt); }
+    /// Release stores and acquire loads, `[xn]` only (the two-thread mode's RAM accesses)
+    pub fn stlr(&mut self, rt: Reg, rn: Reg) { self.e(0x889f_fc00 | rn << 5 | rt); }
+    pub fn stlrh(&mut self, rt: Reg, rn: Reg) { self.e(0x489f_fc00 | rn << 5 | rt); }
+    pub fn stlrb(&mut self, rt: Reg, rn: Reg) { self.e(0x089f_fc00 | rn << 5 | rt); }
+    pub fn ldar(&mut self, rt: Reg, rn: Reg) { self.e(0x88df_fc00 | rn << 5 | rt); }
+    pub fn ldarh(&mut self, rt: Reg, rn: Reg) { self.e(0x48df_fc00 | rn << 5 | rt); }
+    pub fn ldarb(&mut self, rt: Reg, rn: Reg) { self.e(0x08df_fc00 | rn << 5 | rt); }
     pub fn strb(&mut self, rt: Reg, rn: Reg, off: u32) { debug_assert!(off < 4096); self.e(0x3900_0000 | off << 10 | rn << 5 | rt); }
     /// `stp xt1, xt2, [sp, #-imm]!`
     pub fn stp_pre(&mut self, rt1: Reg, rt2: Reg, rn: Reg, off: i32) { self.e(0xa980_0000 | (((off / 8) as u32) & 0x7f) << 15 | rt2 << 10 | rn << 5 | rt1); }
