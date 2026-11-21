@@ -107,10 +107,30 @@ class Fm1 extends AudioWorkletProcessor {
     // the module arrives as bytes: a compiled WebAssembly.Module does not cross into the
     // AudioWorklet's scope (Chrome delivers it as a messageerror). Compiled once, here: on a
     // phone compiling it again on every firmware change takes a noticeable while
-    if (!this.module) this.module = await WebAssembly.compile(m.wasm);
-    let x;
+    let x, threaded = false;
     this.jit = { regions: 0, failed: 0, error: "", bytes: 0, tableSlots: 0, compileMs: 0, compileMaxMs: 0 };
-    x = (await WebAssembly.instantiate(this.module, { env: jitImports(() => x, this.jit) })).exports;
+    if (m.mt) {
+      // the threaded build, on a shared memory the page made: core 1 runs in a Worker on the same memory (core1-worker.js).
+      // Any failure here falls back to the one-thread module below.
+      try {
+        this.mtModule ??= await WebAssembly.compile(m.mt.wasm);
+        const memory = m.mt.memory;
+        x = { ...(await WebAssembly.instantiate(this.mtModule, { env: { memory, ...jitImports(() => x, this.jit) } })).exports, memory };
+        // this thread's thread-local block, and the Worker's with its own stack (a stack pointer is per instance)
+        const block = () => { const n = x.__tls_size.value + x.__tls_align.value, p = x.fm1_alloc(n); return (p + x.__tls_align.value - 1) & -x.__tls_align.value; };
+        x.__wasm_init_tls(block());
+        const STACK = 1 << 20;
+        this.core1 = { sp: x.fm1_alloc(STACK) + STACK, tls: block() };
+        threaded = true;
+      } catch (err) {
+        x = null;
+        this.port.postMessage({ type: "note", seq: m.seq, message: `threaded core unavailable: ${err}` });
+      }
+    }
+    if (!x) {
+      if (!this.module) this.module = await WebAssembly.compile(m.wasm);
+      x = (await WebAssembly.instantiate(this.module, { env: jitImports(() => x, this.jit) })).exports;
+    }
     if (token !== this.bootToken) return;
     // hot code compiled to WebAssembly, a few blocks per quantum at most (?jit=0: interpreter only)
     x.fm1_jit(m.jit === false ? 0 : 1, 16);
@@ -164,7 +184,8 @@ class Fm1 extends AudioWorkletProcessor {
     this.flashChangedAt = this.lastSnapshot = now();
     const base = new Uint8Array(x.memory.buffer, x.fm1_flash_base(), x.fm1_flash_len()).slice();
     const flash = new Uint8Array(x.memory.buffer, x.fm1_flash(), x.fm1_flash_len()).slice();
-    this.port.postMessage({ type: "booted", seq: m.seq, board: this.board, revision: this.flashRevision, base, flash }, [base.buffer, flash.buffer]);
+    if (threaded) this.port.postMessage({ type: "core1", seq: m.seq, ...this.core1 });   // the page starts the Worker
+    this.port.postMessage({ type: "booted", seq: m.seq, threaded, board: this.board, revision: this.flashRevision, base, flash }, [base.buffer, flash.buffer]);
   }
 
   observeFlash() {
@@ -258,7 +279,7 @@ class Fm1 extends AudioWorkletProcessor {
         short: this.short, halted: x.fm1_halted(), jit: this.jit, pads, playing: this.playing,
         busy: this.lastTiming?.busy ?? 0, worst: this.lastTiming?.worst ?? 0,
         emulated: this.lastTiming?.emulated ?? 0, idle: this.lastTiming?.idle ?? 0, starved: this.lastTiming?.starved ?? 0,
-        quanta: this.lastTiming?.quanta ?? 0, frames: this.lastTiming?.frames ?? n }, transfer);
+        core1: x.fm1_core1_beats?.() ?? -1, quanta: this.lastTiming?.quanta ?? 0, frames: this.lastTiming?.frames ?? n }, transfer);
       const took = now() - t0;
       // busy: ms of wall clock the interval's quanta took; emulated: ms of emulated time they ran,
       // idle: of which idle skipping jumped over (cost nothing); starved: audio blocks the firmware

@@ -13,7 +13,7 @@ read = lambda p, mode="r": open(os.path.join(here, p), mode, **({} if "b" in mod
 b64 = lambda p: base64.b64encode(read(p, "rb")).decode()
 sha = lambda p: hashlib.sha256(read(p, "rb")).hexdigest()
 page = read("src/app.html")
-parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
+parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@CORE1WORKER@*/": read("vendor/core1-worker.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
          "/*@MIDIDEVICE@*/": read("vendor/midi-device.js"),  # the Pocket apps' MIDI device panel, the same file as theirs
          "/*@LICENSE_EMU@*/": read("vendor/LICENSE-fm1-emu").replace("&", "&amp;").replace("<", "&lt;"),
          "/*@LICENSE_MBOOT@*/": read("vendor/mboot/LICENSE-m-bootloader").replace("&", "&amp;").replace("<", "&lt;"),

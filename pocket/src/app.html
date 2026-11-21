@@ -761,6 +761,7 @@
 /*@MIDIDEVICE@*/
     </script>
     <script type="text/plain" id="worklet">/*@WORKLET@*/</script>
+    <script type="text/plain" id="core1worker">/*@CORE1WORKER@*/</script>
     <script type="application/json" id="fwlist">/*@FIRMWARES@*/</script>
     <script type="text/plain" id="wasm">/*@WASM@*/</script>
     <script>
@@ -1203,6 +1204,44 @@
         }
       }
       const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+      // Two threads: where the page is cross-origin isolated (sw.js adds the headers from the second visit on) and the threaded
+      // core (vendor/fm1_web_mt.wasm, web/build-threads.sh) is there, the audio thread's instance runs on a shared memory and
+      // core 1 runs in a Worker on it. Anywhere else, or if anything here fails, the one-thread core plays as before.
+      // window.FM1Threads says which: mode "threads" or "single", and core 1's heartbeat count.
+      const thr = (window.FM1Threads = { mode: "single", beats: 0, why: "" });
+      let mtBytes, mtMem = null, core1 = null;
+      async function threadedCore() {
+        if (mtBytes === undefined) {
+          mtBytes = null;
+          try {
+            if (!window.crossOriginIsolated || typeof SharedArrayBuffer === "undefined" || /[?&]threads=0/.test(location.search)) throw Error("this page is not cross-origin isolated");
+            const r = await fetch("vendor/fm1_web_mt.wasm");
+            if (!r.ok) throw Error("no threaded core (" + r.status + ")");
+            mtBytes = await r.arrayBuffer();
+          } catch (e) {
+            thr.why = e.message;
+          }
+        }
+        if (!mtBytes) return null;
+        try {
+          return (mtMem = new WebAssembly.Memory({ initial: 256, maximum: 8192, shared: true })), { wasm: mtBytes, memory: mtMem };
+        } catch (e) {
+          return (thr.why = e.message), null;
+        }
+      }
+      function stopCore1() {
+        core1?.terminate();
+        core1 = null;
+      }
+      function startCore1(m) { // the audio thread set up core 1's stack and thread-local block in the shared memory: its Worker runs on it
+        stopCore1();
+        const url = URL.createObjectURL(new Blob([$("#core1worker").textContent], { type: "text/javascript" }));
+        core1 = new Worker(url);
+        URL.revokeObjectURL(url);
+        core1.onmessage = (e) => e.data.type === "error" && (thr.why = "core 1: " + e.data.message);
+        core1.onerror = (e) => (thr.why = "core 1: " + e.message);
+        core1.postMessage({ wasm: mtBytes, memory: mtMem, sp: m.sp, tls: m.tls });
+      }
       async function boot(fresh) {
         const f = current(),
           mine = ++seq;
@@ -1225,7 +1264,10 @@
             o += 4 + SECTOR;
           }
           status("booting " + f.name + "…");
-          node.port.postMessage({ type: "boot", seq: mine, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
+          stopCore1();
+          const mt = window.FM1Native ? null : await threadedCore();
+          if (mine !== seq || !node) return;
+          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;
@@ -1297,9 +1339,12 @@
       function onWorklet(e) {
         const m = e.data;
         if (m.seq !== seq) return;
-        if (m.type === "frame") (showFrame(m), keepUp(m), m.peak !== undefined && (peak = Math.max(peak * 0.9, m.peak)));
+        if (m.type === "core1") startCore1(m);
+        else if (m.type === "note") thr.why = m.message;
+        else if (m.type === "frame") (thr.beats = m.core1, thr.jit = m.jit, showFrame(m), keepUp(m), m.peak !== undefined && (peak = Math.max(peak * 0.9, m.peak)));
         else if (m.type === "booted") {
           run.base = m.base;
+          thr.mode = m.threaded ? "threads" : "single";
           Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
           send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
           status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
@@ -1391,6 +1436,7 @@
         if (ac) (clearInterval(ac._peak), ac.close());
         if (nat) send({ type: "cancel-boot" }); // the native core has no AudioContext to close: this stops it (and the app lets the screen sleep)
         clearInterval(nat);
+        stopCore1();
         ac = nat = node = run = null;
         allUp();
         dark();

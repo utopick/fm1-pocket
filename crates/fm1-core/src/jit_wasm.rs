@@ -2609,7 +2609,12 @@ fn module(body: &[u8]) -> Vec<u8> {
     uleb(&mut im, 4);
     name(&mut im, "env");
     name(&mut im, "memory");
-    im.extend_from_slice(&[0x02, 0x00, 0x00]);
+    if cfg!(target_feature = "atomics") {
+        // the threaded build's memory is shared, and an import must say so (and the same maximum: 8192 pages, web/build-threads.sh)
+        im.extend_from_slice(&[0x02, 0x03, 0x00, 0x80, 0x40]);
+    } else {
+        im.extend_from_slice(&[0x02, 0x00, 0x00]);
+    }
     for (n, ty) in [("h_read", TY_READ), ("h_write", TY_WRITE), ("h_op", TY_OP)] {
         name(&mut im, "env");
         name(&mut im, n);
