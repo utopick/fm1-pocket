@@ -150,3 +150,11 @@ node --test pocket/tests/real-fm1.test.js pocket/tests/tether.test.js
 - `vendor/midi-device.js` is shared with the other Pocket apps: keep it identical.
 - `python3 pocket/update-firmwares.py` refreshes the built-in firmware list (used when offline).
 - `firmware/autobuild.sh` builds Tether into `vendor/tether.fwsc` (needs Docker on a Mac). Its protocol is in `firmware/PROTOCOL.md`.
+
+### Two threads in the browser
+
+The page can run the FM-1's second core on its own thread. It needs a threaded build of the emulator, made with `web/build-threads.sh` (a nightly Rust and its `rust-src`), whose output `fm1_web_mt.wasm` goes into `pocket/vendor/`. It is not committed yet, and the page works without it.
+
+GitHub Pages cannot send the headers that shared memory needs, so `sw.js` adds them to the page itself (`Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: credentialless`). The service worker only takes over after the first visit, so the first visit runs on one thread and the next ones on two. Where the page is not isolated, the threaded file is missing, or anything in starting it fails, the one-thread core plays as before. `?threads=0` forces that. In the console, `FM1Threads` says which mode is running and counts the second thread's heartbeats.
+
+`python pocket/tests/threads.py path/to/firmware.fwsc` checks all of it in Chrome (set `FM1_MT_WASM` to the build's output). Safari has no `credentialless`, so it stays on one thread; Chrome and Edge, on a computer or Android, can use two.
