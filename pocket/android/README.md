@@ -1,9 +1,19 @@
 # FM1.Pocket for Android
 
-This is FM1.Pocket as an Android app, made so that an old phone can have a second life as an FM-1. The app is the same
-page as the one on the web, shown in a WebView, but the emulator and the sound run as native code instead of
-WebAssembly. The emulator core is the same Rust code, and on an arm64 phone it uses its native JIT, which on our
-measurements runs a heavy firmware about one and a half times faster than the WebAssembly version.
+This is FM1.Pocket as an Android app, made so that a phone, old or new, can play the FM-1's firmwares as smoothly as the
+real thing. The app is the same page as the one on the web, shown in a WebView, but the emulator and the sound run as
+native code instead of WebAssembly. The emulator core is the same Rust code, and on an arm64 phone it uses its native
+JIT. On a Galaxy S23 it plays even 386DX, the heaviest firmware we know, at the real FM-1's 240 MHz without a break in
+the sound or a delay on the keys, so the app starts at 240 MHz (the web page starts at 100).
+
+The FM-1's chip has two cores, and some firmwares (386DX, Bubba Machine) use the second one. The app runs that core on
+a second thread of the phone, so a burst of work on it no longer holds up the sound. A firmware whose second core talks
+to the chip all the time, as Bubba Machine's FreeRTOS does, goes back to one thread by itself, because there the threads
+would spend more time waiting for each other than they save. How it works is described at the top of
+[`crates/fm1-soc/src/mt.rs`](../../crates/fm1-soc/src/mt.rs).
+
+MIDI keyboards work as on the web, and so does a real FM-1 over USB: REAL FM-1 can install firmwares, and with Tether
+on the FM-1 the app sends its sound to the FM-1's speaker and headphone output.
 
 It needs a 64-bit phone (arm64-v8a) with Android 7.0 or newer, and it plays in landscape.
 
@@ -25,7 +35,8 @@ To build on your own machine, put the library in `app/src/main/jniLibs/arm64-v8a
 
 ## Installing it on an old phone
 
-Download the artifact from the Actions run, unzip it, and copy the `.apk` to the phone, or open the link on the phone itself.
+Download the APK from the [FM1.Pocket for Android release](https://github.com/utopick/fm1-pocket/releases/tag/android-v1.0)
+on the phone itself, or copy it over from a computer. A newer build can also come from an Actions run (unzip the artifact).
 Open the file, and when Android asks, allow your file manager or browser to install apps from unknown sources. After
 that, FM1.Pocket appears like any other app. Updating means installing a newer APK over it, and as long as it is signed
 with the same key your saved firmwares stay. A debug APK from a different run is signed with a different debug key, so
@@ -49,7 +60,11 @@ waits for the sound card, the sound card sets the pace, as it does in the browse
 
 ## What is not there yet
 
-Android MIDI keyboards are not connected to the app yet (the web page's MIDI needs a browser feature the WebView doesn't
-have), and neither is using a real FM-1 over USB, so REAL FM-1 and Tether do nothing here. The options for choosing the
-sound output and for installing the web app are hidden. There are no settings of its own, the app is not on Google Play
-or F-Droid, and the only build is for arm64. The Java side compiles, but the app has not been run on a real device yet.
+The app is not on Google Play or F-Droid, the only build is for arm64, and without the signing secrets above each build
+has its own debug key. The options for choosing the sound output and for installing the web app are hidden, because the
+app picks a USB output by itself and is already installed. It has its own play screen drawn natively (`FaceView.java`),
+but it is switched off (`FACE = false` in `MainActivity.java`), because on a Galaxy S23 the page alone plays better.
+
+To compare one thread with two, open the app's page in Chrome's remote debugging (`chrome://inspect`) and type
+`FM1Native.threads(1)` or `FM1Native.threads(2)` in the console. The choice is kept, and it takes effect when the
+firmware next starts.
