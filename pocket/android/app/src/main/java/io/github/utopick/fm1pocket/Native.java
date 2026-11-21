@@ -21,6 +21,8 @@ final class Native {
     static native int load();
     /** The highest load of a 1/30 s stretch since the last call, in percent (the bursts the smoothed load hides); -2 when busy. */
     static native int peakLoad();
+    /** 2 when core 1 of the running firmware has its own thread, else 1. */
+    static native int threads();
     /** Whether the native JIT can get executable memory (else the emulator interprets, much slower). */
     static native boolean jitMemory();
 

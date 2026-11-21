@@ -143,6 +143,8 @@ impl Host {
         let copy = |b: &[u8]| { let p = w::fm1_alloc(b.len() as u32); unsafe { std::ptr::copy_nonoverlapping(b.as_ptr(), p, b.len()) }; p };
         // native: switches on the native JIT (the wasm JIT's per-quantum limit means nothing here)
         w::fm1_jit(!matches!(m.get("jit"), Some(Json::Bool(false))) as u32, 16);
+        // "threads":2: core 1 on its own thread, for a firmware that releases it (the default is one thread: the reference)
+        w::fm1_threads(m.num("threads").unwrap_or(1.0) as u32);
         w::fm1_flash_part((m.str("chip") == Some("uc25hq80")) as u32);
         let ahead = m.num("ahead").unwrap_or(AHEAD_FRAMES);
         w::fm1_ahead(ahead as u32);

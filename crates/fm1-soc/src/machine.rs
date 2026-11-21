@@ -827,6 +827,9 @@ pub fn run_dual(
         let resets = soc.resets;
         done = run_dual_from(cpu1, soc, done, n, ram_size, jit_on, &mut run0)?;
         if soc.resets == resets {
+            if std::mem::take(&mut soc.mt_retry) {
+                continue; // (the two-thread mode ended: on in one thread)
+            }
             break;
         }
         *cpu1 = None;
@@ -866,6 +869,9 @@ fn run_dual_from(
     }
     let Some(c1) = cpu1.as_mut() else { return Ok(done) };
     soc.periph.room_cap = SLICE as u64;
+    if soc.mt.is_some() {
+        return run_dual_mt(c1, soc, done, n, resets, run0);
+    }
     soc.cpu1_running = true;
     while done < n {
         // a slice of cpu0, then cpu1 for the cycles it took. cpu0 stops short of the slice where
@@ -920,6 +926,100 @@ fn run_dual_from(
                 }
             }
         }
+    }
+    Ok(done)
+}
+
+/// Stop core 1's thread (the two-thread mode, `Soc::set_threads`) where it is. It runs on between
+/// calls to `run_dual` (core 1 alone touches only RAM and XIP without core 0's say-so), so call
+/// this before anything outside reads or changes core 1 itself or moves the machine. Nothing to do in the one-thread mode.
+pub fn settle(soc: &Soc) {
+    if let Some(mt) = &soc.mt {
+        mt.shared.quiesce();
+    }
+}
+
+/// A stretch of this many cycles (5 ms of FM-1 time) over which core 1 may reach the chip this many times (20 a ms, three stretches running: 386DX's core 1 does 6 in all).
+const FALLBACK_CYCLES: u64 = 1_200_000;
+const FALLBACK_GATES: u64 = 100;
+
+/// `run_dual_from` with core 1 on its own thread (`mt.rs`): cpu0 runs its slices as ever, and
+/// before each it tells the thread the time and core 1's interrupts, and waits if the thread has
+/// fallen a window behind. No hand-overs: the cores meet in the atomic locks.
+fn run_dual_mt(
+    c1: &mut Cpu,
+    soc: &mut Soc,
+    mut done: u32,
+    n: u32,
+    resets: u32,
+    run0: &mut impl FnMut(&mut Soc, u32) -> Result<u32, String>,
+) -> Result<u32, String> {
+    let sh = std::sync::Arc::clone(&soc.mt.as_ref().expect("mt").shared);
+    soc.cpu1_running = false; // (no waits: a lock held is retried, not handed over)
+    if soc.cpu1_fault.is_none() {
+        soc.mt_start(c1);
+    }
+    // core 1's accesses to what is not RAM wait for core 0's slice boundaries: a firmware whose
+    // core 1 does a great deal of them (Bubba Machine's kernel ticks: over 100k a second) runs
+    // far slower in this mode, so past FALLBACK_GATES a millisecond the machine goes back to one thread
+    let mut watch = sh.watch.lock().unwrap_or_else(|e| e.into_inner());
+    if watch.0 == 0 {
+        *watch = (soc.periph.cycles, sh.gates(), 0);
+    }
+    let (mut check_at, mut check_gates, mut busy) = *watch;
+    drop(watch);
+    while done < n {
+        if soc.periph.cycles - check_at >= FALLBACK_CYCLES {
+            let g = sh.gates();
+            busy = if g - check_gates > FALLBACK_GATES { busy + 1 } else { 0 };
+            if busy >= 3 {
+                sh.quiesce();
+                let (owner, idle) = sh.hand_back();
+                soc.lock_owner = owner;
+                soc.cpu1_idle = idle;
+                c1.reset_blocks();
+                soc.mt = None;
+                soc.mt_retry = true;
+                eprintln!("two threads: core 1 reaches the chip {} times in {} ms: back to one thread", g - check_gates, (soc.periph.cycles - check_at) * 1000 / soc.periph.hz.max(1));
+                return Ok(done);
+            }
+            (check_at, check_gates) = (soc.periph.cycles, g);
+            *sh.watch.lock().unwrap_or_else(|e| e.into_inner()) = (check_at, check_gates, busy);
+        }
+        if let Some(e) = sh.take_fault() {
+            sh.quiesce();
+            if !soc.cpu1_survives {
+                return Err(e);
+            }
+            eprintln!("cpu1 stopped at {} ms: {e} (the chip's core would fault; cpu0 goes on alone)", soc.periph.ms());
+            soc.cpu1_fault = Some(e);
+            sh.release_lock_of_1();
+        }
+        if soc.cpu1_fault.is_none() {
+            sh.a_sync(soc);
+        }
+        let k = (n - done).min(SLICE);
+        let ran = if soc.core_paused(0) && !soc.reset_due() {
+            soc.advance(k as u64); // held by cpu1 (C0_CON bit 2): time runs on
+            if soc.reset_due() {
+                run0(soc, 0)?; // (a reset is cpu0's to carry out, held or not)
+            }
+            k
+        } else {
+            match run0(soc, k) {
+                Ok(r) => r,
+                Err(e) => {
+                    sh.quiesce();
+                    return Err(e);
+                }
+            }
+        };
+        if soc.resets != resets {
+            sh.quiesce();
+            return Ok(done + ran);
+        }
+        // (short of the slice: a latched release, see run_blocks; the rest of the slice is forfeited)
+        done += k.max(ran);
     }
     Ok(done)
 }
@@ -2134,5 +2234,75 @@ mod tests {
             run_dual(&mut b1, &mut sb, 8192, 1 << 20, false, |s, k| run_blocks(&mut b, s, k, &mut tb)).unwrap();
             assert_eq!((a.pc, a.insn_count, sa.periph.cycles), (b.pc, b.insn_count, sb.periph.cycles), "call {i}");
         }
+    }
+
+    // ---- the two-thread mode (mt.rs): the cores meet in real atomic locks
+
+    /// `r<d> = [r<b>]`
+    fn ld(d: u8, base: u8) -> [u8; 2] {
+        (0x6000u16 | d as u16 | (base as u16) << 4).to_le_bytes()
+    }
+
+    /// cpu0 and cpu1 each go round: take the lock (`take`, `give`), add one to the word WORD+0x20 the
+    /// lock guards (a read, an add and a write: it loses updates unless the lock is exclusive),
+    /// then one to their own count (PASSES for cpu0, ROUNDS for cpu1), without it.
+    fn locked_counters(take: &[u8], give: &[u8], jit: bool, slices: u32) -> (u32, u32, u32) {
+        // r1 the guarded word, r2 the lock byte, r3 the core's own count, r6 the loop start
+        let body = |_top: u32| [take, &ld(5, 1), &add1(5), &st(1, 5), give, &ld(7, 3), &add1(7), &st(3, 7), &goto_r(6)].concat();
+        let cpu0 = body(XIP_BASE);
+        let e = XIP_BASE + cpu0.len() as u32;
+        let pre = [imm32(6, e + 26), imm32(1, WORD + 0x20), imm32(2, WORD), imm32(3, ROUNDS), goto_r(6).to_vec()].concat();
+        assert_eq!(pre.len(), 26);
+        let cpu1 = [pre, body(e + 26)].concat();
+        let (mut cpu, mut soc) = machine(&[&cpu0[..], &cpu1].concat(), &[(1, WORD + 0x20), (2, WORD), (3, PASSES), (6, XIP_BASE)], false);
+        assert!(soc.set_threads(2));
+        cpu.jit_on = jit;
+        soc.take_boot(&cpu);
+        soc.write32(0x01c7_fff8, XIP_BASE + cpu0.len() as u32);
+        soc.write32(0x10008, 8);
+        let (mut c1, mut t) = (None, false);
+        for _ in 0..slices / 20 {
+            // (20 slices a call: starting and stopping the thread takes a scheduler's wake-up each)
+            run_dual(&mut c1, &mut soc, 20 * SLICE, 1 << 20, jit, |s, k| run_blocks(&mut cpu, s, k, &mut t)).unwrap();
+            settle(&soc);
+            assert!(soc.cpu1_fault.is_none());
+        }
+        let _ = body;
+        (word(&soc, WORD + 0x20), word(&soc, PASSES), word(&soc, ROUNDS))
+    }
+
+    #[test]
+    fn mt_hardware_lock_is_exclusive() {
+        for jit in [false, true] {
+            for round in 0..10 {
+                let (shared, mine0, mine1) = locked_counters(&LOCKSET, &LOCKCLR, jit, 300);
+                assert!(mine0 > 100 && mine1 > 100, "both cores went round: {mine0} {mine1} (jit {jit}, round {round})");
+                // (a core may stand between its two additions where the run stopped)
+                assert!(shared.abs_diff(mine0 + mine1) <= 2, "an update was lost: {shared} against {mine0} + {mine1} (jit {jit}, round {round})");
+            }
+        }
+    }
+
+    #[test]
+    fn mt_byte_lock_is_exclusive() {
+        // `testset b[r2]; ifeq goto` back, and the word cleared to release it (r0 is 0)
+        let take = [&testset(2)[..], &IFEQ_BACK].concat();
+        for jit in [false, true] {
+            for round in 0..10 {
+                let (shared, mine0, mine1) = locked_counters(&take, &st(2, 0), jit, 300);
+                assert!(mine0 > 100 && mine1 > 100, "both cores went round: {mine0} {mine1} (jit {jit}, round {round})");
+                assert!(shared.abs_diff(mine0 + mine1) <= 2, "an update was lost: {shared} against {mine0} + {mine1} (jit {jit}, round {round})");
+            }
+        }
+    }
+
+    #[test]
+    fn mt_the_counter_test_sees_a_lost_update() {
+        // (the control: with no lock the cores really do run at once, and the sum comes out short)
+        let lost = (0..10).any(|_| {
+            let (shared, a, b) = locked_counters(&[], &[], false, 300);
+            shared.abs_diff(a + b) > 2
+        });
+        assert!(lost, "no lost update in ten runs without a lock: the cores do not run at the same time");
     }
 }

@@ -236,6 +236,8 @@ pub struct Jit {
     itab: Box<[ITab]>,
     /// compile the checks for `Cpu::stop_pc` / `stop_io` at each body's entry (`Cpu::stop_checks`)
     pub(crate) stops: bool,
+    /// RAM accesses are acquire / release (`Bus::ordered`)
+    pub(crate) ordered: bool,
 }
 
 /// An `itab` entry (generated code reads it: pc at 0, body at 8).
@@ -305,7 +307,7 @@ const HOT: u32 = 32;
 impl Jit {
     pub fn new(profile: bool) -> Option<Jit> {
         let itab = (0..1 << ITAB_BITS).map(itab_empty).collect();
-        Some(Jit { cache: CodeCache::new(64 << 20)?, state: Vec::new(), guards: Vec::new(), profile, itab, stops: false })
+        Some(Jit { cache: CodeCache::new(64 << 20)?, state: Vec::new(), guards: Vec::new(), profile, itab, stops: false, ordered: false })
     }
 
     /// Will `entry` compile block `id` on its next call? (Then `Cpu::then_of` looks for the
@@ -375,7 +377,7 @@ impl Jit {
         }
         let itab = self.itab.as_ptr() as u64;
         let stops = self.stops.then_some(whole);
-        let (code, body) = compile::<B>(ops, swaps, then, pc0, mem, &mut self.guards, self.profile, itab, stops)?;
+        let (code, body) = compile::<B>(ops, swaps, then, pc0, mem, &mut self.guards, self.profile, itab, stops, self.ordered)?;
         let p = self.cache.write(&code)?;
         // SAFETY: body is a byte offset inside the code just written
         let body = unsafe { p.add(body) };
@@ -459,9 +461,24 @@ pub(crate) unsafe fn link(slot: *mut u64, body: *const u8) {
 ///
 /// # Safety
 /// `code` must come from `Jit::entry` for this bus type and the memory `mem` describes.
+#[cfg(test)]
 pub(crate) unsafe fn run<B: Bus>(code: *const u8, cpu: &mut Cpu, bus: &mut B, mem: &JitMem, extra: u32, cap: u32, inside: bool) -> (u32, *mut u64, bool) {
+    unsafe { run_fit(code, cpu, bus, mem, extra, cap, inside, 0) }
+}
+
+/// `run` for a prefix of `need` instructions: one that cannot fit the call's limit would only
+/// enter the code to leave again at once (the code's first check), so it is not entered (a
+/// slice's or a timer's end came a block early about three times in a thousand instructions).
+///
+/// # Safety
+/// As `run`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) unsafe fn run_fit<B: Bus>(code: *const u8, cpu: &mut Cpu, bus: &mut B, mem: &JitMem, extra: u32, cap: u32, inside: bool, need: u32) -> (u32, *mut u64, bool) {
     // instructions this call may run: their ticks ((k - 1) + extra) must all fit tick_room
     let limit = (bus.tick_room() + 1).saturating_sub(extra as u64).min(1 << 30).min(cap as u64) as u32;
+    if need > limit {
+        return (0, std::ptr::null_mut(), false);
+    }
     let mut ctx = Ctx {
         cpu: cpu as *mut Cpu,
         bus: bus as *mut B as *mut (),
@@ -734,6 +751,8 @@ struct Gen<'a> {
     itab: u64,
     /// the runner's stop checks are compiled (`Jit::stops`)
     stops: bool,
+    /// two threads share RAM: compiled loads and stores of it are ldar / stlr, a compile-time choice
+    ordered: bool,
     rc: RegCache,
     /// emitting a probe copy (`emit_ops`): the block's instructions
     probe_copy: Option<u32>,
@@ -937,6 +956,31 @@ impl Gen<'_> {
         };
         self.a.mov(w, POOL[i]);
     }
+    /// The pool register holding guest register r (loaded if it is not), to use as an operand
+    /// in place (no copy through a scratch register).
+    fn rd(&mut self, r: u8) -> Reg {
+        let r = r & 15;
+        let i = match self.slot(r) {
+            Some(i) => i,
+            None => {
+                let i = self.take_slot(r);
+                self.a.ldr(POOL[i], CPU, off_reg(r));
+                i
+            }
+        };
+        POOL[i]
+    }
+    /// The pool register to compute guest register r into (marked changed). Take it after the
+    /// operands: they are the most recently used, so it never evicts one.
+    fn wr(&mut self, r: u8) -> Reg {
+        let r = r & 15;
+        let i = match self.slot(r) {
+            Some(i) => i,
+            None => self.take_slot(r),
+        };
+        self.rc.dirty[i] = true;
+        POOL[i]
+    }
     /// guest register r = w (see `RegCache`)
     fn st_reg(&mut self, w: Reg, r: u8) {
         let r = r & 15;
@@ -1019,6 +1063,52 @@ impl Gen<'_> {
             Op::Shl => a.lslv(0, 0, 1),
             Op::Shr => a.lsrv(0, 0, 1),
             Op::Sar => a.asrv(0, 0, 1),
+        }
+    }
+    /// d = op(x, y)
+    fn alu3(&mut self, op: Op, d: Reg, x: Reg, y: Reg) {
+        let a = &mut self.a;
+        match op {
+            Op::Add => a.add(d, x, y),
+            Op::Sub => a.sub(d, x, y),
+            Op::RSub => a.sub(d, y, x),
+            Op::And => a.and(d, x, y),
+            Op::AndNot => a.bic(d, x, y),
+            Op::Or => a.orr(d, x, y),
+            Op::Xor => a.eor(d, x, y),
+            Op::Mul => a.mul(d, x, y),
+            Op::Shl => a.lslv(d, x, y),
+            Op::Shr => a.lsrv(d, x, y),
+            Op::Sar => a.asrv(d, x, y),
+        }
+    }
+    /// d = op(x, imm): a small add or subtract is one instruction, the rest through w1
+    fn alu3i(&mut self, op: Op, d: Reg, x: Reg, v: u32) {
+        match op {
+            Op::Add => self.add_imm(d, x, v),
+            Op::Sub => self.add_imm(d, x, v.wrapping_neg()),
+            _ => {
+                self.a.mov32(1, v);
+                self.alu3(op, d, x, 1);
+            }
+        }
+    }
+    /// The register of an A4/BitBr right-hand side (see `rhs`): a guest register in place, else w1
+    fn rhs_reg(&mut self, rk: u8, rv: u32) -> Reg {
+        if rk == 0 {
+            self.rd(rv as u8)
+        } else {
+            self.rhs(rk, rv);
+            1
+        }
+    }
+    /// Flags for a compare of w(x) with an immediate.
+    fn cmp_i(&mut self, x: Reg, v: u32) {
+        if v < 4096 {
+            self.a.cmp_imm(x, v);
+        } else {
+            self.a.mov32(1, v);
+            self.a.cmp(x, 1);
         }
     }
     /// w1 = an A4/BitBr right-hand side: rk 0 register, 1 immediate, 2 `1 << reg`
@@ -1120,6 +1210,22 @@ impl Gen<'_> {
             self.a.mov32(2, len.saturating_sub(w as u32));
             self.a.cmp(3, 2);
             self.a.b_cond(AC::Hi, miss);
+            if self.ordered && base_reg == RAM {
+                // acquire: what the other core published before its flag store is seen after it
+                self.a.add_x(3, RAM, 3);
+                match w {
+                    4 => self.a.ldar(0, 3),
+                    2 => self.a.ldarh(0, 3),
+                    _ => self.a.ldarb(0, 3),
+                }
+                match (w, signed) {
+                    (2, true) => self.a.sxth(0, 0),
+                    (1, true) => self.a.sbfx(0, 0, 0, 8),
+                    _ => {}
+                }
+                self.a.b(done);
+                continue;
+            }
             match (w, signed) {
                 (4, _) => self.a.ldr_u(0, base_reg, 3),
                 (2, false) => self.a.ldrh_u(0, base_reg, 3),
@@ -1145,6 +1251,10 @@ impl Gen<'_> {
 
     /// store(width) of w1 at guest address w0. Inline RAM, else the bus.
     fn store(&mut self, w: u8, idx: u32) {
+        self.store_from(1, w, idx);
+    }
+    /// `store` of w(src) (not w0, w2 or w3)
+    fn store_from(&mut self, src: Reg, w: u8, idx: u32) {
         let (slow, done) = (self.a.label(), self.a.label());
         let mem = *self.mem;
         if w == 2 {
@@ -1160,14 +1270,33 @@ impl Gen<'_> {
             self.a.ldrb_u(2, FLAGS, 2);
             self.a.cbnz(2, slow);
         }
+        if self.ordered {
+            // release: this core's earlier stores are seen before this one (a lock byte or flag)
+            self.a.add_x(3, RAM, 3);
+            match w {
+                4 => self.a.stlr(src, 3),
+                2 => self.a.stlrh(src, 3),
+                _ => self.a.stlrb(src, 3),
+            }
+            self.a.b(done);
+            self.a.bind(slow);
+            self.a.mov(2, src);
+            self.a.mov(1, 0);
+            self.a.mov_x(0, CTX);
+            self.a.add_imm(3, DONE, idx);
+            self.a.mov32(4, w as u32);
+            self.call(self.h_write);
+            self.a.bind(done);
+            return;
+        }
         match w {
-            4 => self.a.str_u(1, RAM, 3),
-            2 => self.a.strh_u(1, RAM, 3),
-            _ => self.a.strb_u(1, RAM, 3),
+            4 => self.a.str_u(src, RAM, 3),
+            2 => self.a.strh_u(src, RAM, 3),
+            _ => self.a.strb_u(src, RAM, 3),
         }
         self.a.b(done);
         self.a.bind(slow);
-        self.a.mov(2, 1);
+        self.a.mov(2, src);
         self.a.mov(1, 0);
         self.a.mov_x(0, CTX);
         self.a.add_imm(3, DONE, idx);
@@ -1332,84 +1461,84 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
     match fast {
         Fast::Nop => {}
         Fast::MovI { d, v } => {
-            g.a.mov32(0, v);
-            g.st_reg(0, d);
+            let x = g.wr(d);
+            g.a.mov32(x, v);
         }
         Fast::Mov { d, s } => {
-            g.ld_reg(0, s);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            if x != y {
+                g.a.mov(y, x);
+            }
         }
         Fast::AddRI { d, s, v } => {
-            g.ld_reg(0, s);
-            g.add_imm(0, 0, v);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            g.add_imm(y, x, v);
         }
         Fast::ShlI { d, s, n } => {
-            g.ld_reg(0, s);
-            g.a.lsl_imm(0, 0, n as u32 & 31);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            g.a.lsl_imm(y, x, n as u32 & 31);
         }
         Fast::SarI { d, s, n } => {
-            g.ld_reg(0, s);
-            g.a.asr_imm(0, 0, n as u32 & 31);
-            g.st_reg(0, d);
+            let x = g.rd(s);
+            let y = g.wr(d);
+            g.a.asr_imm(y, x, n as u32 & 31);
         }
         Fast::Alu3 { d, a, b, op } => {
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(a);
+            let y = g.rd(b);
+            let z = g.wr(d);
+            g.alu3(op, z, x, y);
         }
         Fast::Alu3I { d, a, v, op } => {
-            g.ld_reg(0, a);
-            g.a.mov32(1, v);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(a);
+            let z = g.wr(d);
+            g.alu3i(op, z, x, v);
         }
         Fast::Alu2 { d, b, op } => {
-            g.ld_reg(0, d);
-            g.ld_reg(1, b);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(d);
+            let y = g.rd(b);
+            let z = g.wr(d);
+            g.alu3(op, z, x, y);
         }
         Fast::Alu2I { d, v, op } => {
-            g.ld_reg(0, d);
-            g.a.mov32(1, v);
-            g.alu(op);
-            g.st_reg(0, d);
+            let x = g.rd(d);
+            let z = g.wr(d);
+            g.alu3i(op, z, x, v);
         }
         Fast::A4 { d, s, op, rk, rv } => {
-            g.rhs(rk, rv);
-            g.ld_reg(0, s);
-            g.alu(op);
-            g.st_reg(0, d);
+            let y = g.rhs_reg(rk, rv);
+            let x = g.rd(s);
+            let z = g.wr(d);
+            g.alu3(op, z, x, y);
         }
         Fast::Ext { d, s, part, signed } => {
-            g.ld_reg(0, s);
+            let x = g.rd(s);
+            let y = g.wr(d);
             match (part, signed) {
-                (0, false) => g.a.ubfx(0, 0, 0, 8),
-                (0, true) => g.a.sbfx(0, 0, 0, 8),
-                (1, false) => g.a.ubfx(0, 0, 0, 16),
-                (1, true) => g.a.sbfx(0, 0, 0, 16),
-                (_, false) => g.a.ubfx(0, 0, 16, 16),
-                (_, true) => g.a.sbfx(0, 0, 16, 16),
+                (0, false) => g.a.ubfx(y, x, 0, 8),
+                (0, true) => g.a.sbfx(y, x, 0, 8),
+                (1, false) => g.a.ubfx(y, x, 0, 16),
+                (1, true) => g.a.sbfx(y, x, 0, 16),
+                (_, false) => g.a.ubfx(y, x, 16, 16),
+                (_, true) => g.a.sbfx(y, x, 16, 16),
             }
-            g.st_reg(0, d);
         }
         Fast::MinMax { d, a, b, kind } => {
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
-            g.a.cmp(0, 1);
+            let x = g.rd(a);
+            let y = g.rd(b);
+            let z = g.wr(d);
+            g.a.cmp(x, y);
             let c = match kind { 0 => AC::Lt, 1 => AC::Gt, 2 => AC::Lo, _ => AC::Hi };
-            g.a.csel(0, 0, 1, c);
-            g.st_reg(0, d);
+            g.a.csel(z, x, y, c);
         }
         // ---- branches (always a block's last op)
         Fast::BrI { a, v, cond, target } => {
             let t = g.a.label();
-            g.ld_reg(0, a);
-            g.a.mov32(1, v);
-            g.a.cmp(0, 1);
+            let x = g.rd(a);
+            g.cmp_i(x, v);
             g.a.b_cond(acond(cond), t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1417,9 +1546,8 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BrIEq { a, v, target } | Fast::BrINe { a, v, target } => {
             let t = g.a.label();
-            g.ld_reg(0, a);
-            g.a.mov32(1, v);
-            g.a.cmp(0, 1);
+            let x = g.rd(a);
+            g.cmp_i(x, v);
             g.a.b_cond(if matches!(fast, Fast::BrIEq { .. }) { AC::Eq } else { AC::Ne }, t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1427,9 +1555,9 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BrR { a, b, cond, target } => {
             let t = g.a.label();
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
-            g.cmp(cond.is_float(), 0, 1);
+            let x = g.rd(a);
+            let y = g.rd(b);
+            g.cmp(cond.is_float(), x, y);
             g.a.b_cond(acond(cond), t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1437,9 +1565,9 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BitBr { r, mk, ne, mv, target } => {
             let t = g.a.label();
-            g.rhs(mk, mv);
-            g.ld_reg(0, r);
-            g.a.tst(0, 1);
+            let y = g.rhs_reg(mk, mv);
+            let x = g.rd(r);
+            g.a.tst(x, y);
             g.a.b_cond(if ne { AC::Ne } else { AC::Eq }, t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1447,11 +1575,10 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::DecBr { r, cond, v, target } => {
             let t = g.a.label();
-            g.ld_reg(0, r);
-            g.a.sub_imm(0, 0, 1);
-            g.st_reg(0, r);
-            g.a.mov32(1, v);
-            g.a.cmp(0, 1);
+            let x = g.rd(r);
+            let z = g.wr(r);
+            g.a.sub_imm(z, x, 1);
+            g.cmp_i(z, v);
             g.a.b_cond(acond(cond), t);
             g.chain(next_pc, count);
             g.a.bind(t);
@@ -1474,26 +1601,28 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         // (the multiply-accumulates 7 / 8 read d too, and the rounding conversions other than
         // trunc have no single A64 instruction here: through the interpreter's executor)
         Fast::FOp { d, a, b, op } if matches!(op, 0..=6 | 0x1f | 0x5f | 0x8f | 0x9f) => {
-            g.ld_reg(0, a);
+            let x = g.rd(a);
             match op {
                 0x1f | 0x5f => {
-                    g.a.fmov_s_w(0, 0);
-                    if op == 0x1f { g.a.fcvtzs(0, 0) } else { g.a.fcvtzu(0, 0) }
+                    g.a.fmov_s_w(0, x);
+                    let z = g.wr(d);
+                    if op == 0x1f { g.a.fcvtzs(z, 0) } else { g.a.fcvtzu(z, 0) }
                 }
                 0x8f | 0x9f => {
-                    if op == 0x8f { g.a.scvtf(0, 0) } else { g.a.ucvtf(0, 0) }
-                    g.a.fmov_w_s(0, 0);
+                    if op == 0x8f { g.a.scvtf(0, x) } else { g.a.ucvtf(0, x) }
+                    let z = g.wr(d);
+                    g.a.fmov_w_s(z, 0);
                 }
                 _ => {
-                    g.ld_reg(1, b);
-                    g.a.fmov_s_w(0, 0);
-                    g.a.fmov_s_w(1, 1);
+                    let y = g.rd(b);
+                    g.a.fmov_s_w(0, x);
+                    g.a.fmov_s_w(1, y);
                     let opc = match op { 0 => 0x1e20_2800, 1 => 0x1e20_3800, 2 => 0x1e20_0800, 3 => 0x1e20_1800, 5 => 0x1e20_7800, _ => 0x1e20_6800 };
                     g.a.fop(opc, 0, 0, 1);
-                    g.a.fmov_w_s(0, 0);
+                    let z = g.wr(d);
+                    g.a.fmov_w_s(z, 0);
                 }
             }
-            g.st_reg(0, d);
         }
         Fast::Rts => {
             g.a.ldr(9, CPU, off_rets());
@@ -1512,17 +1641,22 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         // ---- memory
         Fast::Ld { d, b, off, w, signed } => {
             match b {
-                Base::Reg(r) => g.ld_reg(0, r),
-                Base::Sp => g.a.ldr(0, CPU, off_sp()),
+                Base::Reg(r) => {
+                    let x = g.rd(r);
+                    g.add_imm(0, x, off);
+                }
+                Base::Sp => {
+                    g.a.ldr(0, CPU, off_sp());
+                    g.add_imm(0, 0, off);
+                }
             }
-            g.add_imm(0, 0, off);
             g.load(w, signed, idx);
             g.st_reg(0, d);
             bus_used = true;
         }
         Fast::LdW { d, b, off } => {
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, off);
+            let x = g.rd(b);
+            g.add_imm(0, x, off);
             g.load(4, false, idx);
             g.st_reg(0, d);
             bus_used = true;
@@ -1535,27 +1669,32 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             bus_used = true;
         }
         Fast::LdBu { d, b, off } => {
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, off);
+            let x = g.rd(b);
+            g.add_imm(0, x, off);
             g.load(1, false, idx);
             g.st_reg(0, d);
             bus_used = true;
         }
         Fast::St { s, b, off, w } => {
             match b {
-                Base::Reg(r) => g.ld_reg(0, r),
-                Base::Sp => g.a.ldr(0, CPU, off_sp()),
+                Base::Reg(r) => {
+                    let x = g.rd(r);
+                    g.add_imm(0, x, off);
+                }
+                Base::Sp => {
+                    g.a.ldr(0, CPU, off_sp());
+                    g.add_imm(0, 0, off);
+                }
             }
-            g.add_imm(0, 0, off);
-            g.ld_reg(1, s);
-            g.store(w, idx);
+            let v = g.rd(s);
+            g.store_from(v, w, idx);
             bus_used = true;
         }
         Fast::StW { s, b, off } => {
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, off);
-            g.ld_reg(1, s);
-            g.store(4, idx);
+            let x = g.rd(b);
+            g.add_imm(0, x, off);
+            let v = g.rd(s);
+            g.store_from(v, 4, idx);
             bus_used = true;
         }
         Fast::StWSp { s, off } => {
@@ -1566,37 +1705,39 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             bus_used = true;
         }
         Fast::LdIdx { d, b, i, sh, w, signed } => {
-            g.ld_reg(0, b);
-            g.ld_reg(1, i);
-            g.a.add_lsl(0, 0, 1, sh as u32 & 31);
+            let x = g.rd(b);
+            let y = g.rd(i);
+            g.a.add_lsl(0, x, y, sh as u32 & 31);
             g.load(w, signed, idx);
             g.st_reg(0, d);
             bus_used = true;
         }
         Fast::StIdx { s, b, i, sh, w } => {
-            g.ld_reg(0, b);
-            g.ld_reg(1, i);
-            g.a.add_lsl(0, 0, 1, sh as u32 & 31);
-            g.ld_reg(1, s);
-            g.store(w, idx);
+            let x = g.rd(b);
+            let y = g.rd(i);
+            g.a.add_lsl(0, x, y, sh as u32 & 31);
+            let v = g.rd(s);
+            g.store_from(v, w, idx);
             bus_used = true;
         }
         Fast::LdPost { d, b, w, signed, inc } => {
-            g.ld_reg(0, b);
+            let x = g.rd(b);
+            g.a.mov(0, x);
             g.load(w, signed, idx);
             g.st_reg(0, d);
-            g.ld_reg(0, b); // (after the load wrote d, as the interpreter)
-            g.add_imm(0, 0, inc);
-            g.st_reg(0, b);
+            let x = g.rd(b); // (after the load wrote d, as the interpreter)
+            let z = g.wr(b);
+            g.add_imm(z, x, inc);
             bus_used = true;
         }
         Fast::StPost { s, b, w, inc } => {
-            g.ld_reg(0, b);
-            g.ld_reg(1, s);
-            g.store(w, idx);
-            g.ld_reg(0, b);
-            g.add_imm(0, 0, inc);
-            g.st_reg(0, b);
+            let x = g.rd(b);
+            g.a.mov(0, x);
+            let v = g.rd(s);
+            g.store_from(v, w, idx);
+            let x = g.rd(b);
+            let z = g.wr(b);
+            g.add_imm(z, x, inc);
             bus_used = true;
         }
         // (i 16: the immediate increment; else register i's)
@@ -1690,8 +1831,16 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             g.a.ldr(0, CPU, off_sp()); g.add_imm(0, 0, v); g.st_reg(0, d);
         }
         Fast::Mov2 { dh, dl, sh, sl } => {
-            g.ld_reg(0, sh); g.ld_reg(1, sl);
-            g.st_reg(0, dh); g.st_reg(1, dl);
+            let (x, y) = (g.rd(sh), g.rd(sl));
+            let (zh, zl) = (g.wr(dh), g.wr(dl));
+            // (a source may be the other half's destination: the copies go through w0 / w1)
+            if zh == y || zl == x {
+                g.a.mov(0, x); g.a.mov(1, y);
+                g.a.mov(zh, 0); g.a.mov(zl, 1);
+            } else {
+                if zh != x { g.a.mov(zh, x); }
+                if zl != y { g.a.mov(zl, y); }
+            }
         }
         Fast::Mov2I { dh, dl, v } => {
             g.a.mov32(0, v); g.st_reg(0, dl);
@@ -1699,11 +1848,12 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         }
         Fast::BitExt { d, s, p, l, signed } => {
             let (p, l) = (p as u32 & 31, l as u32 & 31);
-            g.ld_reg(0, s); g.a.lsr_imm(0, 0, p);
+            let x = g.rd(s);
+            let z = g.wr(d);
+            g.a.lsr_imm(z, x, p);
             if l != 0 {
-                if signed { g.a.sbfx(0, 0, 0, l); } else { g.a.ubfx(0, 0, 0, l); }
+                if signed { g.a.sbfx(z, z, 0, l); } else { g.a.ubfx(z, z, 0, l); }
             }
-            g.st_reg(0, d);
         }
         Fast::BitIns { d, s, p, l } => {
             let (p, l) = (p as u32 & 31, l as u32 & 31);
@@ -1761,6 +1911,21 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
             g.a.str(0, CPU, off_sp());
             g.ind_brk(KEEP, count, true);
         }
+        Fast::Un { d, s, k } if k <= 4 => {
+            let x = g.rd(s);
+            let z = g.wr(d);
+            match k {
+                0 => g.a.mvn(z, x),
+                1 => g.a.neg(z, x),
+                // (i32::MIN stays i32::MIN, as wrapping_abs)
+                2 => {
+                    g.a.cmp_imm(x, 0);
+                    g.a.cneg(z, x, AC::Lt);
+                }
+                3 => g.a.rev(z, x),
+                _ => g.a.clz(z, x),
+            }
+        }
         Fast::Un { d, s, k } => {
             g.ld_reg(0, s);
             match k {
@@ -1794,19 +1959,19 @@ fn emit_op<B: Bus>(g: &mut Gen, fast: Fast, idx: u32, next_pc: u32, profile: boo
         Fast::Div { d, a, b, k } => {
             // sdiv / udiv give 0 for a divisor of 0 and i32::MIN for i32::MIN / -1, as the
             // interpreter; a remainder is a - q * b, and 0 for a divisor of 0
-            g.ld_reg(0, a);
-            g.ld_reg(1, b);
+            let (x, y) = (g.rd(a), g.rd(b));
             if k == 0 || k == 2 {
-                g.a.sdiv(2, 0, 1);
+                g.a.sdiv(2, x, y);
             } else {
-                g.a.udiv(2, 0, 1);
+                g.a.udiv(2, x, y);
             }
             if k >= 2 {
-                g.a.msub(2, 2, 1, 0);
-                g.a.cmp_imm(1, 0);
+                g.a.msub(2, 2, y, x);
+                g.a.cmp_imm(y, 0);
                 g.a.csel(2, ZR, 2, AC::Eq);
             }
-            g.st_reg(2, d);
+            let z = g.wr(d);
+            g.a.mov(z, 2);
         }
         // (`sti` opens the bus's interrupt window: a helper of its own, `h_sti`)
         Fast::SetIe { on: false } if off_ie() < 4096 => g.a.strb(ZR, CPU, off_ie()),
@@ -2027,7 +2192,7 @@ fn emit_ops<B: Bus>(g: &mut Gen, ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)],
 /// Native code for a block prefix of plain micro-ops (none careful), and its body's offset.
 #[cfg(target_arch = "aarch64")]
 #[allow(clippy::too_many_arguments)]
-fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate::BOp], pc0: u32, mem: &JitMem, guards: &mut Vec<Box<RamGuard>>, profile: bool, itab: u64, stops: Option<bool>) -> Option<(Vec<u8>, usize)> {
+fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate::BOp], pc0: u32, mem: &JitMem, guards: &mut Vec<Box<RamGuard>>, profile: bool, itab: u64, stops: Option<bool>, ordered: bool) -> Option<(Vec<u8>, usize)> {
     for o in [off_reg(15), off_sp(), off_rets(), off_pc(), off_hold(), off_stop_pc(), off_stop_io(), off_stop_rest()] {
         if o >= 16384 {
             return None;
@@ -2044,6 +2209,7 @@ fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate
         h_pair: h_pair::<B> as *const () as u64,
         itab,
         stops: stops.is_some(),
+        ordered,
         rc: RegCache::default(),
         probe_copy: None,
     };

@@ -97,6 +97,19 @@ pub trait Bus {
     /// locks: `testset b[r]; ifeq goto` back to it). A dual-core bus may hand the machine to
     /// the other core, the one that holds it.
     fn spin(&mut self, _core: u32, _addr: u32) {}
+    /// Another thread runs the other core on the same RAM: compiled code loads and stores it with
+    /// acquire / release (the hosts here are weakly ordered; a flag or a lock byte must not
+    /// overtake the data it guards).
+    fn ordered(&self) -> bool {
+        false
+    }
+    /// `testset`: the byte at `addr` is taken (bit 7 set); returns what it held. One atomic
+    /// step on a bus whose two cores run on two threads.
+    fn test_set(&mut self, addr: u32) -> u8 {
+        let old = self.read8(addr);
+        self.write8(addr, old | 0x80);
+        old
+    }
     /// Would the next tick be due?
     fn next_tick_due(&self) -> bool {
         true
@@ -776,8 +789,10 @@ impl Cpu {
                 let inside = careful;
                 if let Some(mem) = jit_mem {
                     if self.jit.is_none() {
+                        let ordered = bus.ordered();
                         self.jit = jit::Jit::new(self.profile).map(|mut j| {
                             j.stops = self.stop_checks;
+                            j.ordered = ordered;
                             Box::new(j)
                         });
                     }
@@ -811,7 +826,7 @@ impl Cpu {
                         let cap = if inside { (limit - n).min(insns) } else if open { budget - n } else { limit - n };
                         let entry = pc;
                         // SAFETY: code was compiled for this bus type and memory map
-                        let (k, slot, stop) = unsafe { jit::run(code, self, bus, &mem, extra, cap, inside) };
+                        let (k, slot, stop) = unsafe { jit::run_fit(code, self, bus, &mem, extra, cap, inside, insns) };
                         if self.profile { self.jit_entries += 1; self.jit_insns += k as u64; }
                         if k > 0 {
                             n += k;
@@ -1376,28 +1391,49 @@ impl Cpu {
         self.jit.as_ref()?.body(id as usize - 1)
     }
 
-    #[inline(never)]
+    /// `build_block_once`, built again if another core wrote to code while it read (two threads:
+    /// every instruction's words are marked before they are read, so a write after the read is
+    /// counted; one that came between the marks and the end shows in the count).
     fn build_block<B: Bus>(&mut self, bus: &mut B, pc: u32) -> Result<Option<(usize, u32, u32)>, CoreError> {
+        let ram = !(0x0200_0000..0x0400_0000).contains(&pc);
+        for _ in 0..16 {
+            let v0 = bus.code_writes();
+            let r = self.build_block_once(bus, pc);
+            if !ram || v0.is_none() || bus.code_writes() == v0 {
+                return r;
+            }
+        }
+        self.build_block_once(bus, pc)
+    }
+
+    /// Forget every block and compiled body, and the JIT itself: a core that goes to run on another
+    /// kind of bus (compiled code holds helpers for the one it was made for) starts afresh.
+    pub fn reset_blocks(&mut self) {
+        self.bops.clear();
+        self.swaps.clear();
+        self.blocks.clear();
+        self.bbytes.clear();
+        self.bver.clear();
+        self.bmap.iter_mut().for_each(|x| *x = 0);
+        self.bfind.clear();
+        #[cfg(native_jit)]
+        {
+            self.jit = None;
+        }
+        #[cfg(target_arch = "wasm32")]
+        if let Some(j) = self.wjit.as_mut() {
+            j.reset();
+        }
+    }
+
+    #[inline(never)]
+    fn build_block_once<B: Bus>(&mut self, bus: &mut B, pc: u32) -> Result<Option<(usize, u32, u32)>, CoreError> {
         if self.bmap.is_empty() {
             self.bmap = vec![0; ICACHE_LINES];
         }
         if self.bops.len() > 1 << 22 {
             // (cannot happen for one image, but never grow without bound)
-            self.bops.clear();
-            self.swaps.clear();
-            self.blocks.clear();
-            self.bbytes.clear();
-            self.bver.clear();
-            self.bmap.iter_mut().for_each(|x| *x = 0);
-            self.bfind.clear();
-            #[cfg(native_jit)]
-            if let Some(j) = self.jit.as_mut() {
-                j.reset();
-            }
-            #[cfg(target_arch = "wasm32")]
-            if let Some(j) = self.wjit.as_mut() {
-                j.reset();
-            }
+            self.reset_blocks();
         }
         let start = self.bops.len() as u32;
         let xip = (0x0200_0000..0x0400_0000).contains(&pc);
@@ -1406,6 +1442,9 @@ impl Cpu {
         // (a glued pair's second instruction always joins its head's block)
         let mut glued = false;
         while ((self.bops.len() as u32 - start) < 32 || glued) && code(bus, p) {
+            if !xip {
+                bus.code_mark(p, p + 6); // (before the read: a write after it is counted)
+            }
             let slot = self.fetch_at(bus, p)?;
             let l = self.icache[slot];
             let Some(f) = l.fast else { break };
@@ -1414,6 +1453,9 @@ impl Cpu {
             glued = false;
             // (a head whose flags are read later keeps the careful path: the JITs do not set them)
             if l.pair_head && !l.flags_live && !f.may_jump() && !matches!(f, Fast::IfBlk { .. }) && code(bus, q) {
+                if !xip {
+                    bus.code_mark(q, q + 6);
+                }
                 let ts = self.fetch_at(bus, q)?;
                 let t = self.icache[ts];
                 if let (Some(tf), false, false) = (t.fast, t.pair_head, t.careful) {
@@ -3222,9 +3264,8 @@ impl Cpu {
                 // SDK spins with `testset; ifeq goto retry`, so "eq" must mean
                 // "was already taken". Single-core emulation: always acquired.
                 let addr = self.regs[(insn.raw & 0xf) as usize];
-                let old = bus.read8(addr);
+                let old = bus.test_set(addr);
                 self.cc = old != 0;
-                bus.write8(addr, old | 0x80);
                 // taken, with `ifeq goto` back to it next (`40 e8 fd ff`: the SDK's byte
                 // spinlock): the core spins on this byte. A try-lock, or a claim-a-job byte
                 // that is often set, takes no such loop and records no wait.

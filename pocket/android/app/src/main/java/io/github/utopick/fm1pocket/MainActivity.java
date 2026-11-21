@@ -40,10 +40,15 @@ public class MainActivity extends Activity {
             if (json.contains("\"cancel-boot\"")) runOnUiThread(() -> { running = false; setAwake(false); showFace(false); }); // the page's power off
         }
         @JavascriptInterface public void boot(String json, String packageB64, String sectorsB64, String syxB64) {
+            // core 1 on its own thread (used once the firmware releases core 1; 386DX and Bubba Machine do): on unless switched off
+            int threads = getSharedPreferences("fm1", MODE_PRIVATE).getInt("threads", 2);
+            if (threads > 1 && !json.contains("\"threads\"") && json.startsWith("{")) json = "{\"threads\":" + threads + "," + json.substring(1);
             Native.boot(json, decode(packageB64), decode(sectorsB64), decode(syxB64));
             startAudio();
             runOnUiThread(() -> { running = true; setAwake(true); showFace(true); });
         }
+        /** Hidden switch (from the page's console: FM1Native.threads(1)): 1 runs both FM-1 cores on one thread, 2 (the default) gives core 1 its own. Takes effect at the next boot. */
+        @JavascriptInterface public void threads(int n) { getSharedPreferences("fm1", MODE_PRIVATE).edit().putInt("threads", n > 1 ? 2 : 1).apply(); }
         @JavascriptInterface public String version() { return Native.version(); }
         /** The page has something to say or ask (a lower clock, an error): show it over the native play screen. */
         @JavascriptInterface public void page() { runOnUiThread(() -> showFace(false)); }

@@ -116,6 +116,12 @@ impl Pace {
     }
 }
 
+impl Drop for Machine {
+    fn drop(&mut self) {
+        machine::settle(&self.soc); // (core 1's thread must not run on a core that is going)
+    }
+}
+
 impl Machine {
     /// `stock`: a package's flash (its chip and boot parameters come along) and board.
     fn new(image: Vec<u8>, entry: u32, mhz: u32, stock: Option<(&[u8], fm1_soc::Board)>) -> Self {
@@ -124,6 +130,7 @@ impl Machine {
         soc.periph.skip_idle = true;
         soc.lcd_timed = unsafe { LCD_TIMED };
         soc.cpu1_survives = unsafe { CPU1_SURVIVES };
+        soc.set_threads(unsafe { THREADS });
         // (before the boot: the board sets the flash chip's id from it)
         soc.set_flash_part(flash_part(unsafe { FLASH_PART }));
         let mut cpu = Cpu::new(entry);
@@ -187,7 +194,7 @@ impl Machine {
     /// fm1-live's loop: cpu0's blocks (interrupts exact at block granularity), cpu1 beside.
     fn run(&mut self, n: u32) {
         let jit = self.cpu.jit_on;
-        if let Some(c1) = self.cpu1.as_mut() { c1.profile = self.cpu.profile; }
+        if let Some(c1) = self.cpu1.as_mut() { if c1.profile != self.cpu.profile { c1.profile = self.cpu.profile; } }
         let Machine { cpu, cpu1, soc, pending_tick, .. } = self;
         if machine::run_dual(cpu1, soc, n, RAM_SIZE, jit, |soc, k| machine::run_blocks(cpu, soc, k, pending_tick)).is_err() {
             self.halted = true;
@@ -197,6 +204,8 @@ impl Machine {
 
 static mut M: Option<Machine> = None;
 static mut JIT: bool = false;
+/// `fm1_threads`: the next boot's core 1 thread (2) or not (1)
+static mut THREADS: u32 = 1;
 static mut JIT_PER_RENDER: u32 = 0;
 static mut AHEAD: u32 = 0;
 /// `fm1_lcd_timed`: the next boot's `Soc::lcd_timed`
@@ -303,6 +312,7 @@ pub extern "C" fn fm1_jit(on: u32, per_render: u32) {
         JIT_PER_RENDER = per_render;
     }
     if let Some(m) = machine() {
+        machine::settle(&m.soc); // (core 1's thread must not run while its Cpu changes)
         m.cpu.jit_on = on != 0;
         if let Some(c1) = m.cpu1.as_mut() {
             c1.jit_on = on != 0;
@@ -329,6 +339,7 @@ static mut PROFILE_JSON: Vec<u8> = Vec::new();
 #[no_mangle]
 #[allow(static_mut_refs)]
 pub extern "C" fn fm1_profile_report() -> *const u8 {
+    if let Some(m) = machine() { machine::settle(&m.soc); }
     let report = machine().map(|m| format!("[{},{}]", m.cpu.jit_profile_json(),
         m.cpu1.as_ref().map_or_else(|| "null".to_owned(), |c| c.jit_profile_json()))).unwrap_or_else(|| "[]".to_owned());
     unsafe {
@@ -414,6 +425,7 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
         m.audio.extend(m.soc.periph.audio.drain(..));
     }
     m.pace.end();
+    // (core 1's thread, if any, runs on between renders: what the host reads from here is core 0's side)
     unsafe { INSNS += spent as u64 };
     let have = (m.audio.len() / 2).min(frames);
     #[allow(static_mut_refs)]
@@ -453,6 +465,42 @@ fn flash_part(n: u32) -> fm1_soc::FlashPart {
 pub extern "C" fn fm1_flash_part(part: u32) {
     unsafe { FLASH_PART = part };
     if let Some(m) = machine() { m.soc.set_flash_part(flash_part(part)); }
+}
+
+/// Core 1 on its own thread (`threads` = 2, from the next boot on; `Soc::set_threads`), once the
+/// firmware releases it, or both cores on one thread (1, the default and the reference: the audio
+/// is the same byte for byte every run, where two threads vary with the host's scheduler). 0 when
+/// this build cannot run threads (wasm), else the number now asked for.
+#[no_mangle]
+pub extern "C" fn fm1_threads(threads: u32) -> u32 {
+    let t = if threads >= 2 && fm1_soc::mt::AVAILABLE { 2 } else { 1 };
+    unsafe { THREADS = t };
+    if threads >= 2 && t == 1 { 0 } else { t }
+}
+
+/// How often the threads waited for each other (tuning): `which` 0 core 0 for core 1's clock, 1 core 1
+/// for core 0's, 2 core 1 for the `Soc`, 3 the instructions core 1 ran on its thread.
+#[no_mangle]
+pub extern "C" fn fm1_mt_stats(which: u32) -> u64 {
+    machine().and_then(|m| m.soc.mt.as_ref()).map_or(0, |mt| mt.stats()[which as usize % 8])
+}
+
+/// Prints the two-thread mode's shared words to stderr (a hang report).
+#[no_mangle]
+pub extern "C" fn fm1_mt_dump() {
+    if let Some(mt) = machine().and_then(|m| m.soc.mt.as_ref()) { eprintln!("{}", mt.shared.dump()); }
+}
+
+/// 2 once core 1 runs on its own thread (the firmware released it), else 1.
+#[no_mangle]
+pub extern "C" fn fm1_core1_thread() -> u32 {
+    machine().and_then(|m| m.soc.mt.as_ref()).map_or(1, |mt| mt.started() as u32 + 1)
+}
+
+/// 2 when the running machine has core 1 on its own thread, else 1.
+#[no_mangle]
+pub extern "C" fn fm1_threaded() -> u32 {
+    machine().map_or(1, |m| m.soc.threaded() as u32 + 1)
 }
 
 /// Before the boot, or for the machine running.
