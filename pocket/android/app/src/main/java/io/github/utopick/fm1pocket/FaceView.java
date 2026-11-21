@@ -15,7 +15,7 @@ import java.nio.ShortBuffer;
 
 /**
  * The FM-1's play screen drawn natively: the LCD, the knobs, the buttons and the keys, with their LEDs.
- * Touches go straight to the core (Native.post) and the screen reads the core (Native.face), so a slow
+ * Touches go to the core between two slices of sound (AudioThread.send) and the screen reads the core when it is free (Native.face), so a slow
  * phone's WebView is out of the way while the FM-1 is played. The ids and messages are the page's
  * (pocket/src/app.html: ENCS, BTNS, WHITES, BLACKS, setKey, turn, setPot).
  */
@@ -103,7 +103,7 @@ final class FaceView extends View implements Choreographer.FrameCallback {
     // ---------------------------------------------------------------- input
 
     private void setKey(int id, boolean down) {
-        Native.post("{\"type\":\"key\",\"id\":" + id + ",\"down\":" + down + "}");
+        AudioThread.send("{\"type\":\"key\",\"id\":" + id + ",\"down\":" + down + "}");
         invalidate();
     }
     private void press(int id) { if (holds[id]++ == 0) { setKey(id, true); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); } }
@@ -130,14 +130,14 @@ final class FaceView extends View implements Choreographer.FrameCallback {
                     if (h >= 14 && h < 41 && h != f.what) { unpress(f.what); press(f.what = h); }
                 } else if (f.what == 100) {
                     int v = Math.max(0, Math.min(1023, Math.round(pot + up * 6)));
-                    if (v != pot) { pot = v; Native.post("{\"type\":\"pot\",\"value\":" + v + "}"); invalidate(); }
+                    if (v != pot) { pot = v; AudioThread.send("{\"type\":\"pot\",\"value\":" + v + "}"); invalidate(); }
                 } else if (f.what > 100) {
                     int k = f.what - 100, n = 0;
                     for (f.acc += up; f.acc >= 9; f.acc -= 9) n++; // a click every 9 dp, as the page's 9 px
                     for (; f.acc <= -9; f.acc += 9) n--;
                     if (n != 0) {
                         clicks[k] += n;
-                        Native.post("{\"type\":\"enc\",\"enc\":" + ENC[k] + ",\"clicks\":" + n + "}");
+                        AudioThread.send("{\"type\":\"enc\",\"enc\":" + ENC[k] + ",\"clicks\":" + n + "}");
                         performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
                         invalidate();
                     }
@@ -176,6 +176,7 @@ final class FaceView extends View implements Choreographer.FrameCallback {
         if (nanos - lastRead < 30_000_000L) return; // the core reports about 30 times a second
         lastRead = nanos;
         int got = Native.face(lcd, leds);
+        if (got == -2) { lastRead = 0; return; } // the emulator is in a slice: try at the next vsync
         boolean was = on;
         on = got >= 0;
         if (got == 1) lcdBitmap.copyPixelsFromBuffer(ShortBuffer.wrap(lcd));
@@ -193,11 +194,14 @@ final class FaceView extends View implements Choreographer.FrameCallback {
             lastStat = nanos;
             // the load, its highest 1/30 s since the last look (a burst over 100% is a dropout unless the buffer covers it), the buffer's delay
             int load = Native.load(), peak = Native.peakLoad();
-            String st = load < 0 ? (jit ? "JIT" : "NO JIT") : load + "% max " + peak + "%",
-                st2 = load < 0 ? "" : (jit ? "JIT " : "NO JIT ") + Math.round(AudioThread.bufferFrames / 44.1f) + " ms";
-            statMoved = !st.equals(stat) || !st2.equals(stat2);
-            stat = st;
-            stat2 = st2;
+            if (load == -2 || peak == -2) lastStat = 0; // busy: the next frame asks again
+            else {
+                String st = load < 0 ? (jit ? "JIT" : "NO JIT") : load + "% max " + peak + "%",
+                    st2 = load < 0 ? "" : (jit ? "JIT " : "NO JIT ") + Math.round(AudioThread.bufferFrames / 44.1f) + " ms";
+                statMoved = !st.equals(stat) || !st2.equals(stat2);
+                stat = st;
+                stat2 = st2;
+            }
         }
         if (got == 1 || ledsMoved || was != on || statMoved) invalidate();
     }

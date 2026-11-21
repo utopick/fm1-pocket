@@ -51,7 +51,7 @@ public class MainActivity extends Activity {
 
     private synchronized void startAudio() {
         if (audio != null) return;
-        audio = new AudioThread();
+        audio = new AudioThread(this);
         audio.start();
     }
 

@@ -88,6 +88,9 @@ fn plays_a_song() {
     assert!(frame_msgs > 0 && lcd_ok, "the LCD stayed blank");
     assert!(peak > 0.0, "silence");
     assert!(face_ok, "the native screen's LCD stayed blank");
+    // the UI thread's reads give way while the lock is held (the audio thread in a slice)
+    assert!(with(|_| fm1_android::try_with(|h| h.load()).is_none()), "a busy core was waited for");
+    assert!(fm1_android::try_with(|h| h.load()).is_some());
     let load = with(|h| h.load());
     let peak = with(|h| h.take_peak_load());
     println!("load {load}%, highest 1/30 s {peak}% (render CPU time over sound time)");
