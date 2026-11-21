@@ -40,7 +40,7 @@ final class FaceView extends View implements Choreographer.FrameCallback {
     private int pot = 512; // the page's starting MASTER
     private boolean on, running;
     private long lastRead, lastStat;
-    private String stat = "";
+    private String stat = "", stat2 = "";
     private final boolean jit = Native.jitMemory();
 
     /** What a finger holds: a key or button id, a knob (100 + index), or the menu button. */
@@ -191,10 +191,13 @@ final class FaceView extends View implements Choreographer.FrameCallback {
         boolean statMoved = false;
         if (nanos - lastStat > 1_000_000_000L) { // the load under MENU, once a second: whether this phone keeps up
             lastStat = nanos;
-            int load = Native.load();
-            String st = (load < 0 ? "" : load + "% ") + (jit ? "JIT" : "NO JIT");
-            statMoved = !st.equals(stat);
+            // the load, its highest 1/30 s since the last look (a burst over 100% is a dropout unless the buffer covers it), the buffer's delay
+            int load = Native.load(), peak = Native.peakLoad();
+            String st = load < 0 ? (jit ? "JIT" : "NO JIT") : load + "% max " + peak + "%",
+                st2 = load < 0 ? "" : (jit ? "JIT " : "NO JIT ") + Math.round(AudioThread.bufferFrames / 44.1f) + " ms";
+            statMoved = !st.equals(stat) || !st2.equals(stat2);
             stat = st;
+            stat2 = st2;
         }
         if (got == 1 || ledsMoved || was != on || statMoved) invalidate();
     }
@@ -232,7 +235,8 @@ final class FaceView extends View implements Choreographer.FrameCallback {
         paint.setColor(Color.rgb(70, 70, 90));
         c.drawRoundRect(menuRect, rr, rr, paint);
         label(c, "MENU", menuRect, menuRect.centerY() + text.getTextSize() / 3);
-        label(c, stat, menuRect, menuRect.bottom - text.getTextSize() * 0.8f);
+        label(c, stat, menuRect, menuRect.bottom - text.getTextSize() * 2.1f);
+        label(c, stat2, menuRect, menuRect.bottom - text.getTextSize() * 0.8f);
         for (int id = 0; id < 14; id++) {
             RectF r = keyRect[id];
             int base = holds[id] > 0 ? Color.rgb(90, 90, 96) : Color.rgb(50, 50, 54);

@@ -11,6 +11,8 @@ import java.util.Arrays;
 final class AudioThread extends Thread {
     private static final int RATE = 44100, CHUNK = 128; // 128 frames, as the worklet's quantum
     private volatile boolean stop, paused;
+    /** The sound buffer now, in frames: the delay it adds to every key (read by the native screen). */
+    static volatile int bufferFrames;
 
     AudioThread() { super("fm1-audio"); }
 
@@ -23,7 +25,7 @@ final class AudioThread extends Thread {
         AudioTrack.Builder b = new AudioTrack.Builder()
             .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).setEncoding(AudioFormat.ENCODING_PCM_FLOAT).build())
-            .setBufferSizeInBytes(8192 * 2 * 4) // the most it may grow to (186 ms, for firmwares whose work comes in bursts), not what it starts with
+            .setBufferSizeInBytes(16384 * 2 * 4) // the most it may grow to (372 ms, for firmwares whose work comes in bursts), not what it starts with
             .setTransferMode(AudioTrack.MODE_STREAM);
         if (Build.VERSION.SDK_INT >= 26) b.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
         AudioTrack track = b.build();
@@ -31,6 +33,7 @@ final class AudioThread extends Thread {
         // and double it each time the phone could not keep up (Android clamps it to what it allows).
         int size = track.setBufferSizeInFrames(2 * CHUNK), underruns = 0;
         if (size <= 0) size = track.getBufferCapacityInFrames(); // refused: keep the whole buffer, as before
+        bufferFrames = size;
         float[] buf = new float[CHUNK * 2];
         boolean playing = false;
         try {
@@ -47,7 +50,7 @@ final class AudioThread extends Thread {
                 int u = track.getUnderrunCount();
                 if (u > underruns) {
                     underruns = u;
-                    if (size < track.getBufferCapacityInFrames()) size = Math.max(size, track.setBufferSizeInFrames(size * 2));
+                    if (size < track.getBufferCapacityInFrames()) bufferFrames = size = Math.max(size, track.setBufferSizeInFrames(size * 2));
                 }
             }
         } catch (InterruptedException ignored) {
