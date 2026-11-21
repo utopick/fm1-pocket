@@ -30,6 +30,8 @@ public class MainActivity extends Activity {
     private AudioThread audio;
     private FaceView face;
     private boolean running; // a firmware is on (the page booted one and has not turned it off)
+    /** The native play screen (FaceView) while a firmware runs. Off: with it, 386DX lagged on a Galaxy S23 where the page alone keeps up at 240 MHz. */
+    private static final boolean FACE = false;
 
     /** window.FM1Native: the page's way to the native core. Its methods run on a WebView binder thread. */
     private final class Bridge {
@@ -62,6 +64,7 @@ public class MainActivity extends Activity {
 
     /** The native play screen or the page. The page polls the core slowly while it is hidden (it still keeps the saves). */
     private void showFace(boolean show) {
+        show &= FACE;
         if (show == (face.getVisibility() == View.VISIBLE)) return;
         face.setVisibility(show ? View.VISIBLE : View.GONE);
         web.setVisibility(show ? View.GONE : View.VISIBLE);
@@ -132,7 +135,7 @@ public class MainActivity extends Activity {
     }
     @Override public void onBackPressed() {
         if (face.getVisibility() == View.VISIBLE) menu();
-        else if (running) showFace(true);
+        else if (FACE && running) showFace(true);
         else if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
