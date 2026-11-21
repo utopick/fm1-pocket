@@ -7,6 +7,11 @@ use fm1_web as w;
 
 /// Renders `secs` of emulated time (PLAY at 2 s) with `threads` threads; the audio as mono f32.
 fn song(pkg: &[u8], threads: u32, secs: u32) -> Vec<f32> {
+    // (a hang report: the two-thread mode's shared words, every 30 s the song takes)
+    let done = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let d = done.clone();
+    std::thread::spawn(move || { while !d.load(std::sync::atomic::Ordering::Relaxed) { std::thread::sleep(std::time::Duration::from_secs(30)); if !d.load(std::sync::atomic::Ordering::Relaxed) { eprintln!("still playing at {} ms", w::fm1_ms()); w::fm1_mt_dump(); } } });
+    let _stop = Stop(done);
     with(|h| h.boot(&format!("{{\"seq\":1,\"mhz\":240,\"threads\":{threads}}}"), pkg, &[], &[]));
     assert_eq!(w::fm1_threaded(), threads, "the machine's thread mode");
     assert_eq!(w::fm1_core1_thread(), 1, "core 1 has no thread before the firmware releases it");
@@ -19,13 +24,16 @@ fn song(pkg: &[u8], threads: u32, secs: u32) -> Vec<f32> {
         with(|h| h.render(&mut buf));
         out.extend(buf.chunks(2).map(|f| (f[0] + f[1]) / 2.0));
     }
-    assert!(threads == 1 || w::fm1_core1_thread() == 2 || !CORE1_OPTIONAL.load(std::sync::atomic::Ordering::Relaxed), "core 1's thread");
+    assert!(threads == 1 || w::fm1_core1_thread() == 2 || CORE1_OPTIONAL.load(std::sync::atomic::Ordering::Relaxed), "core 1's thread (386DX must keep it; other firmwares may fall back to one thread)");
     assert_eq!(w::fm1_halted(), 0, "the machine halted ({threads} threads)");
     assert_eq!(w::fm1_cpu1_fault(), 0, "core 1 faulted ({threads} threads)");
     out
 }
 
 static CORE1_OPTIONAL: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+struct Stop(std::sync::Arc<std::sync::atomic::AtomicBool>);
+impl Drop for Stop { fn drop(&mut self) { self.0.store(true, std::sync::atomic::Ordering::Relaxed); } }
 
 fn rms(x: &[f32]) -> f64 { (x.iter().map(|v| (*v as f64).powi(2)).sum::<f64>() / x.len().max(1) as f64).sqrt() }
 

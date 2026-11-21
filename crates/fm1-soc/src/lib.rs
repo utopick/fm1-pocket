@@ -257,6 +257,8 @@ impl Board {
 pub struct Soc {
     /// Core 1 on its own thread (`set_threads`). First, so it is dropped (stopped) before the rest.
     pub mt: Option<mt::Mt>,
+    /// the two-thread mode gave up (core 1 does too much I/O for it) and the runner goes on in one thread
+    pub mt_retry: bool,
     pub board: Board,
     /// The FM-1's flash part (its JEDEC id; `set_flash_part`): the stock Puya unless asked.
     pub flash_part: spiflash::FlashPart,
@@ -523,6 +525,7 @@ impl Soc {
             bt_window: BT_WINDOW_BASE,
             xip,
             mt: None,
+            mt_retry: false,
             ram: Ram::new(ram_size),
             ovl: Ram::new(512 * 1024),
             sram2: Ram::new(256 * 1024),

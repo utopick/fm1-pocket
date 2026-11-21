@@ -827,6 +827,9 @@ pub fn run_dual(
         let resets = soc.resets;
         done = run_dual_from(cpu1, soc, done, n, ram_size, jit_on, &mut run0)?;
         if soc.resets == resets {
+            if std::mem::take(&mut soc.mt_retry) {
+                continue; // (the two-thread mode ended: on in one thread)
+            }
             break;
         }
         *cpu1 = None;
@@ -927,14 +930,18 @@ fn run_dual_from(
     Ok(done)
 }
 
-/// Stop core 1's thread (the two-thread mode, `Soc::set_threads`) where it is: call it when you
-/// stop running the machine for a while (the end of a render), before anything outside reads or
-/// moves the machine or the second core. Nothing to do in the one-thread mode.
+/// Stop core 1's thread (the two-thread mode, `Soc::set_threads`) where it is. It runs on between
+/// calls to `run_dual` (core 1 alone touches only RAM and XIP without core 0's say-so), so call
+/// this before anything outside reads or changes core 1 itself or moves the machine. Nothing to do in the one-thread mode.
 pub fn settle(soc: &Soc) {
     if let Some(mt) = &soc.mt {
         mt.shared.quiesce();
     }
 }
+
+/// A stretch of this many cycles (5 ms of FM-1 time) over which core 1 may reach the chip this many times (20 a ms, three stretches running: 386DX's core 1 does 6 in all).
+const FALLBACK_CYCLES: u64 = 1_200_000;
+const FALLBACK_GATES: u64 = 100;
 
 /// `run_dual_from` with core 1 on its own thread (`mt.rs`): cpu0 runs its slices as ever, and
 /// before each it tells the thread the time and core 1's interrupts, and waits if the thread has
@@ -952,7 +959,33 @@ fn run_dual_mt(
     if soc.cpu1_fault.is_none() {
         soc.mt_start(c1);
     }
+    // core 1's accesses to what is not RAM wait for core 0's slice boundaries: a firmware whose
+    // core 1 does a great deal of them (Bubba Machine's kernel ticks: over 100k a second) runs
+    // far slower in this mode, so past FALLBACK_GATES a millisecond the machine goes back to one thread
+    let mut watch = sh.watch.lock().unwrap_or_else(|e| e.into_inner());
+    if watch.0 == 0 {
+        *watch = (soc.periph.cycles, sh.gates(), 0);
+    }
+    let (mut check_at, mut check_gates, mut busy) = *watch;
+    drop(watch);
     while done < n {
+        if soc.periph.cycles - check_at >= FALLBACK_CYCLES {
+            let g = sh.gates();
+            busy = if g - check_gates > FALLBACK_GATES { busy + 1 } else { 0 };
+            if busy >= 3 {
+                sh.quiesce();
+                let (owner, idle) = sh.hand_back();
+                soc.lock_owner = owner;
+                soc.cpu1_idle = idle;
+                c1.reset_blocks();
+                soc.mt = None;
+                soc.mt_retry = true;
+                eprintln!("two threads: core 1 reaches the chip {} times in {} ms: back to one thread", g - check_gates, (soc.periph.cycles - check_at) * 1000 / soc.periph.hz.max(1));
+                return Ok(done);
+            }
+            (check_at, check_gates) = (soc.periph.cycles, g);
+            *sh.watch.lock().unwrap_or_else(|e| e.into_inner()) = (check_at, check_gates, busy);
+        }
         if let Some(e) = sh.take_fault() {
             sh.quiesce();
             if !soc.cpu1_survives {

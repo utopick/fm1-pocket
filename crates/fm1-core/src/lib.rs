@@ -1406,6 +1406,26 @@ impl Cpu {
         self.build_block_once(bus, pc)
     }
 
+    /// Forget every block and compiled body, and the JIT itself: a core that goes to run on another
+    /// kind of bus (compiled code holds helpers for the one it was made for) starts afresh.
+    pub fn reset_blocks(&mut self) {
+        self.bops.clear();
+        self.swaps.clear();
+        self.blocks.clear();
+        self.bbytes.clear();
+        self.bver.clear();
+        self.bmap.iter_mut().for_each(|x| *x = 0);
+        self.bfind.clear();
+        #[cfg(native_jit)]
+        {
+            self.jit = None;
+        }
+        #[cfg(target_arch = "wasm32")]
+        if let Some(j) = self.wjit.as_mut() {
+            j.reset();
+        }
+    }
+
     #[inline(never)]
     fn build_block_once<B: Bus>(&mut self, bus: &mut B, pc: u32) -> Result<Option<(usize, u32, u32)>, CoreError> {
         if self.bmap.is_empty() {
@@ -1413,21 +1433,7 @@ impl Cpu {
         }
         if self.bops.len() > 1 << 22 {
             // (cannot happen for one image, but never grow without bound)
-            self.bops.clear();
-            self.swaps.clear();
-            self.blocks.clear();
-            self.bbytes.clear();
-            self.bver.clear();
-            self.bmap.iter_mut().for_each(|x| *x = 0);
-            self.bfind.clear();
-            #[cfg(native_jit)]
-            if let Some(j) = self.jit.as_mut() {
-                j.reset();
-            }
-            #[cfg(target_arch = "wasm32")]
-            if let Some(j) = self.wjit.as_mut() {
-                j.reset();
-            }
+            self.reset_blocks();
         }
         let start = self.bops.len() as u32;
         let xip = (0x0200_0000..0x0400_0000).contains(&pc);

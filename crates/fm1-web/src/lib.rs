@@ -309,6 +309,7 @@ pub extern "C" fn fm1_jit(on: u32, per_render: u32) {
         JIT_PER_RENDER = per_render;
     }
     if let Some(m) = machine() {
+        machine::settle(&m.soc); // (core 1's thread must not run while its Cpu changes)
         m.cpu.jit_on = on != 0;
         if let Some(c1) = m.cpu1.as_mut() {
             c1.jit_on = on != 0;
@@ -335,6 +336,7 @@ static mut PROFILE_JSON: Vec<u8> = Vec::new();
 #[no_mangle]
 #[allow(static_mut_refs)]
 pub extern "C" fn fm1_profile_report() -> *const u8 {
+    if let Some(m) = machine() { machine::settle(&m.soc); }
     let report = machine().map(|m| format!("[{},{}]", m.cpu.jit_profile_json(),
         m.cpu1.as_ref().map_or_else(|| "null".to_owned(), |c| c.jit_profile_json()))).unwrap_or_else(|| "[]".to_owned());
     unsafe {
@@ -420,7 +422,7 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
         m.audio.extend(m.soc.periph.audio.drain(..));
     }
     m.pace.end();
-    machine::settle(&m.soc); // (core 1's thread, if any, stops: nothing outside sees it mid-step)
+    // (core 1's thread, if any, runs on between renders: what the host reads from here is core 0's side)
     unsafe { INSNS += spent as u64 };
     let have = (m.audio.len() / 2).min(frames);
     #[allow(static_mut_refs)]
@@ -477,7 +479,7 @@ pub extern "C" fn fm1_threads(threads: u32) -> u32 {
 /// for core 0's, 2 core 1 for the `Soc`, 3 the instructions core 1 ran on its thread.
 #[no_mangle]
 pub extern "C" fn fm1_mt_stats(which: u32) -> u64 {
-    machine().and_then(|m| m.soc.mt.as_ref()).map_or(0, |mt| { let s = mt.stats(); [s.0, s.1, s.2, s.3][which as usize % 4] })
+    machine().and_then(|m| m.soc.mt.as_ref()).map_or(0, |mt| mt.stats()[which as usize % 8])
 }
 
 /// Prints the two-thread mode's shared words to stderr (a hang report).

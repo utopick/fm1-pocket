@@ -15,8 +15,8 @@
 //! tuning knob: the cores drift apart by up to that much, which firmwares cannot tell, as they
 //! meet through locks.
 //!
-//! Stopping. B runs only between `Shared::start` and `Shared::quiesce`; the runner quiesces it at
-//! the end of every render (`machine::settle`), so nothing outside the emulator sees core 1 in
+//! Stopping. B runs from `Shared::start` to `Shared::quiesce`, which the runner calls (`machine::settle`) at
+//! whatever reads or changes core 1 itself (the profile report, the JIT setting, a reset, a drop), so nothing outside sees core 1 in
 //! the middle of a step. B parks in the thread's `park`, so a stopped core 1 costs nothing.
 //!
 //! The one-thread scheduler (`machine::run_dual_from`) is the default and the reference: this
@@ -33,10 +33,11 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle, Thread};
 use std::time::Duration;
 
-/// How far (in cycles) the cores may drift apart: 64 slices, about 0.27 ms of FM-1 time. Fewer slices
-/// make the threads wait for each other more (386DX: 16 slices, 14k waits in 15 s; 64, 3k; 256, 0.7k);
-/// more let a firmware's start-up handshakes see the drift. FM1_MT_WINDOW (in slices) overrides it.
-pub const WINDOW: u64 = 64 * crate::machine::SLICE as u64;
+/// How far (in cycles) the cores may drift apart: 256 slices, about 1.1 ms of FM-1 time. 386DX, 15 s
+/// unpaced on an M4: wall 3.54 s at 64 slices, 3.41 at 256, 3.31 at 1024 (one thread: 4.0), and
+/// core 0's waits fall from 3.6k to 0.8k to 0.1k; a longer drift lets a firmware's start-up
+/// handshakes see it. FM1_MT_WINDOW (in slices) overrides it.
+pub const WINDOW: u64 = 256 * crate::machine::SLICE as u64;
 
 // who holds the `Soc`
 const GATE_A: u32 = 0;
@@ -51,6 +52,17 @@ const RUNNING: u32 = 1;
 const NAP: u64 = 2 * crate::machine::SLICE as u64;
 const LONG_NAP: u64 = 32 * crate::machine::SLICE as u64;
 
+/// A field on a cache line of its own: the two threads write and read these every slice or chunk,
+/// and fields that share a line made each write cost the other thread a cache miss.
+#[repr(align(64))]
+struct L<T>(T);
+impl<T> std::ops::Deref for L<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
 /// The state both threads see. Everything here is atomic or behind a mutex.
 pub struct Shared {
     gate: AtomicU32,
@@ -59,12 +71,12 @@ pub struct Shared {
     /// the hardware lock: 0 free, else the owner's core + 1
     lock: AtomicU32,
     /// core 1's pending interrupt, as `pending_irq_for(1)` (0 none, else 1 | irq << 8 | prio << 16)
-    irq1: AtomicU32,
+    irq1: L<AtomicU32>,
     paused1: AtomicBool,
     /// core 1 asleep on `idle`, until an interrupt of its bank is pending
     idle: AtomicBool,
-    a_cycles: AtomicU64,
-    b_cycles: AtomicU64,
+    a_cycles: L<AtomicU64>,
+    b_cycles: L<AtomicU64>,
     /// B is running (it holds A back when it falls more than the window behind)
     b_live: AtomicBool,
     /// B is in a sleep that A's `unpark` ends
@@ -82,7 +94,12 @@ pub struct Shared {
     pub b_waits: AtomicU64,
     pub b_gates: AtomicU64,
     /// instructions core 1 ran on thread B
-    pub b_insns: AtomicU64,
+    b_insns: L<AtomicU64>,
+    /// microseconds spent in window waits by A and by B, in gate waits by B, and the sleeps of each
+    pub a_wait_us: AtomicU64,
+    pub b_wait_us: AtomicU64,
+    pub b_gate_us: AtomicU64,
+    pub a_sleeps: AtomicU64,
     /// consecutive failed `lockset`s of each core (the backoff's count)
     fails: [AtomicU32; 2],
     /// the clock at which A should wake B from a wait for it (u64::MAX: not waiting), and B's for A
@@ -92,6 +109,8 @@ pub struct Shared {
     /// core 0 is retrying a `lockset` core 1 holds: B may run on past the window, to its unlock
     a_blocked: AtomicBool,
     a_thread: Mutex<Option<Thread>>,
+    /// the fallback's watch (`machine::run_dual_mt`): the clock and gate count at its last look, and the stretches over the limit in a row
+    pub watch: Mutex<(u64, u64, u32)>,
 }
 
 /// What B runs: raw pointers into the machine, valid from `start` to `quiesce`.
@@ -116,7 +135,7 @@ pub struct Mt {
 
 /// A short spin, a few yields, then sleeps that grow to 200 us: a partner that is not running (a
 /// loaded phone) must not cost this thread's core as well (386DX at W=16, on a busy host: 27 s of CPU for 12 s of sound with yield loops).
-const SPINS: u32 = 2000;
+const SPINS: u32 = 300;
 
 fn backoff(i: &mut u32) {
     if *i < SPINS {
@@ -146,11 +165,11 @@ impl Shared {
             gate: AtomicU32::new(GATE_A),
             want: AtomicU32::new(0),
             lock: AtomicU32::new(0),
-            irq1: AtomicU32::new(0),
+            irq1: L(AtomicU32::new(0)),
             paused1: AtomicBool::new(false),
             idle: AtomicBool::new(false),
-            a_cycles: AtomicU64::new(0),
-            b_cycles: AtomicU64::new(0),
+            a_cycles: L(AtomicU64::new(0)),
+            b_cycles: L(AtomicU64::new(0)),
             b_live: AtomicBool::new(false),
             sleeping: AtomicBool::new(false),
             state: AtomicU32::new(PARKED),
@@ -164,22 +183,28 @@ impl Shared {
             a_waits: AtomicU64::new(0),
             b_waits: AtomicU64::new(0),
             b_gates: AtomicU64::new(0),
-            b_insns: AtomicU64::new(0),
+            b_insns: L(AtomicU64::new(0)),
+            a_wait_us: AtomicU64::new(0),
+            b_wait_us: AtomicU64::new(0),
+            b_gate_us: AtomicU64::new(0),
+            a_sleeps: AtomicU64::new(0),
             fails: Default::default(),
             b_wake_at: AtomicU64::new(u64::MAX),
             a_wake_at: AtomicU64::new(u64::MAX),
             a_sleeping: AtomicBool::new(false),
             a_blocked: AtomicBool::new(false),
             a_thread: Mutex::new(None),
+            watch: Mutex::new((0, 0, 0)),
         }
     }
 
     /// The shared words, for a hang report.
     pub fn dump(&self) -> String {
-        format!("gate {} want {} lock {} irq1 {:#x} paused1 {} idle {} a {} b {} b_live {} sleeping {} state {} stop {} b_insns {}",
+        format!("gate {} want {} lock {} irq1 {:#x} paused1 {} idle {} a {} b {} b_live {} sleeping {} state {} stop {} b_insns {} a_blocked {} fails {:?} b_wake_at {} a_wake_at {} a_sleeping {} cycles_now {}",
             self.gate.load(Relaxed), self.want.load(Relaxed), self.lock.load(Relaxed), self.irq1.load(Relaxed), self.paused1.load(Relaxed),
             self.idle.load(Relaxed), self.a_cycles.load(Relaxed), self.b_cycles.load(Relaxed), self.b_live.load(Relaxed), self.sleeping.load(Relaxed),
-            self.state.load(Relaxed), self.stop.load(Relaxed), self.b_insns.load(Relaxed))
+            self.state.load(Relaxed), self.stop.load(Relaxed), self.b_insns.load(Relaxed),
+            self.a_blocked.load(Relaxed), [self.fails[0].load(Relaxed), self.fails[1].load(Relaxed)], self.b_wake_at.load(Relaxed), self.a_wake_at.load(Relaxed), self.a_sleeping.load(Relaxed), 0)
     }
 
     pub fn set_window(&self, cycles: u64) {
@@ -203,27 +228,34 @@ impl Shared {
             return true;
         }
         let f = &self.fails[core as usize & 1];
-        // (long enough to span a critical section of the other core's: it is running, not waiting)
-        for _ in 0..1000 {
-            match self.lock.compare_exchange(0, me, Acquire, Relaxed) {
-                Ok(_) => {
-                    f.store(0, Relaxed);
-                    if core == 0 {
-                        self.a_blocked.store(false, Relaxed);
+        // Core 0 waits here, handing the Soc over between tries: the holder may be waiting for it
+        // (an access of its own inside its critical section), and a round of sleeps between tries
+        // let Bubba Machine's cores crawl at a try per sleep. Core 1 tries once and `Why::Blocked` waits.
+        let rounds = if core == 0 { 100 } else { 1 };
+        for _ in 0..rounds {
+            // (long enough to span a critical section of the other core's: it is running, not waiting)
+            for _ in 0..1000 {
+                match self.lock.compare_exchange(0, me, Acquire, Relaxed) {
+                    Ok(_) => {
+                        f.store(0, Relaxed);
+                        if core == 0 {
+                            self.a_blocked.store(false, Relaxed);
+                        }
+                        return true;
                     }
-                    return true;
+                    Err(owner) if owner == me => return true,
+                    Err(_) => std::hint::spin_loop(),
                 }
-                Err(owner) if owner == me => return true,
-                Err(_) => std::hint::spin_loop(),
+            }
+            if core == 0 {
+                // its clock stands still meanwhile, so B may run on past the window to the unlock
+                self.a_blocked.store(true, Relaxed);
+                self.yield_soc();
             }
         }
         if core == 1 {
-            return false; // (B's thread waits for the unlock where it can: `Why::Blocked`)
+            return false;
         }
-        // core 0 hands the Soc to core 1 first (it may need it to get to its unlock), and its
-        // clock runs on while it retries, so B may run on past the window to the unlock
-        self.a_blocked.store(true, Relaxed);
-        self.yield_soc();
         let mut i = f.load(Relaxed);
         backoff(&mut i);
         f.store(i, Relaxed);
@@ -253,10 +285,12 @@ impl Shared {
     fn b_gate(&self) {
         self.want.fetch_add(1, SeqCst);
         self.b_gates.fetch_add(1, Relaxed);
+        let t0 = std::time::Instant::now();
         let mut i = 0;
         while self.gate.compare_exchange(GATE_FREE, GATE_B, Acquire, Relaxed).is_err() {
             backoff(&mut i);
         }
+        self.b_gate_us.fetch_add(t0.elapsed().as_micros() as u64, Relaxed);
     }
 
     fn b_ungate(&self) {
@@ -275,9 +309,13 @@ impl Shared {
     /// Core 1's pending interrupt, from the `Soc` (the owner's call: A at a slice, B holding the gate).
     fn publish_irq(&self, soc: &Soc) {
         let w = Self::encode(if soc.periph.any_pending() { soc.pending_irq_for(1) } else { None });
-        let old = self.irq1.swap(w, AcqRel);
-        if w != 0 && old == 0 {
-            self.wake();
+        // (a read first: a write every slice would pull the line away from the other thread)
+        let old = self.irq1.load(Relaxed);
+        if old != w {
+            self.irq1.store(w, Release);
+            if w != 0 && old == 0 {
+                self.wake();
+            }
         }
     }
 
@@ -293,6 +331,7 @@ impl Shared {
         self.yield_soc();
         let w = self.window.load(Relaxed);
         let mut i = 0;
+        let t0 = std::time::Instant::now();
         let behind = || self.b_live.load(Acquire) && self.state.load(Acquire) == RUNNING && a > self.b_cycles.load(Acquire) + w;
         while behind() {
             if i == 0 {
@@ -310,7 +349,11 @@ impl Shared {
                 }
                 self.a_sleeping.store(false, SeqCst);
                 self.a_wake_at.store(u64::MAX, Relaxed);
+                self.a_sleeps.fetch_add(1, Relaxed);
             }
+        }
+        if i > 0 {
+            self.a_wait_us.fetch_add(t0.elapsed().as_micros() as u64, Relaxed);
         }
     }
 
@@ -385,6 +428,16 @@ impl Shared {
         self.stop.store(false, Relaxed);
     }
 
+    /// What the one-thread scheduler needs of the shared state when the mode ends: the hardware
+    /// lock's owner and whether core 1 sleeps (B is stopped).
+    pub fn hand_back(&self) -> (Option<u32>, bool) {
+        (match self.lock.load(Acquire) { 0 => None, n => Some(n - 1) }, self.idle.load(Acquire))
+    }
+
+    pub fn gates(&self) -> u64 {
+        self.b_gates.load(Relaxed)
+    }
+
     /// A chip reset: the state B shared with core 1 starts over.
     pub fn reset(&self) {
         self.lock.store(0, Release);
@@ -419,9 +472,9 @@ impl Mt {
     }
 
     /// (cores 1's time in the window waits, for tuning) A's waits for B, B's for A, B's for the `Soc`
-    pub fn stats(&self) -> (u64, u64, u64, u64) {
+    pub fn stats(&self) -> [u64; 8] {
         let s = &self.shared;
-        (s.a_waits.load(Relaxed), s.b_waits.load(Relaxed), s.b_gates.load(Relaxed), s.b_insns.load(Relaxed))
+        [s.a_waits.load(Relaxed), s.b_waits.load(Relaxed), s.b_gates.load(Relaxed), s.b_insns.load(Relaxed), s.a_wait_us.load(Relaxed), s.b_wait_us.load(Relaxed), s.b_gate_us.load(Relaxed), s.a_sleeps.load(Relaxed)]
     }
 }
 
@@ -564,6 +617,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
     let mut live = false;
     let mut calm = 0u32;
     let mut i = 0u32;
+    let mut wt: Option<std::time::Instant> = None;
     loop {
         if sh.stop.load(Acquire) {
             return Ok(());
@@ -591,6 +645,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
         if b >= a + w && !sh.a_blocked.load(Relaxed) {
             if i == 0 {
                 sh.b_waits.fetch_add(1, Relaxed);
+                wt = Some(std::time::Instant::now());
             }
             if i < SPINS {
                 backoff(&mut i);
@@ -601,6 +656,9 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
                 sh.b_wake_at.store(u64::MAX, Relaxed);
             }
             continue;
+        }
+        if let Some(t) = wt.take() {
+            sh.b_wait_us.fetch_add(t.elapsed().as_micros() as u64, Relaxed);
         }
         i = 0;
         let (k, why) = run_chunk(sh, c1, &job, a + w - b)?;
@@ -912,4 +970,5 @@ impl Bus for Core1Mt<'_> {
         self.budget <= 1
     }
 }
+
 
