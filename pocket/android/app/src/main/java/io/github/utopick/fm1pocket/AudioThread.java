@@ -3,6 +3,7 @@ package io.github.utopick.fm1pocket;
 import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
+import android.os.Build;
 import android.os.Process;
 import java.util.Arrays;
 
@@ -18,12 +19,17 @@ final class AudioThread extends Thread {
 
     @Override public void run() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO);
-        AudioTrack track = new AudioTrack.Builder()
-            .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+        AudioTrack.Builder b = new AudioTrack.Builder()
+            .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).setEncoding(AudioFormat.ENCODING_PCM_FLOAT).build())
-            .setBufferSizeInBytes(2048 * 2 * 4)
-            .setTransferMode(AudioTrack.MODE_STREAM)
-            .build();
+            .setBufferSizeInBytes(2048 * 2 * 4) // the most it may grow to, not what it starts with
+            .setTransferMode(AudioTrack.MODE_STREAM);
+        if (Build.VERSION.SDK_INT >= 26) b.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
+        AudioTrack track = b.build();
+        // Every frame in the buffer is a frame of delay between a key press and its sound, so start small
+        // and grow by a quantum each time the phone could not keep up (Android clamps it to what it allows).
+        int size = track.setBufferSizeInFrames(2 * CHUNK), underruns = 0;
+        if (size <= 0) size = track.getBufferCapacityInFrames(); // refused: keep the whole buffer, as before
         float[] buf = new float[CHUNK * 2];
         boolean playing = false;
         try {
@@ -37,6 +43,11 @@ final class AudioThread extends Thread {
                 int frames = Native.render(buf);
                 if (frames <= 0) { Arrays.fill(buf, 0f); frames = CHUNK; } // off or between firmwares: silence keeps the pace
                 track.write(buf, 0, Math.min(frames, CHUNK) * 2, AudioTrack.WRITE_BLOCKING);
+                int u = track.getUnderrunCount();
+                if (u > underruns) {
+                    underruns = u;
+                    if (size < track.getBufferCapacityInFrames()) size = Math.max(size, track.setBufferSizeInFrames(size + CHUNK));
+                }
             }
         } catch (InterruptedException ignored) {
         } finally {
