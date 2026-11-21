@@ -19,6 +19,17 @@ pub fn with<R>(f: impl FnOnce(&mut Host) -> R) -> R {
     f(g.get_or_insert_with(Host::new))
 }
 
+/// As `with`, for the UI thread: None when the audio thread holds the lock (in a slice of
+/// emulation, which is longest during a firmware's bursts), so a screen refresh is skipped, not waited for.
+pub fn try_with<R>(f: impl FnOnce(&mut Host) -> R) -> Option<R> {
+    let mut g = match HOST.try_lock() {
+        Ok(g) => g,
+        Err(std::sync::TryLockError::Poisoned(e)) => e.into_inner(),
+        Err(std::sync::TryLockError::WouldBlock) => return None,
+    };
+    Some(f(g.get_or_insert_with(Host::new)))
+}
+
 pub fn version() -> String { format!("fm1-android {}", env!("CARGO_PKG_VERSION")) }
 
 // ---------------------------------------------------------------- JNI
@@ -72,7 +83,7 @@ pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_poll(env: 
 #[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_face(env: *mut JNIEnv, _c: jclass, lcd: jshortArray, leds: jfloatArray) -> jint {
     let (mut px, mut lv) = ([0u16; 240 * 240], [0f32; 41]);
-    let got = catch_unwind(AssertUnwindSafe(|| with(|h| h.face(&mut px, &mut lv)))).unwrap_or(-1);
+    let got = match catch_unwind(AssertUnwindSafe(|| try_with(|h| h.face(&mut px, &mut lv)))) { Ok(Some(g)) => g, Ok(None) => return -2, Err(_) => -1 };
     if got >= 0 { (**env).SetFloatArrayRegion.unwrap()(env, leds, 0, 41, lv.as_ptr()); }
     if got == 1 { (**env).SetShortArrayRegion.unwrap()(env, lcd, 0, (240 * 240) as jsize, px.as_ptr() as *const jshort); }
     got
@@ -120,12 +131,12 @@ pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_fastCores(
 
 #[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_load(_env: *mut JNIEnv, _c: jclass) -> jint {
-    catch_unwind(|| with(|h| h.load())).unwrap_or(-1)
+    catch_unwind(|| try_with(|h| h.load())).map_or(-1, |l| l.unwrap_or(-2))
 }
 
 #[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_peakLoad(_env: *mut JNIEnv, _c: jclass) -> jint {
-    catch_unwind(|| with(|h| h.take_peak_load())).unwrap_or(0)
+    catch_unwind(|| try_with(|h| h.take_peak_load())).map_or(0, |l| l.unwrap_or(-2))
 }
 
 #[no_mangle]
