@@ -18,7 +18,7 @@ js = d.execute_script
 FAKE = """
 window.__calls = []; window.__queue = []; window.__polls = 0; window.__errs = [];
 addEventListener('error', e => __errs.push(String(e.message)));
-window.FM1Native = { post: j => __calls.push(['post', j]), boot: (j, p, s, x) => __calls.push(['boot', j, p.length, s, x]), version: () => 'fake' };
+window.FM1Native = { post: j => __calls.push(['post', j]), boot: (j, p, s, x) => __calls.push(['boot', j, p.length, s, x]), version: () => 'fake', page: () => __calls.push(['page']) };
 // the poll's answer: u32 count, then per message u32 jsonLen, json, u32 blobs, each u32 nameLen, name, u32 typeLen, type, u32 byteLen, bytes
 window.pack = (msgs) => {
   const parts = [], enc = new TextEncoder(), u32 = n => new Uint8Array(new Uint32Array([n]).buffer), str = s => [u32(enc.encode(s).length), enc.encode(s)];
@@ -67,6 +67,9 @@ try:
     js("setKey(0, true)")
     time.sleep(0.3)
     assert any(c[0] == "post" and '"key"' in c[1] for c in js("return __calls")), "a key did not go through FM1Native.post: %s" % js("return __calls.map(c => c[1])")
+    # an error shows the page over the app's native play screen
+    js("__queue.push(pack([[{type: 'error', seq: arguments[0], message: 'test error'}, {}]]))", seq); time.sleep(0.5)
+    assert ["page"] in js("return __calls"), "an error did not bring the page forward"
     # the app's native play screen covers the page: it polls about 4 times a second, then as often as before
     js("nativeSlow(true)"); time.sleep(0.3); n = js("return __polls"); time.sleep(1)
     slow = js("return __polls") - n
