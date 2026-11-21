@@ -1307,7 +1307,7 @@
           const r = run; // a picture of its screen for its card, once it has drawn it
           setTimeout(() => run === r && kvPut("shot:" + r.f.id, $("#lcd").toDataURL("image/png")).catch(() => {}), 8000);
         } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
-        else if (m.type === "error") (status(m.message), toast(m.message, 4000));
+        else if (m.type === "error") (window.FM1Native?.page?.(), status(m.message), toast(m.message, 4000));
       }
       // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
       // worklet messages (docs: pocket/android/README.md). nat is the poll timer; the object it makes stands in for the AudioWorkletNode.
@@ -1581,6 +1581,7 @@
       let sureGo = null, sureCancel = null;
       let sureChoice = 0; // with opts, the dialog asks which one (the first by default) and gives its number to go
       function sure(text, go, opts) {
+        window.FM1Native?.page?.(); // the Android app: a question can't wait under its native play screen
         $("#sureText").textContent = text;
         sureChoice = 0;
         $("#sureOpt").hidden = !opts;
