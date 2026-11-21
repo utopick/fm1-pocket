@@ -39,7 +39,9 @@ final class FaceView extends View implements Choreographer.FrameCallback {
     private final int[] clicks = new int[8];
     private int pot = 512; // the page's starting MASTER
     private boolean on, running;
-    private long lastRead;
+    private long lastRead, lastStat;
+    private String stat = "";
+    private final boolean jit = Native.jitMemory();
 
     /** What a finger holds: a key or button id, a knob (100 + index), or the menu button. */
     private static final class Finger { int what; float lastY, acc; }
@@ -186,7 +188,15 @@ final class FaceView extends View implements Choreographer.FrameCallback {
             if (Math.abs(v - ledAvg[i]) > 0.005f) ledsMoved = true;
             ledAvg[i] = v;
         }
-        if (got == 1 || ledsMoved || was != on) invalidate();
+        boolean statMoved = false;
+        if (nanos - lastStat > 1_000_000_000L) { // the load under MENU, once a second: whether this phone keeps up
+            lastStat = nanos;
+            int load = Native.load();
+            String st = (load < 0 ? "" : load + "% ") + (jit ? "JIT" : "NO JIT");
+            statMoved = !st.equals(stat);
+            stat = st;
+        }
+        if (got == 1 || ledsMoved || was != on || statMoved) invalidate();
     }
 
     // ---------------------------------------------------------------- drawing
@@ -222,6 +232,7 @@ final class FaceView extends View implements Choreographer.FrameCallback {
         paint.setColor(Color.rgb(70, 70, 90));
         c.drawRoundRect(menuRect, rr, rr, paint);
         label(c, "MENU", menuRect, menuRect.centerY() + text.getTextSize() / 3);
+        label(c, stat, menuRect, menuRect.bottom - text.getTextSize() * 0.8f);
         for (int id = 0; id < 14; id++) {
             RectF r = keyRect[id];
             int base = holds[id] > 0 ? Color.rgb(90, 90, 96) : Color.rgb(50, 50, 54);

@@ -88,4 +88,7 @@ fn plays_a_song() {
     assert!(frame_msgs > 0 && lcd_ok, "the LCD stayed blank");
     assert!(peak > 0.0, "silence");
     assert!(face_ok, "the native screen's LCD stayed blank");
+    let load = with(|h| h.load());
+    println!("load {load}% (render CPU time over sound time)");
+    assert!(load > 0 && load < 1000, "load {load}");
 }
