@@ -22,12 +22,12 @@ final class AudioThread extends Thread {
         AudioTrack.Builder b = new AudioTrack.Builder()
             .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(new AudioFormat.Builder().setSampleRate(RATE).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).setEncoding(AudioFormat.ENCODING_PCM_FLOAT).build())
-            .setBufferSizeInBytes(2048 * 2 * 4) // the most it may grow to, not what it starts with
+            .setBufferSizeInBytes(8192 * 2 * 4) // the most it may grow to (186 ms, for firmwares whose work comes in bursts), not what it starts with
             .setTransferMode(AudioTrack.MODE_STREAM);
         if (Build.VERSION.SDK_INT >= 26) b.setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY);
         AudioTrack track = b.build();
         // Every frame in the buffer is a frame of delay between a key press and its sound, so start small
-        // and grow by a quantum each time the phone could not keep up (Android clamps it to what it allows).
+        // and double it each time the phone could not keep up (Android clamps it to what it allows).
         int size = track.setBufferSizeInFrames(2 * CHUNK), underruns = 0;
         if (size <= 0) size = track.getBufferCapacityInFrames(); // refused: keep the whole buffer, as before
         float[] buf = new float[CHUNK * 2];
@@ -46,7 +46,7 @@ final class AudioThread extends Thread {
                 int u = track.getUnderrunCount();
                 if (u > underruns) {
                     underruns = u;
-                    if (size < track.getBufferCapacityInFrames()) size = Math.max(size, track.setBufferSizeInFrames(size + CHUNK));
+                    if (size < track.getBufferCapacityInFrames()) size = Math.max(size, track.setBufferSizeInFrames(size * 2));
                 }
             }
         } catch (InterruptedException ignored) {

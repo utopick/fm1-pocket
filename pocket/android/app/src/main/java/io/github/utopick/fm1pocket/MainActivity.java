@@ -41,6 +41,8 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> { running = true; setAwake(true); showFace(true); });
         }
         @JavascriptInterface public String version() { return Native.version(); }
+        /** The page has something to say or ask (a lower clock, an error): show it over the native play screen. */
+        @JavascriptInterface public void page() { runOnUiThread(() -> showFace(false)); }
     }
 
     private static byte[] decode(String b64) { return b64 == null || b64.isEmpty() ? null : Base64.decode(b64, Base64.DEFAULT); }
