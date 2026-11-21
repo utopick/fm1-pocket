@@ -51,55 +51,6 @@
       });
       // the Android app (pocket/android) injects FM1Native: the emulator and the sound run natively there, so no service worker, install or sound-output options
       if (window.FM1Native) document.documentElement.classList.add("native");
-      // Web MIDI in the Android app: a WebView has none, so the app's FM1Midi (Android's MIDI service, SysEx included) stands in for
-      // navigator.requestMIDIAccess with the few parts the page uses: the port maps, send, onmidimessage, onstatechange. Android hands
-      // bytes in pieces as they come; each input cuts them into whole messages, as Web MIDI does. The app has MIDI without asking.
-      if (window.FM1Midi && !navigator.requestMIDIAccess) {
-        const M = window.FM1Midi, b64 = (a) => { let t = ""; for (const x of a) t += String.fromCharCode(x); return btoa(t); }, LEN = (s) => (s < 0xc0 || s >= 0xe0 && s < 0xf0 || s === 0xf2 ? 2 : s < 0xe0 || s === 0xf1 || s === 0xf3 ? 1 : 0);
-        let access = null;
-        const port = (p) => {
-          const o = { id: p.id, name: p.name, manufacturer: p.manufacturer, type: p.type, version: "", state: "connected", connection: "open", onmidimessage: null, onstatechange: null };
-          o.open = o.close = () => Promise.resolve(o);
-          if (p.type === "output") (o.send = (d) => d.length && M.send(p.id, b64(d))), (o.clear = () => {});
-          else o.cut = { sx: null, run: 0, msg: null };
-          return o;
-        };
-        const sync = () => {
-          const now = JSON.parse(M.list()), seen = new Set(now.map((p) => p.id)), changed = [];
-          for (const p of now) { const map = p.type === "input" ? access.inputs : access.outputs; if (!map.has(p.id)) map.set(p.id, port(p)), changed.push(map.get(p.id)); }
-          for (const map of [access.inputs, access.outputs]) for (const [id, o] of map) if (!seen.has(id)) (map.delete(id), (o.state = "disconnected"), (o.connection = "closed"), changed.push(o));
-          for (const o of changed) (o.onstatechange?.({ port: o }), access.onstatechange?.({ port: o }));
-        };
-        window.__fm1MidiChanged = () => access && sync();
-        window.__fm1MidiIn = (id, data) => {
-          const o = access?.inputs.get(id), c = o?.cut;
-          if (!c) return;
-          const emit = (m) => o.onmidimessage?.({ data: Uint8Array.from(m), timeStamp: performance.now(), target: o });
-          for (const x of Uint8Array.from(atob(data), (ch) => ch.charCodeAt(0))) {
-            if (x >= 0xf8) emit([x]); // clock and the other real-time bytes may come anywhere, even inside a SysEx
-            else if (x === 0xf0) c.sx = [x];
-            else if (x === 0xf7) c.sx && (c.sx.push(x), emit(c.sx), (c.sx = null));
-            else if (c.sx && x < 0x80) c.sx.push(x);
-            else if (x >= 0x80) {
-              c.sx = null;
-              c.run = x < 0xf0 ? x : 0; // running status: channel messages only
-              c.msg = [x];
-              if (!LEN(x)) (emit(c.msg), (c.msg = null));
-              else c.need = LEN(x);
-            } else if (c.msg || c.run) {
-              c.msg = c.msg || [c.run];
-              c.msg.push(x);
-              if (c.msg.length > c.need) (emit(c.msg), (c.msg = null));
-            }
-          }
-        };
-        navigator.requestMIDIAccess = async () => {
-          if (!access) (access = { inputs: new Map(), outputs: new Map(), sysexEnabled: true, onstatechange: null }), sync(), M.start();
-          return access;
-        };
-        const query = navigator.permissions?.query?.bind(navigator.permissions);
-        if (query) navigator.permissions.query = (d) => (d && d.name === "midi" ? Promise.resolve({ state: "granted", onchange: null }) : query(d));
-      }
       else if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname)))
         addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(console.warn));
       try {
