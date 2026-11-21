@@ -4,6 +4,7 @@
 pub mod host;
 pub mod json;
 
+use fm1_web as w;
 use host::Host;
 use jni_sys::*;
 use std::ffi::{c_char, CStr, CString};
@@ -137,6 +138,11 @@ pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_load(_env:
 #[no_mangle]
 pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_peakLoad(_env: *mut JNIEnv, _c: jclass) -> jint {
     catch_unwind(|| try_with(|h| h.take_peak_load())).map_or(0, |l| l.unwrap_or(-2))
+}
+
+#[no_mangle]
+pub unsafe extern "system" fn Java_io_github_utopick_fm1pocket_Native_threads(_env: *mut JNIEnv, _c: jclass) -> jint {
+    catch_unwind(|| try_with(|_| w::fm1_core1_thread())).ok().flatten().unwrap_or(1) as jint
 }
 
 #[no_mangle]

@@ -486,6 +486,12 @@ pub extern "C" fn fm1_mt_dump() {
     if let Some(mt) = machine().and_then(|m| m.soc.mt.as_ref()) { eprintln!("{}", mt.shared.dump()); }
 }
 
+/// 2 once core 1 runs on its own thread (the firmware released it), else 1.
+#[no_mangle]
+pub extern "C" fn fm1_core1_thread() -> u32 {
+    machine().and_then(|m| m.soc.mt.as_ref()).map_or(1, |mt| mt.started() as u32 + 1)
+}
+
 /// 2 when the running machine has core 1 on its own thread, else 1.
 #[no_mangle]
 pub extern "C" fn fm1_threaded() -> u32 {
