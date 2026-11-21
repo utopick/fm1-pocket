@@ -89,6 +89,8 @@ fn plays_a_song() {
     assert!(peak > 0.0, "silence");
     assert!(face_ok, "the native screen's LCD stayed blank");
     let load = with(|h| h.load());
-    println!("load {load}% (render CPU time over sound time)");
+    let peak = with(|h| h.take_peak_load());
+    println!("load {load}%, highest 1/30 s {peak}% (render CPU time over sound time)");
+    assert!(peak >= load && with(|h| h.take_peak_load()) == 0, "the peak was not kept, or not reset");
     assert!(load > 0 && load < 1000, "load {load}");
 }

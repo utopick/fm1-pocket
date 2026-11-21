@@ -19,6 +19,8 @@ final class Native {
     static native int fastCores();
     /** Emulation time over sound time in percent (100 = just real time), -1 while nothing plays. */
     static native int load();
+    /** The highest load of a 1/30 s stretch since the last call, in percent (the bursts the smoothed load hides). */
+    static native int peakLoad();
     /** Whether the native JIT can get executable memory (else the emulator interprets, much slower). */
     static native boolean jitMemory();
 
