@@ -1149,6 +1149,10 @@ impl Bus for Soc {
         }
     }
 
+    fn ordered(&self) -> bool {
+        self.mt.is_some()
+    }
+
     fn test_set(&mut self, addr: u32) -> u8 {
         let o = addr.wrapping_sub(RAM_BASE) as usize;
         if self.mt.is_some() && o < self.ram.len() {
@@ -1167,13 +1171,7 @@ impl Bus for Soc {
 
     fn hw_lock(&mut self, core: u32, set: bool) -> bool {
         if let Some(mt) = &self.mt {
-            let got = mt.shared.hw_lock(core, set);
-            if !got {
-                // core 1's thread holds it: hand it the `Soc` (it may need it to get to the unlock)
-                mt.shared.yield_soc();
-                std::thread::yield_now();
-            }
-            return got;
+            return mt.shared.hw_lock(core, set);
         }
         match (set, self.lock_owner) {
             (true, Some(c)) if c != core => {

@@ -236,6 +236,8 @@ pub struct Jit {
     itab: Box<[ITab]>,
     /// compile the checks for `Cpu::stop_pc` / `stop_io` at each body's entry (`Cpu::stop_checks`)
     pub(crate) stops: bool,
+    /// RAM accesses are acquire / release (`Bus::ordered`)
+    pub(crate) ordered: bool,
 }
 
 /// An `itab` entry (generated code reads it: pc at 0, body at 8).
@@ -305,7 +307,7 @@ const HOT: u32 = 32;
 impl Jit {
     pub fn new(profile: bool) -> Option<Jit> {
         let itab = (0..1 << ITAB_BITS).map(itab_empty).collect();
-        Some(Jit { cache: CodeCache::new(64 << 20)?, state: Vec::new(), guards: Vec::new(), profile, itab, stops: false })
+        Some(Jit { cache: CodeCache::new(64 << 20)?, state: Vec::new(), guards: Vec::new(), profile, itab, stops: false, ordered: false })
     }
 
     /// Will `entry` compile block `id` on its next call? (Then `Cpu::then_of` looks for the
@@ -375,7 +377,7 @@ impl Jit {
         }
         let itab = self.itab.as_ptr() as u64;
         let stops = self.stops.then_some(whole);
-        let (code, body) = compile::<B>(ops, swaps, then, pc0, mem, &mut self.guards, self.profile, itab, stops)?;
+        let (code, body) = compile::<B>(ops, swaps, then, pc0, mem, &mut self.guards, self.profile, itab, stops, self.ordered)?;
         let p = self.cache.write(&code)?;
         // SAFETY: body is a byte offset inside the code just written
         let body = unsafe { p.add(body) };
@@ -749,6 +751,8 @@ struct Gen<'a> {
     itab: u64,
     /// the runner's stop checks are compiled (`Jit::stops`)
     stops: bool,
+    /// two threads share RAM: compiled loads and stores of it are ldar / stlr, a compile-time choice
+    ordered: bool,
     rc: RegCache,
     /// emitting a probe copy (`emit_ops`): the block's instructions
     probe_copy: Option<u32>,
@@ -1206,6 +1210,22 @@ impl Gen<'_> {
             self.a.mov32(2, len.saturating_sub(w as u32));
             self.a.cmp(3, 2);
             self.a.b_cond(AC::Hi, miss);
+            if self.ordered && base_reg == RAM {
+                // acquire: what the other core published before its flag store is seen after it
+                self.a.add_x(3, RAM, 3);
+                match w {
+                    4 => self.a.ldar(0, 3),
+                    2 => self.a.ldarh(0, 3),
+                    _ => self.a.ldarb(0, 3),
+                }
+                match (w, signed) {
+                    (2, true) => self.a.sxth(0, 0),
+                    (1, true) => self.a.sbfx(0, 0, 0, 8),
+                    _ => {}
+                }
+                self.a.b(done);
+                continue;
+            }
             match (w, signed) {
                 (4, _) => self.a.ldr_u(0, base_reg, 3),
                 (2, false) => self.a.ldrh_u(0, base_reg, 3),
@@ -1249,6 +1269,25 @@ impl Gen<'_> {
             self.a.lsr_imm(2, 3, 2);
             self.a.ldrb_u(2, FLAGS, 2);
             self.a.cbnz(2, slow);
+        }
+        if self.ordered {
+            // release: this core's earlier stores are seen before this one (a lock byte or flag)
+            self.a.add_x(3, RAM, 3);
+            match w {
+                4 => self.a.stlr(src, 3),
+                2 => self.a.stlrh(src, 3),
+                _ => self.a.stlrb(src, 3),
+            }
+            self.a.b(done);
+            self.a.bind(slow);
+            self.a.mov(2, src);
+            self.a.mov(1, 0);
+            self.a.mov_x(0, CTX);
+            self.a.add_imm(3, DONE, idx);
+            self.a.mov32(4, w as u32);
+            self.call(self.h_write);
+            self.a.bind(done);
+            return;
         }
         match w {
             4 => self.a.str_u(src, RAM, 3),
@@ -2153,7 +2192,7 @@ fn emit_ops<B: Bus>(g: &mut Gen, ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)],
 /// Native code for a block prefix of plain micro-ops (none careful), and its body's offset.
 #[cfg(target_arch = "aarch64")]
 #[allow(clippy::too_many_arguments)]
-fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate::BOp], pc0: u32, mem: &JitMem, guards: &mut Vec<Box<RamGuard>>, profile: bool, itab: u64, stops: Option<bool>) -> Option<(Vec<u8>, usize)> {
+fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate::BOp], pc0: u32, mem: &JitMem, guards: &mut Vec<Box<RamGuard>>, profile: bool, itab: u64, stops: Option<bool>, ordered: bool) -> Option<(Vec<u8>, usize)> {
     for o in [off_reg(15), off_sp(), off_rets(), off_pc(), off_hold(), off_stop_pc(), off_stop_io(), off_stop_rest()] {
         if o >= 16384 {
             return None;
@@ -2170,6 +2209,7 @@ fn compile<B: Bus>(ops: &[crate::BOp], swaps: &[(Fast, Fast, u8)], then: &[crate
         h_pair: h_pair::<B> as *const () as u64,
         itab,
         stops: stops.is_some(),
+        ordered,
         rc: RegCache::default(),
         probe_copy: None,
     };

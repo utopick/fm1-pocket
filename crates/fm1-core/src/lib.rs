@@ -97,6 +97,12 @@ pub trait Bus {
     /// locks: `testset b[r]; ifeq goto` back to it). A dual-core bus may hand the machine to
     /// the other core, the one that holds it.
     fn spin(&mut self, _core: u32, _addr: u32) {}
+    /// Another thread runs the other core on the same RAM: compiled code loads and stores it with
+    /// acquire / release (the hosts here are weakly ordered; a flag or a lock byte must not
+    /// overtake the data it guards).
+    fn ordered(&self) -> bool {
+        false
+    }
     /// `testset`: the byte at `addr` is taken (bit 7 set); returns what it held. One atomic
     /// step on a bus whose two cores run on two threads.
     fn test_set(&mut self, addr: u32) -> u8 {
@@ -783,8 +789,10 @@ impl Cpu {
                 let inside = careful;
                 if let Some(mem) = jit_mem {
                     if self.jit.is_none() {
+                        let ordered = bus.ordered();
                         self.jit = jit::Jit::new(self.profile).map(|mut j| {
                             j.stops = self.stop_checks;
+                            j.ordered = ordered;
                             Box::new(j)
                         });
                     }

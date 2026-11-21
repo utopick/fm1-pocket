@@ -83,6 +83,13 @@ pub struct Shared {
     pub b_gates: AtomicU64,
     /// instructions core 1 ran on thread B
     pub b_insns: AtomicU64,
+    /// consecutive failed `lockset`s of each core (the backoff's count)
+    fails: [AtomicU32; 2],
+    /// the clock at which A should wake B from a wait for it (u64::MAX: not waiting), and B's for A
+    b_wake_at: AtomicU64,
+    a_wake_at: AtomicU64,
+    a_sleeping: AtomicBool,
+    a_thread: Mutex<Option<Thread>>,
 }
 
 /// What B runs: raw pointers into the machine, valid from `start` to `quiesce`.
@@ -105,15 +112,30 @@ pub struct Mt {
     handle: Option<JoinHandle<()>>,
 }
 
+/// A short spin, a few yields, then sleeps that grow to 200 us: a partner that is not running (a
+/// loaded phone) must not cost this thread's core as well (386DX at W=16, on a busy host: 27 s of CPU for 12 s of sound with yield loops).
+const SPINS: u32 = 2000;
+
 fn backoff(i: &mut u32) {
-    if *i < 40 {
+    if *i < SPINS {
         std::hint::spin_loop();
-    } else if *i < 200 {
+    } else if *i < SPINS + 4 {
         thread::yield_now();
     } else {
-        thread::park_timeout(Duration::from_micros(50));
+        thread::park_timeout(Duration::from_micros(20 + 10 * (*i - SPINS - 4).min(18) as u64));
     }
     *i = i.saturating_add(1);
+}
+
+/// `backoff` for a partner that has just been woken (a start, a stop): it should be with us within
+/// a scheduler's latency, so yields come first, and only a late one costs a sleep.
+fn backoff_woken(i: &mut u32) {
+    if *i < SPINS + 400 {
+        if *i < SPINS { std::hint::spin_loop() } else { thread::yield_now() }
+        *i += 1;
+    } else {
+        backoff(i);
+    }
 }
 
 impl Shared {
@@ -141,6 +163,11 @@ impl Shared {
             b_waits: AtomicU64::new(0),
             b_gates: AtomicU64::new(0),
             b_insns: AtomicU64::new(0),
+            fails: Default::default(),
+            b_wake_at: AtomicU64::new(u64::MAX),
+            a_wake_at: AtomicU64::new(u64::MAX),
+            a_sleeping: AtomicBool::new(false),
+            a_thread: Mutex::new(None),
         }
     }
 
@@ -172,13 +199,24 @@ impl Shared {
             let _ = self.lock.compare_exchange(me, 0, Release, Relaxed);
             return true;
         }
+        let f = &self.fails[core as usize & 1];
         for _ in 0..64 {
             match self.lock.compare_exchange(0, me, Acquire, Relaxed) {
-                Ok(_) => return true,
+                Ok(_) => {
+                    f.store(0, Relaxed);
+                    return true;
+                }
                 Err(owner) if owner == me => return true,
                 Err(_) => std::hint::spin_loop(),
             }
         }
+        // (core 0 hands the Soc to core 1 first: it may need it to get to its unlock)
+        if core == 0 {
+            self.yield_soc();
+        }
+        let mut i = f.load(Relaxed);
+        backoff(&mut i);
+        f.store(i, Relaxed);
         false
     }
 
@@ -239,15 +277,39 @@ impl Shared {
         self.publish_irq(soc);
         let a = soc.periph.cycles;
         self.a_cycles.store(a, Release);
+        if a >= self.b_wake_at.load(Relaxed) {
+            self.wake();
+        }
         self.yield_soc();
         let w = self.window.load(Relaxed);
         let mut i = 0;
-        while self.b_live.load(Acquire) && self.state.load(Acquire) == RUNNING && a > self.b_cycles.load(Acquire) + w {
+        let behind = || self.b_live.load(Acquire) && self.state.load(Acquire) == RUNNING && a > self.b_cycles.load(Acquire) + w;
+        while behind() {
             if i == 0 {
                 self.a_waits.fetch_add(1, Relaxed);
             }
             self.yield_soc();
-            backoff(&mut i);
+            if i < SPINS {
+                backoff(&mut i);
+            } else {
+                // asleep until B has caught up by half a window (its `wake_a`), or a millisecond
+                self.a_wake_at.store(a.saturating_sub(w / 2), SeqCst);
+                self.a_sleeping.store(true, SeqCst);
+                if behind() {
+                    thread::park_timeout(Duration::from_millis(1));
+                }
+                self.a_sleeping.store(false, SeqCst);
+                self.a_wake_at.store(u64::MAX, Relaxed);
+            }
+        }
+    }
+
+    /// B wakes A from a wait for B's clock, once it has got there.
+    fn wake_a(&self, b: u64) {
+        if b >= self.a_wake_at.load(SeqCst) && self.a_sleeping.load(SeqCst) {
+            if let Some(t) = self.a_thread.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                t.unpark();
+            }
         }
     }
 
@@ -268,6 +330,7 @@ impl Shared {
         }
         let a = soc.periph.cycles;
         *self.job.lock().unwrap_or_else(|e| e.into_inner()) = Some(job);
+        *self.a_thread.lock().unwrap_or_else(|e| e.into_inner()) = Some(thread::current());
         self.a_cycles.store(a, Relaxed);
         self.b_cycles.store(a, Relaxed);
         self.b_live.store(false, Relaxed);
@@ -291,7 +354,7 @@ impl Shared {
             if !self.sleeping.load(Relaxed) && self.paused1.load(Relaxed) {
                 break; // (held: it will not go live)
             }
-            backoff(&mut i);
+            backoff_woken(&mut i);
         }
     }
 
@@ -307,7 +370,7 @@ impl Shared {
                 t.unpark();
             }
             self.yield_soc();
-            backoff(&mut i);
+            backoff_woken(&mut i);
         }
         self.stop.store(false, Relaxed);
     }
@@ -498,6 +561,7 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
         }
         if sh.paused1.load(Acquire) || sh.idle.load(Acquire) {
             sh.b_live.store(false, Release);
+            sh.wake_a(u64::MAX);
             live = false;
             sleep_until(sh, || sh.stop.load(Acquire) || (!sh.paused1.load(Acquire) && (!sh.idle.load(Acquire) || sh.irq1.load(Acquire) != 0)));
             continue;
@@ -516,13 +580,21 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
             if i == 0 {
                 sh.b_waits.fetch_add(1, Relaxed);
             }
-            backoff(&mut i);
+            if i < SPINS {
+                backoff(&mut i);
+            } else {
+                // asleep until A has come within half a window (`a_sync`), or a millisecond
+                sh.b_wake_at.store(b.saturating_sub(w / 2), SeqCst);
+                sleep_until(sh, || sh.stop.load(Acquire) || sh.a_cycles.load(Acquire) + w > b);
+                sh.b_wake_at.store(u64::MAX, Relaxed);
+            }
             continue;
         }
         i = 0;
         let (k, why) = run_chunk(sh, c1, &job, a + w - b)?;
         let b = b + k;
         sh.b_cycles.store(b, Release);
+        sh.wake_a(b);
         sh.b_insns.fetch_add(k, Relaxed);
         match why {
             Why::Budget | Why::Held => calm = 0,
@@ -541,9 +613,17 @@ unsafe fn session(sh: &Shared, job: Job) -> Result<(), String> {
                 sh.b_live.store(false, Release);
                 live = false;
                 let target = a + if calm > 16 { LONG_NAP } else { NAP };
-                let mut j = if calm > 16 { 200 } else { 0 };
-                while sh.a_cycles.load(Acquire) < target && !sh.stop.load(Acquire) && sh.irq1.load(Acquire) == 0 && !sh.paused1.load(Acquire) {
-                    backoff(&mut j);
+                let mut j = if calm > 16 { SPINS } else { 0 };
+                sh.wake_a(u64::MAX); // (A may be waiting for it: it is not live now)
+                let waiting = || sh.a_cycles.load(Acquire) < target && !sh.stop.load(Acquire) && sh.irq1.load(Acquire) == 0 && !sh.paused1.load(Acquire);
+                while waiting() {
+                    if j < SPINS {
+                        backoff(&mut j);
+                    } else {
+                        sh.b_wake_at.store(target, SeqCst);
+                        sleep_until(sh, || !waiting());
+                        sh.b_wake_at.store(u64::MAX, Relaxed);
+                    }
                 }
             }
         }
@@ -759,6 +839,9 @@ impl Bus for Core1Mt<'_> {
     fn irq_takes(&self, ready: &dyn Fn(u8) -> bool) -> bool {
         Shared::decode(self.sh.irq1.load(Acquire)).is_some_and(|(_, prio)| ready(prio))
     }
+    fn ordered(&self) -> bool {
+        true
+    }
     fn jit_mem(&mut self) -> Option<JitMem> {
         Some(self.mem)
     }
@@ -781,7 +864,6 @@ impl Bus for Core1Mt<'_> {
         if !got {
             // the other thread holds it: let it run, and look at what is asked of this one
             self.budget = self.budget.min(1);
-            thread::yield_now();
         }
         got
     }
@@ -801,3 +883,4 @@ impl Bus for Core1Mt<'_> {
         self.budget <= 1
     }
 }
+
