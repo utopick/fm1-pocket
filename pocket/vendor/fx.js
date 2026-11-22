@@ -383,11 +383,17 @@ window.FXE = (() => {
   const ORDER0 = [...PEDALS.slice(0, 8), ...AMPS, ...CABS, ...PEDALS.slice(8)].map((p) => p.id);
   // the live FX pads: effects on the whole sound, to latch or hold (PLAY.Pocket's mixer FX PADS)
   const LIVE = [
-    ["lofi", "LO-FI", "crushed"], ["tape", "TAPE", "wobble"], ["radio", "RADIO", "AM band"], ["tele", "PHONE", "narrow"],
-    ["water", "UNDERWATER", "muffled"], ["stut", "STUTTER", "16th chop"], ["lp", "LOW PASS", "dark"], ["hp", "HIGH PASS", "thin"],
-    ["echo", "ECHO", "throw"], ["verb", "REVERB", "wash"], ["robot", "ROBOT", "ring mod"], ["crunch", "CRUNCH", "whole mix"],
+    // pitch and voices: PLAY.Pocket's voice changer (pitch shifter, robot, megaphone, alien, choir) and TRACK.Pocket's octave, unison and fifth
+    ["o1", "OCTAVE ↑", "one up"], ["o2", "OCTAVE ↓", "one down"], ["uni", "UNISON", "+ octave below"], ["fif", "FIFTH", "+ a fifth"],
+    ["choir", "CHOIR", "three voices"], ["alien", "ALIEN", "warble"], ["robot", "ROBOT", "ring mod"], ["mega", "MEGAPHONE", "bullhorn"],
+    // filters and speakers: PLAY's mixer FX pads and TRACK's Filter down / up
+    ["lp", "LOW PASS", "dark"], ["hp", "HIGH PASS", "thin"], ["flo", "FILTER ↓", "closes it"], ["fhi", "FILTER ↑", "thins it"],
+    ["radio", "RADIO", "AM band"], ["tele", "PHONE", "narrow"], ["water", "UNDERWATER", "muffled"], ["lofi", "LO-FI", "crushed"],
+    // texture and time
+    ["tape", "TAPE", "wobble"], ["crunch", "CRUNCH", "whole mix"], ["drv", "DRIVE", "distort"], ["fln", "FLANGER", "whoosh"],
+    ["stut", "STUTTER", "16th chop"], ["g8", "GATE 1/8", "chop"], ["echo", "ECHO", "throw"], ["verb", "REVERB", "wash"],
   ];
-  const SENDS = new Set(["echo", "verb"]); // these add to the dry sound; the others replace it
+  const SENDS = new Set(["echo", "verb", "uni", "fif", "choir", "fln"]); // these add to the dry sound; the others replace it
   const defaults = () => ({ order: ORDER0.slice(), latch: true, u: Object.fromEntries(FX.map((p) => [p.id, Object.fromEntries([["on", false], ...p.knobs.map((k) => [k[0], k[4]])])])) });
   // saved and imported settings are untrusted: keep only known units and knobs, clamp every value
   function vet(o) {
@@ -485,7 +491,41 @@ window.FXE = (() => {
       return true;
     }
   }
-  registerProcessor("pp-room", Room);`;
+  registerProcessor("pp-room", Room);
+  // a pitch shifter (PLAY.Pocket's, its voice changer): two read heads on a delay line half a window apart, each fading in and out
+  class Pitch extends AudioWorkletProcessor {
+    static get parameterDescriptors() {
+      return [{ name: "ratio", defaultValue: 1, minValue: 0.25, maxValue: 4, automationRate: "k-rate" }];
+    }
+    constructor() {
+      super();
+      this.buf = new Float32Array(65536);
+      this.w = 0;
+      this.p = 0;
+      this.W = Math.round(sampleRate * 0.06);
+    }
+    process(inputs, outputs, par) {
+      const x = inputs[0] && inputs[0][0], y = outputs[0][0];
+      if (!x || !y) return true;
+      const r = par.ratio[0], W = this.W, M = 65535, buf = this.buf;
+      for (let n = 0; n < y.length; n++) {
+        buf[this.w] = x[n];
+        let a = 0;
+        for (let h = 0; h < 2; h++) {
+          let ph = this.p + h * 0.5;
+          ph -= Math.floor(ph);
+          const pos = this.w - (ph * W + 2), i0 = Math.floor(pos), f = pos - i0;
+          a += (buf[i0 & M] * (1 - f) + buf[(i0 + 1) & M] * f) * (0.5 - 0.5 * Math.cos(6.283185307 * ph));
+        }
+        y[n] = a;
+        this.w = (this.w + 1) & M;
+        this.p += (1 - r) / W;
+        this.p -= Math.floor(this.p);
+      }
+      return true;
+    }
+  }
+  registerProcessor("pp-pitch", Pitch);`;
   async function load(ctx) {
     if (!ctx.audioWorklet) return false;
     const url = URL.createObjectURL(new Blob([WORKLET_JS], { type: "text/javascript" }));
@@ -519,6 +559,13 @@ window.FXE = (() => {
       o.frequency.value = rate;
       o.start();
       return o;
+    };
+    // a pitch shifter at a ratio (2 = an octave up); without worklets it just passes the sound
+    h.pitch = (ratio) => {
+      if (!wl) return h.g();
+      const n = new AudioWorkletNode(ctx, "pp-pitch", { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [1], channelCount: 1, channelCountMode: "explicit" });
+      n.parameters.get("ratio").value = ratio;
+      return n;
     };
     h.chain = (...ns) => ns.reduce((a, b) => (a.connect(b), b));
     // a unit: in -> dry -> out, and in -> (its effect) -> wet -> out
@@ -607,6 +654,62 @@ window.FXE = (() => {
           o = h.lfo(70);
         o.connect(g.gain);
         h.chain(x.in, g, h.g(1.6), x.wet);
+        break;
+      }
+      case "o1": h.chain(x.in, h.pitch(2), x.wet); break;
+      case "o2": h.chain(x.in, h.pitch(0.5), x.wet); break;
+      case "uni": h.chain(x.in, h.pitch(0.5), x.wet); break;
+      case "fif": h.chain(x.in, h.pitch(Math.pow(2, 7 / 12)), x.wet); break;
+      case "choir": {
+        const out = h.g(0.8),
+          cv = c.createConvolver(),
+          n = Math.round(c.sampleRate * 1.4),
+          ir = c.createBuffer(2, n, c.sampleRate);
+        for (let ch = 0; ch < 2; ch++) {
+          const d = ir.getChannelData(ch);
+          for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / n, 2.4);
+        }
+        cv.buffer = ir;
+        for (const r of [1.26, 0.84]) h.chain(x.in, h.pitch(r), h.g(0.5), out);
+        x.in.connect(out);
+        out.connect(cv);
+        cv.connect(x.wet);
+        out.connect(x.wet);
+        break;
+      }
+      case "alien": {
+        const g = h.g(0),
+          d = c.createDelay(0.05),
+          l = h.lfo(6);
+        h.lfo(28).connect(g.gain);
+        d.delayTime.value = 0.012;
+        l.connect(h.g(0.004)).connect(d.delayTime);
+        h.chain(x.in, g, h.g(1.8), d, x.wet);
+        break;
+      }
+      case "mega": h.chain(x.in, h.bq("highpass", 500, 0.8), h.g(3), shape((v) => Math.tanh(2.5 * v) * 0.8), h.bq("lowpass", 3300, 0.8), x.wet); break;
+      case "flo": h.chain(x.in, h.bq("lowpass", 220, 6), x.wet); break;
+      case "fhi": h.chain(x.in, h.bq("highpass", 3200, 6), x.wet); break;
+      case "drv": h.chain(x.in, shape((v) => ((1 + 85) * v) / (1 + 85 * Math.abs(v)) / (1 + 85 * 0.08)), h.g(0.55), x.wet); break; // TRACK's Drive curve
+      case "fln": {
+        const dl = c.createDelay(0.03),
+          fb = h.g(0.6),
+          lfo = h.lfo(0.3);
+        dl.delayTime.value = 0.004;
+        lfo.connect(h.g(0.003)).connect(dl.delayTime);
+        x.in.connect(dl);
+        dl.connect(fb).connect(dl);
+        dl.connect(x.wet);
+        break;
+      }
+      case "g8": {
+        const gate = h.g(0.5),
+          o = c.createOscillator();
+        o.type = "square";
+        o.frequency.value = 2; // an eighth note at 120 BPM: TRACK's Gate 1/8
+        o.start();
+        o.connect(h.g(0.5)).connect(gate.gain);
+        h.chain(x.in, gate, x.wet);
         break;
       }
       case "crunch": h.chain(x.in, h.g(3), shape((v) => Math.tanh(6 * v) * 0.7), h.bq("lowpass", 5000, 0.7), x.wet); break;
