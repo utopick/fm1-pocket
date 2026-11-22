@@ -1284,7 +1284,7 @@
           stopCore1();
           const mt = window.FM1Native ? null : await threadedCore();
           if (mine !== seq || !node) return;
-          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
+          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, wallPace: !/[?&]wallpace=0/.test(location.search) });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;

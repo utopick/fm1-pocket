@@ -52,6 +52,11 @@ function jitImports(exports, stats) {
 // buffer when ahead is less (?ahead=256 with 512-frame halves). Without the pace (?ahead=0) a
 // quantum may have to run a whole half buffer's time, so it keeps 20 ms.
 const AHEAD_FRAMES = 1024;
+// Chrome on Android, after a late quantum, calls process() faster than real time to refill its buffer and drops what
+// it gets; an emulator that followed it would race (its screen too) and need more time than it has, so it falls
+// further behind. So it runs at most WALL_SLACK frames ahead of the wall clock (silence past that), and time lost in a
+// stall of more than WALL_DEBT frames is forgotten instead of caught up (?wallpace=0: off).
+const WALL_SLACK = 2048, WALL_DEBT = 4410;
 function budgets(mhz, frames) {
   return { boot: mhz * 1e6 * 0.02, play: mhz * 1e6 * 1.5 * frames / sampleRate };
 }
@@ -174,6 +179,10 @@ class Fm1 extends AudioWorkletProcessor {
     this.reportFrames = 0;
     this.reportCalls = 0;
     this.short = 0;
+    this.wallPace = m.wallPace !== false;
+    this.wall0 = undefined;             // the wall clock (ms) at which `ran` frames would be due
+    this.ran = 0;
+    this.held = 0;                      // quanta held back (silence) because the emulator was ahead of the wall clock
     this.calls = 0;
     this.busy = 0;                      // ms spent emulating since the last frame message
     this.worst = 0;                     // the longest quantum among them (once audio plays)
@@ -234,6 +243,17 @@ class Fm1 extends AudioWorkletProcessor {
     const x = this.x;
     if (!x || this.paused || this.waitCore1) return true;
     const n = out[0].length;
+    if (this.wallPace) {
+      const wall = Date.now();
+      if (this.wall0 === undefined) this.wall0 = wall;
+      const due = (wall - this.wall0) * sampleRate / 1000;
+      if (this.ran > due + WALL_SLACK) {
+        this.held++;
+        return true;                    // (the outputs stay silent)
+      }
+      if (due - this.ran > WALL_DEBT) this.wall0 = wall - this.ran * 1000 / sampleRate;
+      this.ran += n;
+    }
     const playing = this.playing;       // (the worst quantum: of those once audio played)
     const t0 = now();
     let have;
@@ -280,7 +300,7 @@ class Fm1 extends AudioWorkletProcessor {
       // Report the preceding interval: its final postMessage is included in its timing.
       const ms = x.fm1_ms(), idle = x.fm1_idle_ms?.() ?? 0, starved = x.fm1_starved?.() ?? 0;
       this.port.postMessage({ type: "frame", seq: this.seq, lcd, leds, ms,
-        short: this.short, halted: x.fm1_halted(), jit: this.jit, pads, playing: this.playing,
+        short: this.short, held: this.held, halted: x.fm1_halted(), jit: this.jit, pads, playing: this.playing,
         busy: this.lastTiming?.busy ?? 0, worst: this.lastTiming?.worst ?? 0,
         emulated: this.lastTiming?.emulated ?? 0, idle: this.lastTiming?.idle ?? 0, starved: this.lastTiming?.starved ?? 0,
         core1: Number(x.fm1_mt_stats?.(3) ?? -1), started: x.fm1_core1_thread?.() ?? 1, quanta: this.lastTiming?.quanta ?? 0, frames: this.lastTiming?.frames ?? n }, transfer);
