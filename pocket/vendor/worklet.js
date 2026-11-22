@@ -52,6 +52,9 @@ function jitImports(exports, stats) {
 // buffer when ahead is less (?ahead=256 with 512-frame halves). Without the pace (?ahead=0) a
 // quantum may have to run a whole half buffer's time, so it keeps 20 ms.
 const AHEAD_FRAMES = 1024;
+// The lead (fm1_lead, ?lead= in ms, 0 off): audio kept queued ahead, topped up (fm1_fill) only for
+// FILL_MS of each quantum's wall time, so a slow stretch plays from the queue instead of breaking up.
+const LEAD_MS = 40, FILL_MS = 2, FILL_INSNS = 100000;
 function budgets(mhz, frames) {
   return { boot: mhz * 1e6 * 0.02, play: mhz * 1e6 * 1.5 * frames / sampleRate };
 }
@@ -141,6 +144,8 @@ class Fm1 extends AudioWorkletProcessor {
     x.fm1_flash_part?.(m.chip === "uc25hq80" ? 1 : 0);   // ?chip=uc25hq80: the newer units' flash part
     const ahead = x.fm1_ahead ? m.ahead ?? AHEAD_FRAMES : 0;
     x.fm1_ahead?.(ahead);               // (?ahead=0: each quantum runs for its own frames only)
+    this.lead = x.fm1_fill ? Math.round((m.lead ?? LEAD_MS) * 44.1) : 0;
+    x.fm1_lead?.(this.lead);
     // the whole update package (.fwsc): the machine unpacks it, gets the flash chip and the
     // boot parameters from it (what M-VAVE's own firmware needs; the others boot the same)
     const copy = (buf) => {
@@ -239,6 +244,7 @@ class Fm1 extends AudioWorkletProcessor {
     let have;
     try {
       have = x.fm1_render(n, this.budget);
+      if (this.lead) while (now() - t0 < FILL_MS && x.fm1_fill(FILL_INSNS)) {}
     } catch (err) {                       // a trap in the emulator: stop and say so
       this.x = null;
       for (const request of this.snapshots.splice(0)) {

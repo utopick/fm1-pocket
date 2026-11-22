@@ -1217,6 +1217,8 @@
       // firmware has released core 1 (started), and why it is on one thread when it is (why).
       const thr = (window.FM1Threads = { mode: "single", insns: 0, started: 1, why: "" });
       let mtBytes, mtMem = null, core1 = null, core1Timer = 0, noMt = false;
+      // ms of audio the browser's core keeps queued ahead (?lead=0: none, as before; the Android app keeps none)
+      const leadMs = () => { const v = /[?&]lead=(\d+)/.exec(location.search); return v ? Math.min(+v[1], 500) : 40; };
       async function threadedCore() {
         if (mtBytes === undefined) {
           mtBytes = null;
@@ -1284,7 +1286,7 @@
           stopCore1();
           const mt = window.FM1Native ? null : await threadedCore();
           if (mine !== seq || !node) return;
-          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz });
+          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, lead: leadMs() });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;

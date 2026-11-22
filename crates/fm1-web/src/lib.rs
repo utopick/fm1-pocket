@@ -38,6 +38,10 @@ struct Machine {
     usr_layout: fm1_soc::fwsc::UsrLayout,
     started: bool,
     pace: Pace,
+    /// `fm1_lead`: the queue has once held a quantum plus the lead, so audio is handed out
+    primed: bool,
+    /// the last quantum's frames, for fm1_fill's target
+    quantum: usize,
 }
 
 /// The audio rate the page plays at (the AudioContext's, and the firmwares' I2S): a quantum of
@@ -142,7 +146,7 @@ impl Machine {
         }
         let flash0 = soc.flash.mem.clone();
         Machine { cpu, cpu1: None, soc, pending_tick: false, audio: VecDeque::new(), halted: false,
-            flash0, usr: None, usr_layout: fm1_soc::fwsc::UsrLayout::FM1, started: false, pace: Pace::default() }
+            flash0, usr: None, usr_layout: fm1_soc::fwsc::UsrLayout::FM1, started: false, pace: Pace::default(), primed: false, quantum: 128 }
     }
 
     // Runtime SPI writes replace complete ranges in XIP, including bytes that happen
@@ -205,6 +209,7 @@ static mut JIT: bool = false;
 static mut THREADS: u32 = 1;
 static mut JIT_PER_RENDER: u32 = 0;
 static mut AHEAD: u32 = 0;
+static mut LEAD: u32 = 0;
 /// `fm1_lcd_timed`: the next boot's `Soc::lcd_timed`
 static mut LCD_TIMED: bool = false;
 /// `fm1_cpu1_survives`: a fault on core 1 stops that core alone and cpu0 goes on (`Soc::cpu1_survives`)
@@ -410,11 +415,15 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
     }
     let frames = frames.min(1024) as usize;
     let ahead = unsafe { AHEAD } as usize;
+    let lead = unsafe { LEAD } as usize;
+    m.quantum = frames;
     let mut spent = 0u32;
     m.pace.begin(frames, m.soc.periph.hz);
     // a cap below what the pace needs would drop out where running for the frames alone did not
-    let max_insns = max_insns.max(m.pace.least(frames, m.soc.periph.hz, ahead).min(u32::MAX as u64) as u32);
-    while spent < max_insns && !m.halted && m.pace.more(m.audio.len() / 2, frames, ahead) {
+    let max_insns = if lead > 0 { max_insns.max(((m.pace.burst + frames * 3 / 2) as u64 * m.soc.periph.hz / AUDIO_HZ as u64).min(u32::MAX as u64) as u32) } else { max_insns.max(m.pace.least(frames, m.soc.periph.hz, ahead).min(u32::MAX as u64) as u32) };
+    // (with a lead, only what the queue lacks of this quantum, or of the lead until primed: fm1_fill tops it up)
+    let need = frames + if m.primed { 0 } else { lead };
+    while spent < max_insns && !m.halted && if lead > 0 { m.audio.len() / 2 < need } else { m.pace.more(m.audio.len() / 2, frames, ahead) } {
         let (c0, h0) = (m.soc.periph.cycles, m.soc.periph.audio_halves);
         m.run(20_000);
         spent += 20_000;
@@ -424,7 +433,8 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
     m.pace.end();
     // (core 1's thread, if any, runs on between renders: what the host reads from here is core 0's side)
     unsafe { INSNS += spent as u64 };
-    let have = (m.audio.len() / 2).min(frames);
+    m.primed |= lead > 0 && m.audio.len() / 2 >= frames + lead;
+    let have = if lead > 0 && !m.primed { 0 } else { (m.audio.len() / 2).min(frames) };
     #[allow(static_mut_refs)]
     unsafe {
         for i in 0..frames {
@@ -446,6 +456,39 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn fm1_ahead(frames: u32) {
     unsafe { AHEAD = frames };
+}
+
+/// Keep up to `frames` of audio queued beyond each quantum (the page's 40 ms; the idea is
+/// RemoteFM1's engine's). fm1_render then hands out silence until the queue first holds them, and
+/// afterwards runs the machine only when the queue lacks the quantum's own frames; the host tops
+/// the queue up with fm1_fill for as long as its quantum's time allows. A slow stretch (a JIT
+/// compile, a GC, a firmware's busy start) then drains the queue instead of being heard, and
+/// fills it again after. 0 (the default): fm1_ahead's pace alone. The cost: input reaches the
+/// machine up to that much later. Set before the boot.
+#[no_mangle]
+pub extern "C" fn fm1_lead(frames: u32) {
+    unsafe { LEAD = frames };
+}
+
+/// Run the machine (at most `max_insns`) toward a full lead, after fm1_render. Returns 1 while
+/// the queue still lacks some of it, so the host calls again while it has time; 0 when full,
+/// halted, or without a lead.
+#[no_mangle]
+pub extern "C" fn fm1_fill(max_insns: u32) -> u32 {
+    let Some(m) = machine() else { return 0 };
+    let lead = unsafe { LEAD } as usize;
+    if lead == 0 || !m.primed {
+        return 0;
+    }
+    let target = m.quantum + lead;
+    let mut spent = 0u32;
+    while spent < max_insns && !m.halted && m.audio.len() / 2 < target {
+        m.run(20_000);
+        spent += 20_000;
+        m.audio.extend(m.soc.periph.audio.drain(..));
+    }
+    unsafe { INSNS += spent as u64 };
+    (!m.halted && m.audio.len() / 2 < target) as u32
 }
 
 /// A fault on core 1 stops that core alone and cpu0 goes on, as the chip's would (`on` = 1;
