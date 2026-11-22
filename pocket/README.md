@@ -34,7 +34,7 @@ author's manual. You can also open a firmware file you already have, or load a b
 If you have a MIDI keyboard, plug it in and its keys will play the FM-1, while its knobs and pads work the FM-1's
 knobs and buttons. In OPTIONS, DEVICE shows a drawing of your keyboard, and MAP helps you set it up step by step.
 
-On the right edge of the FM-1 there are two tabs, FX and PEDALS, that are not part of the real FM-1: they are an expansion
+On the right edge of the FM-1 there are two tabs, PEDALS and LIVE FX, that are not part of the real FM-1: they are an expansion
 this app adds. Tap one, or swipe left from the edge, to slide in a screen where the sound of any firmware can go through
 PLAY.Pocket's pedals, amps and cabs, or through live effects such as lo-fi, tape, echo and stutter. With nothing switched on
 the sound goes out exactly as the FM-1 makes it. They work in the browser and are hidden in the Android app.

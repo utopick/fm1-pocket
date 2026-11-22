@@ -50,7 +50,7 @@ try:
     assert js("return document.querySelector('#xp').inert") and pane() == 0
     fits("#xpDock", "the dock"); shot("1-device")
     # tapping: the dock opens each screen, the tabs and BACK move between them
-    assert js("return [...document.querySelectorAll('#xpDock button, .xpTabs button')].map(b => b.textContent).join()") == "PEDALS,FX,PEDALS,FX"
+    assert js("return [...document.querySelectorAll('#xpDock button, .xpTabs button')].map(b => b.textContent).join()") == "PEDALS,LIVE FX,PEDALS,LIVE FX"
     click("#dockFx"); assert pane() == 2 and not js("return document.querySelector('#xp').inert"); fits("#xp", "FX"); shot("2-fx")
     assert js("return document.querySelectorAll('#fxPads .xpad').length") == 12
     click("#tabPed"); assert pane() == 1; fits("#xp", "PEDALS"); shot("3-pedals")
