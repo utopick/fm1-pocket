@@ -9,7 +9,7 @@
 // the page, 0 off), FM1_CAP=0 keeps the boot budget of 20 ms of emulated time per quantum after
 // audio starts (the page caps it to 1.5 quanta when it runs ahead). "over" counts steady quanta that took longer
 // than the 2.9 ms they stand for: at 1x those are where a device of this speed drops out.
-// FM1_REALTIME=1: each quantum is due on the wall clock, with 3 quanta of
+// FM1_SLOW_COMPILE=k: each JIT compile takes k times as long (a phone). FM1_REALTIME=1: each quantum is due on the wall clock, with 3 quanta of
 // the device's slack, as a browser plays it; "late" counts quanta (once audio plays) done after
 // they were due, and "gaps" those that had less than their 128 frames: both are heard.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -44,7 +44,12 @@ if (MT) {
   };
   x.fm1_core1_pending = () => pending;
 } else {
-  const { instance } = await WebAssembly.instantiate(wasm, { env: jitImports(() => x, stats) });
+  const env = jitImports(() => x, stats), slow = +(process.env.FM1_SLOW_COMPILE || 1);
+  if (slow > 1) {   // a phone's slower compiler: each compile held (slow - 1) times longer
+    const compile = env.fm1_jit_compile;
+    env.fm1_jit_compile = (...a) => { const t = performance.now(), r = compile(...a), end = t + (performance.now() - t) * slow; while (performance.now() < end) {} return r; };
+  }
+  const { instance } = await WebAssembly.instantiate(wasm, { env });
   x = instance.exports;
 }
 if (!process.env.FM1_NO_JIT) x.fm1_jit(1, +(process.env.FM1_JIT_PER || 16));
