@@ -564,6 +564,7 @@
             <button id="open" title="Open a firmware package (.fwsc) from this device, such as your own build or M-VAVE's FM-1.fwsc"><i>.FWSC</i>OPEN FIRMWARE FILE</button>
             <button id="bank" title="Load a DX7 bank of 32 voices (.syx) into the running firmware (M-VAVE's own, and those built on its DX7 voices). The firmware starts again with it."><i>.SYX</i>LOAD DX7 BANK</button>
             <button id="forget" title="Delete every downloaded firmware from this device. What they saved stays, and it asks you first."><i>DOWNLOADS</i>CLEAR DATA</button>
+            <button id="fwUpdate" title="Download the newest list of firmwares now, with new firmwares and versions and the links that changed"><i>LIST</i>UPDATE FIRMWARES</button>
           </div>
           <select id="fw" hidden title="The firmware the FM-1 runs"></select>
         </section>
@@ -859,7 +860,10 @@
       }
       const vetPkg = (p) => (p && p.bytes instanceof Uint8Array && p.bytes.length > 16 && p.bytes.length <= MAX_PACKAGE ? { name: str(p.name, 80) || "firmware", version: str(p.version, 40), bytes: p.bytes } : null);
       const vetSave = (a) => (Array.isArray(a) ? a.filter((r) => Array.isArray(r) && Number.isInteger(r[0]) && r[0] >= 0 && r[0] % SECTOR === 0 && r[1] instanceof Uint8Array && r[1].length === SECTOR).slice(0, 8192) : []);
-      let FIRMWARES = vetCatalog(JSON.parse($("#fwlist").textContent)),
+      // Tether, our own firmware (pocket/firmware), is built into the page: always on the list, first, and the one chosen at first
+      const TETHER = { id: "tether", name: "Tether", version: "1.0", author: "utopick", license: "GPL-3.0", about: "Our own firmware. It makes a real FM-1 the panel of this one, and without the app it is a USB MIDI keyboard. It makes no sound of its own.", package: "", repo: "", chip: "", own: true };
+      const withOwn = (list) => [TETHER, ...list.filter((f) => f.id !== TETHER.id)];
+      let FIRMWARES = withOwn(vetCatalog(JSON.parse($("#fwlist").textContent))),
         kept = new Set(); // the ids of the packages kept on this device
 
       // ======================================================================
@@ -1185,6 +1189,7 @@
       }
       async function packageOf(f) {
         if (f.bytes) return f.bytes;
+        if (f.own) return (f.bytes = (await tetherFirmware()).bytes);
         const got = vetPkg(await kvGet("pkg:" + f.id));
         // kept, and still the version of the list (or no way to get another): it runs from this device
         if (got && (got.version === f.version || !navigator.onLine)) return (f.bytes = got.bytes);
@@ -1494,15 +1499,15 @@
       const CHIP_TAG = { new: ["NEWER CHIP ✓", "It saves on every FM-1, the newer chip (0xB36014) too"], any: ["ANY CHIP", "It does not check the chip, so it works on every FM-1, but the hub has not tried it on the newer chip (0xB36014)"], old: ["FIRST FM-1s ONLY", "It knows only the first FM-1s' flash chip, so on a newer FM-1 (0xB36014) it keeps saves in RAM only, and updates from it may fail"] };
       let fwChipOnly = false; // the filter: only firmwares that save on the newer chip
       let fwQuery = ""; // what the search box holds: it filters the list of banners
-      let want = stored("fm1.fw") || "grimm"; // the firmware chosen (the list may not hold it yet: it fills in steps)
+      let want = stored("fm1.fw") || "tether"; // the firmware chosen (the list may not hold it yet: it fills in steps)
       function listFace() {
         const sel = $("#fw"),
           was = want;
         sel.textContent = "";
         if (backup) sel.add(new Option("● " + backup.name, "backup"));
         if (local) sel.add(new Option("● " + local.name + " (your file)", "local"));
-        for (const f of FIRMWARES) sel.add(new Option((kept.has(f.id) ? "● " : "") + f.name + (f.version ? " " + f.version : ""), f.id));
-        sel.value = [...sel.options].some((o) => o.value === was) ? was : FIRMWARES.some((f) => f.id === "grimm") ? "grimm" : sel.options[0]?.value;
+        for (const f of FIRMWARES) sel.add(new Option((f.own || kept.has(f.id) ? "● " : "") + f.name + (f.version ? " " + f.version : ""), f.id));
+        sel.value = [...sel.options].some((o) => o.value === was) ? was : FIRMWARES.some((f) => f.id === "tether") ? "tether" : sel.options[0]?.value;
         // a card for each: the picture of its screen (the Firmware Hub's, or the one kept here when it last ran), DOWNLOAD and USE.
         // Names and texts come from the list: they only ever go in as text.
         const card = (f) => {
@@ -1510,7 +1515,7 @@
             img = el("img"),
             t = el("div", "t"),
             act = el("div", "act"),
-            have = f === local || f === backup || kept.has(f.id),
+            have = f === local || f === backup || f.own || kept.has(f.id),
             go = el("button", have ? "on" : "", !have ? "DOWNLOAD" : f.id === sel.value && node ? "IN USE" : "USE"), // lit: the ones you have are easy to tell
             inst = el("button", "inst", "INSTALL ON MY FM-1"),
             man = el("button", "man", "MANUAL"),
@@ -1557,7 +1562,7 @@
                 }
                 toast(all && f !== backup ? "Saves and firmware erased" + (running ? ". It keeps running until you switch it off" : "") : "Saves of " + f.name + " erased");
               },
-              f === backup ? null : ["SAVES ONLY", "SAVES + FIRMWARE"], // the backup of the unit is never erased from here
+              f === backup || f.own ? null : ["SAVES ONLY", "SAVES + FIRMWARE"], // the backup of the unit is never erased from here
             );
           act.append(go, man, inst, wipe);
           c.append(img, t, act);
@@ -1568,7 +1573,7 @@
         $("#chipOnly").classList.toggle("on", fwChipOnly);
         const q = fwQuery.toLowerCase(), shown = (f) => (!fwChipOnly || f === backup || f === local || f.chip === "new" || f.chip === "any") && (!q || (f.name + " " + (f.author || "") + " " + (f.about || "")).toLowerCase().includes(q));
         // yours first (the backup of your unit, your file, then what is downloaded), then the rest, each in the order of the list
-        const cards = [backup, local].filter(Boolean).concat(FIRMWARES.filter((f) => kept.has(f.id)), FIRMWARES.filter((f) => !kept.has(f.id))).filter(shown).map(card);
+        const cards = [backup, local].filter(Boolean).concat(FIRMWARES.filter((f) => f.own || kept.has(f.id)), FIRMWARES.filter((f) => !f.own && !kept.has(f.id))).filter(shown).map(card);
         $("#fwList").replaceChildren(...(cards.length ? cards : [el("p", "", "No firmware matches “" + fwQuery + "”.")]));
         const n = kept.size + (local ? 1 : 0) + (backup ? 1 : 0);
         $("#stor span").textContent = n + " KEPT";
@@ -1677,7 +1682,7 @@
       // fm1-emu's own list, when there is a connection: new firmwares and versions appear without an update of this app
       async function refreshCatalog() {
         const keptList = vetCatalog(await kvGet("catalog"));
-        if (keptList.length) FIRMWARES = keptList;
+        if (keptList.length) FIRMWARES = withOwn(keptList);
         for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) kept.add(String(k).slice(4));
         for (const id of kept) {
           const d = await kvGet("date:" + id);
@@ -1689,10 +1694,10 @@
         const bak = vetPkg(await kvGet("bak:fm1"));
         if (bak) backup = { id: "backup", name: bak.name, version: "", bytes: bak.bytes };
         listFace();
-        if (!navigator.onLine) return;
+        if (!navigator.onLine) return "offline";
         try {
           const raw = await (await fetch(CATALOG_URL, { cache: "no-cache" })).json(), fresh = vetCatalog(raw);
-          if (fresh.length < 20) return; // a broken list does not replace a good one
+          if (fresh.length < 20) return "failed"; // a broken list does not replace a good one
           // the hub's firmwares that list lacks (and that fm1-emu does not hold back): added after its own, so the page has them without a new release
           try {
             const have = new Set([...(raw.firmwares || []).flatMap((f) => [f.id, f.hub]), ...Object.keys(raw.skipped || {})]);
@@ -1707,11 +1712,19 @@
             fresh.push(...vetCatalog((hub.firmwares || []).filter((h) => h && typeof h.pkg === "string" && !have.has(h.id) && !fresh.some((f) => f.id === h.id)).map((h) => ({ id: h.id, name: h.name, version: h.version, author: h.author, license: h.lic, about: h.what, date: h.date, chip: h.chip, package: "https://thefirmwarehub.com/" + h.pkg, repo: h.site || "" }))));
           } catch {}
           const run = current();
-          FIRMWARES = fresh.map((f) => (run && run.id === f.id && run.version === f.version ? run : f));
+          FIRMWARES = withOwn(fresh.map((f) => (run && run.id === f.id && run.version === f.version ? run : f)));
           kvPut("catalog", fresh).catch(() => {});
           listFace();
-        } catch {}
+          return FIRMWARES.length;
+        } catch {
+          return "failed";
+        }
       }
+      $("#fwUpdate").onclick = async () => {
+        toast("Updating the firmware list…");
+        const r = await refreshCatalog();
+        toast(r === "offline" ? "There is no connection, so the list stays as it was" : r === "failed" ? "The list did not download, so it stays as it was" : "The firmware list is up to date: " + r + " firmwares", 3000);
+      };
 
       // ======================================================================
       // views, keys and skins
@@ -2691,7 +2704,7 @@
           "**KEYS / TOP / ALL** goes round three views: the whole FM-1, the keys with the knobs, screen and buttons shrunk above them, or only the knobs, screen and buttons.",
           "A phone is always played sideways, so if you hold it upright the FM-1 is drawn turned and you just need to turn the phone.",
           "## The menu (the FM1. button)",
-          "**FIRMWARE** has a card for each firmware. **USE** runs it, and **DOWNLOAD** keeps it on this device so it runs with no connection (it is then marked ●). **OPEN FIRMWARE FILE** runs your own .fwsc file, and **LOAD DX7 BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware.",
+          "**FIRMWARE** has a card for each firmware. **USE** runs it, and **DOWNLOAD** keeps it on this device so it runs with no connection (it is then marked ●). **OPEN FIRMWARE FILE** runs your own .fwsc file, and **LOAD DX7 BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware. The list updates itself when the app opens with a connection, and **UPDATE FIRMWARES** does it again at once, which helps when a download fails because its link has changed. **Tether**, our own firmware, is built into the app and comes first. It makes no sound of its own, because it is the firmware that makes a real FM-1 the panel of this one.",
           "If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock. **CPU CLOCK**, in OPTIONS, lets you choose it yourself: the real FM-1 runs at 240 MHz and the app starts at 100 (the Android app at 240), so lower it if the sound breaks up and raise it if this device has power to spare. Your choice is kept on this device.",
           "**ERASE**, on a card, forgets what that firmware saved, and **CLEAR DATA** deletes the downloaded firmwares. Both ask you to slide to confirm. What a firmware saves (patches, songs, settings) is kept on this device, separately for each exact version of it.",
           "**LOOK** is where you choose the keys (the FM-1's own or a piano), the skin (the colours the FM-1 is sold in, then ours) and the screen filter (LCD, CRT or clean). **OPTIONS** has MIDI, a real FM-1 on USB, and installing the app. The **ENGLISH / ESPAÑOL** button at the top left of the menu switches the language of the app and its manuals.",
@@ -2723,7 +2736,7 @@
           "**TECLAS / ARRIBA / TODO** recorre tres vistas: el FM-1 entero, las teclas con los potes, la pantalla y los botones en pequeño encima, o solo los potes, la pantalla y los botones.",
           "En el móvil siempre se toca en horizontal, así que si lo pones en vertical el FM-1 se dibuja girado y solo tienes que girar el móvil.",
           "## El menú (el botón FM1.)",
-          "**FIRMWARE** tiene una tarjeta por firmware. **USAR** lo ejecuta, y **DESCARGAR** lo guarda en este dispositivo para usarlo sin conexión (entonces sale marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc, y **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE.",
+          "**FIRMWARE** tiene una tarjeta por firmware. **USAR** lo ejecuta, y **DESCARGAR** lo guarda en este dispositivo para usarlo sin conexión (entonces sale marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc, y **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE. La lista se actualiza sola cuando la app se abre con conexión, y **ACTUALIZAR FIRMWARES** lo hace otra vez en el momento, lo que ayuda cuando una descarga falla porque su enlace ha cambiado. **Tether**, nuestro propio firmware, viene dentro de la app y sale primero. No suena por sí mismo, porque es el firmware que convierte un FM-1 real en el panel de este.",
           "Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento. **RELOJ CPU**, en OPCIONES, te deja elegirlo: el FM-1 real va a 240 MHz y la app empieza a 100 (la app de Android a 240), así que bájalo si el sonido se corta y súbelo si este dispositivo tiene potencia de sobra. Tu elección se guarda en este dispositivo.",
           "**BORRAR**, en una tarjeta, borra lo que ha guardado ese firmware, y **BORRAR DATOS** borra los firmwares descargados. Los dos piden deslizar para confirmar. Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, por separado para cada versión exacta.",
           "En **ASPECTO** eliges las teclas (las del FM-1 o un piano), los colores (los del FM-1 a la venta y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpia). **OPCIONES** tiene el MIDI, un FM-1 real por USB e instalar la app. El botón **ENGLISH / ESPAÑOL**, arriba a la izquierda del menú, cambia el idioma de la app y de sus manuales.",
@@ -2912,6 +2925,13 @@
         "Delete every downloaded firmware from this device. What they saved stays, and it asks you first.": "Borra de este dispositivo todos los firmwares descargados. Lo que guardaron se queda, y te pregunta antes.",
         DOWNLOADS: "DESCARGAS",
         "CLEAR DATA": "BORRAR DATOS",
+        "Download the newest list of firmwares now, with new firmwares and versions and the links that changed": "Descarga ahora la lista más nueva de firmwares, con los firmwares y versiones nuevos y los enlaces que han cambiado",
+        LIST: "LISTA",
+        "UPDATE FIRMWARES": "ACTUALIZAR FIRMWARES",
+        "Updating the firmware list…": "Actualizando la lista de firmwares…",
+        "There is no connection, so the list stays as it was": "No hay conexión, así que la lista se queda como estaba",
+        "The list did not download, so it stays as it was": "La lista no se ha descargado, así que se queda como estaba",
+        "Our own firmware. It makes a real FM-1 the panel of this one, and without the app it is a USB MIDI keyboard. It makes no sound of its own.": "Nuestro propio firmware. Convierte un FM-1 real en el panel de este, y sin la app es un teclado MIDI USB. No suena por sí mismo.",
         "The firmware the FM-1 runs": "El firmware que ejecuta el FM-1",
         "NAME · AUTHOR": "NOMBRE · AUTOR",
         "NEWER CHIP ONLY": "SOLO CHIP NUEVO",
@@ -3294,6 +3314,7 @@
         [/^The clock is how fast the emulated FM-1 runs\. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up \(the Android app at 240\)\. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare\. It is (\d+) MHz now\. Slide to keep your choice and restart (.+)\. What it has not saved is lost\.$/, "El reloj es la velocidad a la que funciona el FM-1 emulado. El FM-1 real va a 240 MHz, y esta app empieza a 100 MHz para que más dispositivos den abasto (la app de Android a 240). Elige menos si el sonido se corta, o más si un firmware va lento y este dispositivo tiene potencia de sobra. Ahora está a $1 MHz. Desliza para guardar tu elección y reiniciar $2. Lo que no haya guardado se pierde."],
         [/^The clock is how fast the emulated FM-1 runs\. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up \(the Android app at 240\)\. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare\. It is (\d+) MHz now\. Slide to keep your choice\.$/, "El reloj es la velocidad a la que funciona el FM-1 emulado. El FM-1 real va a 240 MHz, y esta app empieza a 100 MHz para que más dispositivos den abasto (la app de Android a 240). Elige menos si el sonido se corta, o más si un firmware va lento y este dispositivo tiene potencia de sobra. Ahora está a $1 MHz. Desliza para guardar tu elección."],
         [/^CPU clock at (\d+) MHz$/, "Reloj de la CPU a $1 MHz"],
+        [/^The firmware list is up to date: (\d+) firmwares$/, "La lista de firmwares está al día: $1 firmwares"],
         [/^(.+) at (\d+) MHz$/, "$1 a $2 MHz"],
         [/^(.+) is made for the SMK-37, another device, so not all its controls are here$/, "$1 está hecho para el SMK-37, otro aparato, así que aquí no están todos sus controles"],
         [/^(.+) is on$/, "$1 está en marcha"],

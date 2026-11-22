@@ -74,6 +74,12 @@ try:
     js("document.querySelector('#flip').click()"); time.sleep(0.1)
     assert js("return document.querySelector('#toast').textContent") in ("Las teclas", "Potes, pantalla y botones", "El FM-1 entero"), js("return document.querySelector('#toast').textContent")
     js("document.querySelector('#flip').click(); document.querySelector('#flip').click(); document.querySelector('#logo').click(); document.querySelector('#langBtn').click()")
+    # Tether is built in: the first card, chosen at first, kept with no download; UPDATE FIRMWARES says how the update went
+    js("document.querySelector('#menu .tabs [data-tab=fw]').click()"); time.sleep(0.2)
+    assert js("return document.querySelector('#fwList .fwc b').textContent").startswith("Tether"), "Tether is not the first card"
+    assert js("return document.querySelector('#fw').value") == "tether" and js("return document.querySelector('#fwList .fwc button').textContent") in ("USE", "IN USE")
+    js("document.querySelector('#fwUpdate').click()")
+    until(lambda: "list" in js("return document.querySelector('#toast').textContent") and "Updating" not in js("return document.querySelector('#toast').textContent"), "no toast after UPDATE FIRMWARES", 20)
     assert js("return window.__errs || []") == []
     print("manual: ok")
 finally:
