@@ -58,6 +58,12 @@ The answer is in little-endian binary:
 The audio thread in the app asks the core for 128 frames at a time and writes them to an `AudioTrack`; because that write
 waits for the sound card, the sound card sets the pace, as it does in the browser.
 
+The page's PEDALS and LIVE FX screens are WebAudio, so while one of their effects is on the page calls `FM1Native.fx(true)`.
+The audio thread then keeps writing to the `AudioTrack` at volume 0, which keeps the pace, and also keeps the sound for the
+page, which fetches it from `/native/pcm` (interleaved little-endian stereo floats) at each poll and plays it through the
+effects. That adds about 50 milliseconds, and only while an effect is on. `FM1Native.fx(false)` gives the sound back to
+the app.
+
 ## What is not there yet
 
 The app is not on Google Play or F-Droid, the only build is for arm64, and without the signing secrets above each build

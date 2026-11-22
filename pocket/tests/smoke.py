@@ -3,6 +3,7 @@
     python3 pocket/build.py && python pocket/tests/smoke.py path/to/firmware.fwsc    (needs: pip install selenium, Chrome)
 
 The package is not in the repo (firmwares belong to their authors): download one from thefirmwarehub.com.
+Pick one that makes a sound (386DX does): Tether is a MIDI controller and stays silent, so the sound check fails with it.
 SHOT=/some/folder saves a screenshot of each view there.
 """
 import functools, http.server, os, sys, threading, time
@@ -49,7 +50,7 @@ try:
     size(390, 844, "vertical")
     # a phone held upright: the sideways view, drawn turned (one row of keys, the screen still square and inside the window)
     d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": True, "maxTouchPoints": 5}); time.sleep(0.4)
-    parts(1, 1, "phone upright"); assert shown("#Ltop > #rail button") == 3, "the rail is not beside the knobs"; assert js("return document.querySelectorAll('#kb .krow').length") == 1
+    parts(1, 1, "phone upright"); assert shown("#Ltop > #rail button") == 4, "the rail is not beside the knobs"; assert js("return document.querySelectorAll('#kb .krow').length") == 1
     r = js("const r = document.querySelector('#scr').getBoundingClientRect(); return [r.width, r.height, r.right, r.bottom]")
     assert abs(r[0] - r[1]) < 1 and r[0] > 150 and r[2] <= 390 and r[3] <= 844, r
     size(390, 844, "phone-upright")
@@ -60,17 +61,17 @@ try:
     assert abs(m[0] - m[1]) < 2 and abs(m[4] - m[1]) < 2 and m[1] > 12 and abs(m[2]) < 1 and abs(m[3]) < 1, "edge, rail, knobs, screen: the same space between them: %s" % m
     flip = lambda: js("document.querySelector('#flip').click()")
     flip(); flip(); parts(1, 0, "upper part"); size(844, 390, "switch-top")
-    flip(); parts(1, 1, "complete again"); flip(); parts(1, 1, "keys"); assert shown("#fm > #rail button") == 3, "no rail over the keys"
+    flip(); parts(1, 1, "complete again"); flip(); parts(1, 1, "keys"); assert shown("#fm > #rail button") == 4, "no rail over the keys"
     # LOOK: each chooser is a button that shows what it gives
     choose = lambda pane, v: js("document.querySelector(arguments[0] + ' .pick[data-v=\"' + arguments[1] + '\"]').click()", pane, v)
-    choose("#pvKeys", "piano"); assert js("return document.querySelector('#kb').dataset.keys") == "piano"; parts(0, 1, "piano keys"); size(844, 390, "switch-piano")
+    choose("#pvKeys", "piano"); assert js("return document.querySelector('#kb').dataset.keys") == "piano"; parts(1, 1, "piano keys"); size(844, 390, "switch-piano")
     fx = []
     for v in ("crt", "off", "lcd"): choose("#pvFx", v); fx.append(js("return document.querySelector('#scr').dataset.fx + getComputedStyle(document.querySelector('#lcd')).filter"))
     assert len(set(fx)) == 3 and fx[-1].startswith("lcd"), "the screen filters do not change: %s" % fx
     names = js("return [...document.querySelectorAll('#pvSkin .pick')].map(b => b.dataset.v)"); skins = []
     for v in names[1:] + names[:1]: choose("#pvSkin", v); skins.append(js("return document.documentElement.dataset.skin + getComputedStyle(document.body).backgroundColor"))
-    assert len(set(skins)) == 13 and skins[-1].startswith("black"), "the skins do not change: %s" % skins
-    assert js("return [...document.querySelectorAll('#pvSkin .mini')].map(m => getComputedStyle(m).backgroundImage + getComputedStyle(m.querySelector('.mb')).backgroundImage).filter((x, i, a) => a.indexOf(x) === i).length") == 13, "the skin cards do not show their own colours"
+    assert js("return SKINS.length") == 17 and len(set(skins)) == 17 and skins[-1].startswith("black"), "the skins do not change: %s" % skins
+    assert js("return [...document.querySelectorAll('#pvSkin .mini')].map(m => getComputedStyle(m).backgroundImage + getComputedStyle(m.querySelector('.mb')).backgroundImage).filter((x, i, a) => a.indexOf(x) === i).length") == 17, "the skin cards do not show their own colours"
     # the menu: the whole screen, four tabs, nothing wider or taller than the window (only the firmware list scrolls)
     js("document.querySelector('#logo').click()")
     for t in ("fw", "look", "conn", "man", "info"):
@@ -123,9 +124,9 @@ try:
     seen = js("""const out = new Set(), l = new Float32Array(41);
       for (let i = 0; i < 40; i++) { l[3] = i % 9 ? 0.022 : 0.02; showFrame({ lcd: null, leds: l }); i > 20 && out.add(lights[3].style.getPropertyValue('--led')); }
       return [...out]""")
-    assert len(seen) == 1 and 0.2 < float(seen[0]) < 0.3, "a dim light shimmers: %s" % seen
-    # a controller: an MPK's knob 1 (CC 2) turns KNOB1, its pad 1 (note 36, channel 10) holds HOME, its keys go to MIDI IN
-    js("MI.names = ['MPK mini']; window.c0 = clicks[3]; midiMsg([0xb0, 2, 10], 'MPK mini'); midiMsg([0xb0, 2, 30], 'MPK mini')")
+    assert len(seen) == 1 and abs(float(seen[0]) - (0.022 / 0.08) ** 0.5) < 0.02, "a dim light shimmers: %s" % seen
+    # a controller: an MPK's knob 5 (CC 73 in its internal layout; knobs 1 to 4 are MASTER, SELECT, PRESETS and ALGORITHM) turns KNOB1, its pad 1 (note 36, channel 10) holds HOME, its keys go to MIDI IN
+    js("MI.names = ['MPK mini']; window.c0 = clicks[3]; midiMsg([0xb0, 73, 10], 'MPK mini'); midiMsg([0xb0, 73, 30], 'MPK mini')")
     assert js("return clicks[3] - c0") == 5, "the knob did not turn KNOB1"
     js("midiMsg([0x99, 36, 100], 'MPK mini')"); assert js("return down[8]") == 1
     js("midiMsg([0x89, 36, 0], 'MPK mini')"); assert js("return down[8]") == 0

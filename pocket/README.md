@@ -34,6 +34,11 @@ author's manual. You can also open a firmware file you already have, or load a b
 If you have a MIDI keyboard, plug it in and its keys will play the FM-1, while its knobs and pads work the FM-1's
 knobs and buttons. In OPTIONS, DEVICE shows a drawing of your keyboard, and MAP helps you set it up step by step.
 
+On the right edge of the FM-1 there are two tabs, PEDALS and LIVE FX, that are not part of the real FM-1: they are an expansion
+this app adds. Tap one, or swipe left from the edge, to slide in a screen where the sound of any firmware can go through
+PLAY.Pocket's pedals, amps and cabs, or through twenty-four live effects such as octave up and down, choir, lo-fi, tape, echo and stutter. The pedals are drawn as they are in PLAY.Pocket, and a BOARD button opens the pedal board, where you drag the units to change the order of the chain. With nothing switched on
+the sound goes out exactly as the FM-1 makes it. They work in the browser and are hidden in the Android app.
+
 MANUAL explains both this app and the FM-1 itself. The button at the top left of the menu switches the whole app
 between English and Spanish. You can also install FM1.Pocket as an app from OPTIONS, so it gets its own icon and
 opens full screen.
@@ -159,6 +164,7 @@ python3 pocket/build.py                              # builds pocket/index.html 
 python pocket/tests/smoke.py path/to/firmware.fwsc   # needs selenium and Chrome
 python pocket/tests/real.py                          # the REAL FM-1 pane, against a fake unit
 python pocket/tests/manual.py                        # the manual, and the app in Spanish
+python pocket/tests/fx.py                            # the FX and PEDALS screens and the sound's wiring (no firmware needed)
 node --test pocket/tests/real-fm1.test.js pocket/tests/tether.test.js
 ```
 

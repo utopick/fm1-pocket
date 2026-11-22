@@ -50,6 +50,8 @@ public class MainActivity extends Activity {
         /** Hidden switch (from the page's console: FM1Native.threads(1)): 1 runs both FM-1 cores on one thread, 2 (the default) gives core 1 its own. Takes effect at the next boot. */
         @JavascriptInterface public void threads(int n) { getSharedPreferences("fm1", MODE_PRIVATE).edit().putInt("threads", n > 1 ? 2 : 1).apply(); }
         @JavascriptInterface public String version() { return Native.version(); }
+        /** The page's PEDALS or LIVE FX are on (true) or all off: the page then plays the sound through them, fetched from /native/pcm. */
+        @JavascriptInterface public void fx(boolean on) { AudioThread.tap = on; }
         /** The page has something to say or ask (a lower clock, an error): show it over the native play screen. */
         @JavascriptInterface public void page() { runOnUiThread(() -> showFace(false)); }
     }
@@ -106,6 +108,9 @@ public class MainActivity extends Activity {
                 Uri u = r.getUrl();
                 if (HOST.equals(u.getHost()) && "/native/poll".equals(u.getPath())) {
                     return new WebResourceResponse("application/octet-stream", null, new ByteArrayInputStream(Native.poll()));
+                }
+                if (HOST.equals(u.getHost()) && "/native/pcm".equals(u.getPath())) {
+                    return new WebResourceResponse("application/octet-stream", null, new ByteArrayInputStream(AudioThread.drain()));
                 }
                 return loader.shouldInterceptRequest(u);
             }
