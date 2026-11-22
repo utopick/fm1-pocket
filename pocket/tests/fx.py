@@ -3,7 +3,7 @@
     python3 pocket/build.py && python pocket/tests/fx.py      (needs: pip install selenium, Chrome; no firmware needed: it runs Tether, which is built in)
 SHOT=/some/folder saves a screenshot of the device and of each screen.
 """
-import functools, http.server, os, threading, time
+import functools, http.server, json, os, threading, time
 from selenium import webdriver
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,7 +37,7 @@ def swipe(sel, dx):  # a finger drawn across an element
 pane = lambda: js("return document.querySelector('#xp').classList.contains('open') ? +document.querySelector('#xp').dataset.pane : 0")
 # the controls of a screen: every one inside the window and big enough for a finger
 def fits(root, why):
-    bad = js("""return [...document.querySelectorAll(arguments[0] + ' button, ' + arguments[0] + ' .kn')].filter(e => e.offsetParent && getComputedStyle(e).visibility !== 'hidden').map(e => [e, e.getBoundingClientRect()])
+    bad = js("""return [...document.querySelectorAll(arguments[0] + ' button, ' + arguments[0] + ' .kn, ' + arguments[0] + ' .knob')].filter(e => e.offsetParent && getComputedStyle(e).visibility !== 'hidden').map(e => [e, e.getBoundingClientRect()])
       .filter(([e, r]) => r.width < 30 || r.height < 30 || r.left < -1 || r.top < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1).map(([e, r]) => (e.id || e.textContent) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height))""", root)
     assert bad == [], "%s: controls too small or outside the window: %s" % (why, bad)
     if root == "#xp": assert js("return [...document.querySelectorAll('#xp section, #xp .xpWell')].filter(x => x.offsetParent && getComputedStyle(x).visibility !== 'hidden').every(x => x.scrollHeight <= x.clientHeight + 1 && x.scrollWidth <= x.clientWidth + 1)"), why + ": something in it would scroll"
@@ -52,8 +52,42 @@ try:
     # tapping: the dock opens each screen, the tabs and BACK move between them
     assert js("return [...document.querySelectorAll('#xpDock button, .xpTabs button')].map(b => b.textContent).join()") == "PEDALS,LIVE FX,PEDALS,LIVE FX"
     click("#dockFx"); assert pane() == 2 and not js("return document.querySelector('#xp').inert"); fits("#xp", "FX"); shot("2-fx")
-    assert js("return document.querySelectorAll('#fxPads .xpad').length") == 12
+    live = js("return [...document.querySelectorAll('#fxPads .xpad')].map(p => p.dataset.live)")
+    assert len(live) == 24 and len(set(live)) == 24 and {"o1", "o2", "uni", "fif", "choir", "alien", "mega", "flo", "fhi", "drv", "fln", "g8"} <= set(live), live
+    assert js("return document.querySelector('#fxPads').getBoundingClientRect().height") < 330
     click("#tabPed"); assert pane() == 1; fits("#xp", "PEDALS"); shot("3-pedals")
+    # the unit is drawn (PLAY's pedal with its knobs and footswitch), an amp and a cab too
+    assert js("return document.querySelector('#unitDraw').classList.contains('pedal') && !!document.querySelector('#unitDraw .fs') && !!document.querySelector('#unitDraw .jack') && document.querySelectorAll('#unitDraw .knob svg').length") == 3
+    assert js("return document.querySelector('#unitDraw .plate').textContent") == "OVERDRIVE"
+    click("#xpKinds button:nth-child(2)"); assert js("return document.querySelector('#unitDraw').classList.contains('amp') && !!document.querySelector('#unitDraw .grill') && document.querySelectorAll('#unitDraw .knob').length") == 5; fits("#xp", "an amp")
+    click("#xpKinds button:nth-child(3)"); assert js("return document.querySelector('#unitDraw').classList.contains('cab') && !!document.querySelector('#unitDraw .spk')"); fits("#xp", "a cab")
+    click("#xpKinds button:nth-child(1)"); click("#unitGrid .xpU:nth-child(8)")  # EQ-5: a wide pedal with five knobs
+    assert js("return document.querySelectorAll('#unitDraw .knob').length") == 5; fits("#xp", "a five-knob pedal")
+    click("#unitGrid .xpU:nth-child(4)"); assert js("return document.querySelector('#unitDraw .plate').textContent") == "OVERDRIVE"
+    # the pedal board: BOARD is the last button of the kinds row; tap turns a unit on, a drag moves it in the order
+    assert js("return document.querySelector('#xpKinds button:last-child').textContent") == "BOARD" and js("return document.querySelector('#xpBoard').hidden")
+    click("#bdOpen"); assert not js("return document.querySelector('#xpBoard').hidden") and js("return document.querySelectorAll('#bdGrid .sq').length") == 24; fits("#xp", "the board"); shot("3b-board")
+    before = js("return fxInfo().rack.order")
+    def drag(i, j, steps=4):
+        js("""const g = document.querySelector('#bdGrid'), a = g.querySelector('.sq[data-i="' + arguments[0] + '"]').getBoundingClientRect(), b = g.querySelector('.sq[data-i="' + arguments[1] + '"]').getBoundingClientRect(),
+          x0 = a.left + a.width / 2, y0 = a.top + a.height / 2, x1 = b.left + b.width / 2, y1 = b.top + b.height / 2, f = (t, x, y) => g.dispatchEvent(new PointerEvent(t, {pointerId: 11, bubbles: true, clientX: x, clientY: y}));
+          const down = new PointerEvent('pointerdown', {pointerId: 11, bubbles: true, clientX: x0, clientY: y0}); g.querySelector('.sq[data-i="' + arguments[0] + '"]').dispatchEvent(down);
+          for (let k = 1; k <= arguments[2]; k++) g.dispatchEvent(new PointerEvent('pointermove', {pointerId: 11, bubbles: true, clientX: x0 + (x1 - x0) * k / arguments[2], clientY: y0 + (y1 - y0) * k / arguments[2]}));
+          f('pointerup', x1, y1);""", i, j, steps); time.sleep(0.3)
+    def sqtap(i):  # a finger: down, up, and the click that follows
+        js("""const q = document.querySelector('#bdGrid .sq[data-i="' + arguments[0] + '"]'), r = q.getBoundingClientRect(), o = {pointerId: 12, bubbles: true, clientX: r.left + 5, clientY: r.top + 5};
+          q.dispatchEvent(new PointerEvent('pointerdown', o)); q.dispatchEvent(new PointerEvent('pointerup', o)); q.click();""", i); time.sleep(0.3)
+    drag(3, 12)  # OVERDRIVE (4th) to the 13th place
+    after = js("return fxInfo().rack.order")
+    assert after[12] == before[3] and after[:3] == before[:3] and sorted(after) == sorted(before) and after != before, (before, after)
+    assert json.loads(js("return localStorage.getItem('fm1.rack')"))["order"] == after
+    drag(12, 3); assert js("return fxInfo().rack.order") == before  # and back
+    sqtap(3)  # a tap turns it on or off
+    assert js("return fxInfo().rack.u.od.on") is True
+    sqtap(3); assert js("return fxInfo().rack.u.od.on") is False
+    drag(1, 1); assert js("return fxInfo().rack.order") == before  # a drop on itself changes nothing
+    click("#bdBack"); assert js("return document.querySelector('#xpBoard').hidden")
+    js("localStorage.removeItem('fm1.rack')"); d.refresh(); time.sleep(1.5); click("#dockPed")
     click("#xpBack"); assert pane() == 0
     click("#dockPed"); assert pane() == 1; click("#dockPed"); assert pane() == 0
     # swiping: left from the dock opens FX, left again goes to PEDALS, right goes back and back out
@@ -76,7 +110,7 @@ try:
     assert js("return document.querySelector('#xpLed').textContent").startswith("ACTIVE") and js("return document.querySelector('#dockPed').classList.contains('lit')")
     assert js("return JSON.parse(localStorage.getItem('fm1.rack')).u.od.on") is True
     # a knob moves, a live FX pad plays (HOLD: only while held), the unit moves later in the chain
-    js("""const k = document.querySelector('#unitKnobs .kn'), r = k.getBoundingClientRect(), f = (t, y) => k.dispatchEvent(new PointerEvent(t, {pointerId: 3, bubbles: true, clientX: r.left + 5, clientY: y}));
+    js("""const k = document.querySelector('#unitDraw .knob'), r = k.getBoundingClientRect(), f = (t, y) => k.dispatchEvent(new PointerEvent(t, {pointerId: 3, bubbles: true, clientX: r.left + 5, clientY: y}));
       k.setPointerCapture = () => {}; f('pointerdown', r.top + 40); f('pointermove', r.top); f('pointerup', r.top);""")
     assert js("return fxInfo().rack.u.od.level") > 0.5, js("return fxInfo().rack.u.od.level")
     click("#tabFx"); click("#fxLatch"); assert js("return fxInfo().rack.latch") is False
@@ -84,7 +118,17 @@ try:
     assert js("return fxInfo().chain") == ["od", "lofi"], js("return fxInfo().chain")
     js("dispatchEvent(new PointerEvent('pointerup', {pointerId: 5}))"); assert js("return fxInfo().chain") == ["od"]
     click("#fxLatch"); tap("[data-live=echo]"); assert js("return fxInfo().chain") == ["od", "echo"]; shot("4-fx-on")
-    tap("[data-live=echo]"); click("#tabPed"); click("#xpKinds button:nth-child(2)"); click("#unitOn")
+    tap("[data-live=echo]")
+    for id in ("o1", "o2", "uni", "choir", "drv", "g8"): tap("[data-live=%s]" % id); assert id in js("return fxInfo().chain"), id; tap("[data-live=%s]" % id)
+    assert js("return fxInfo().chain") == ["od"]
+    # the octave pads change the sound (worklet, offline): a 440 Hz tone has 220 rising zero crossings in half a second, an octave up about 440, down about 110
+    def crossings(id):
+        return d.execute_async_script("""const done = arguments[arguments.length - 1], id = arguments[0], oc = new OfflineAudioContext(1, 44100, 44100);
+          FXE.load(oc).then(ok => { const e = FXE.build(oc, ok), s = oc.createOscillator(); s.frequency.value = 440; s.connect(e.in); e.out.connect(oc.destination); s.start();
+            e.sync(FXE.defaults(), new Set(id ? [id] : [])); oc.startRendering().then(b => { const o = b.getChannelData(0); let n = 0; for (let i = 22051; i < 44100; i++) if (o[i - 1] < 0 && o[i] >= 0) n++; done([ok, n]); }); });""", id)
+    ok, up = crossings("o1"); _, down = crossings("o2")
+    assert ok and 380 < up < 500 and 80 < down < 140, (ok, up, down)
+    click("#tabPed"); click("#xpKinds button:nth-child(2)"); click("#unitOn")
     assert js("return fxInfo().chain") == ["amp", "od"] or js("return fxInfo().chain") == ["od", "amp"], js("return fxInfo().chain")
     click("#unitEarlier"); click("#unitLater"); shot("5-pedals-on")
     # the audio itself: the engine, in an offline context, with OVERDRIVE on, does not return the input unchanged

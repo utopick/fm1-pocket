@@ -558,11 +558,11 @@
       #xp[data-pane="1"] #paneFx, #xp[data-pane="2"] #panePed { visibility: hidden; }
       .xpWell { background: var(--tray); border-radius: 14px; padding: 8px; box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 6px #000a; min-width: 0; min-height: 0; }
       .xpLcd { background: #0c1016; color: #9fd8b4; border-radius: 6px; padding: 5px 9px; font: 700 11px ui-monospace, Menlo, monospace; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: inset 0 0 0 1px #000, inset 0 2px 6px #000; }
-      /* FX: the live pads, a grid of six by two, a bar under them */
+      /* FX: the live pads, a grid of eight by three, a bar under them */
       #paneFx { grid-template-rows: minmax(0, 1fr) 46px; }
-      #fxPads { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .xpad { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 14px 2px 6px !important; font-size: clamp(10px, 2.3vh, 15px) !important; }
-      .xpad small { font: 600 9px system-ui, sans-serif; letter-spacing: 0.5px; opacity: 0.75; text-transform: uppercase; }
+      #fxPads { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 6px; }
+      .xpad { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-width: 0; padding: 12px 1px 4px !important; font-size: clamp(9px, 2vh, 14px) !important; }
+      .xpad small { font: 600 8px system-ui, sans-serif; letter-spacing: 0.5px; opacity: 0.75; text-transform: uppercase; }
       .xpad::before { content: ""; position: absolute; top: 7px; left: 50%; width: 22px; height: 5px; margin-left: -11px; border-radius: 3px; background: #000a; }
       .xpad.on::before { background: var(--lit); box-shadow: 0 0 10px var(--lit); }
       .xpad.on small { opacity: 1; }
@@ -570,7 +570,7 @@
       .xpFoot .xpLcd { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; }
       .xpFoot button { width: 130px; }
       /* PEDALS: the units of a kind on the left, the chosen unit's knobs on the right, the signal chain under both */
-      #panePed { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 44px; }
+      #panePed { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); grid-template-rows: minmax(0, 1fr) 44px; }
       #panePed .left { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
       .xpKinds { flex: none; display: flex; gap: 6px; }
       .xpKinds button { flex: 1; min-height: 36px; }
@@ -580,16 +580,81 @@
       .xpU.on::before { background: var(--lit); box-shadow: 0 0 8px var(--lit); }
       .xpU.sel { outline: 2px solid var(--lit); outline-offset: 1px; }
       .xpU.on { background: linear-gradient(color-mix(in srgb, var(--btn1), var(--lit) 28%), color-mix(in srgb, var(--btn2), var(--lit) 20%)) !important; color: var(--ink) !important; }
-      #unitCard { display: flex; flex-direction: column; gap: 8px; }
-      #unitCard .head { flex: none; display: flex; gap: 8px; align-items: center; }
-      #unitCard .head .xpLcd { flex: 1; min-width: 0; padding: 9px; font-size: 12px; }
-      #unitCard .head button { width: 76px; }
-      #unitKnobs { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: minmax(0, 1fr); align-items: center; justify-items: center; gap: 2px 6px; }
-      #unitKnobs .kn { --u: 1px; --d: clamp(38px, 14vh, 96px); gap: 3px; touch-action: none; }
-      #unitKnobs .kn label { font: 700 clamp(9px, 1.7vh, 14px) ui-monospace, Menlo, monospace; letter-spacing: 0.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-      #unitKnobs .kn output { font: 700 clamp(9px, 1.7vh, 14px) ui-monospace, Menlo, monospace; color: #9fd8b4; background: #0c1016; border-radius: 4px; padding: 1px 5px; min-width: 52px; text-align: center; }
-      #unitCard .move { flex: none; display: flex; gap: 6px; }
-      #unitCard .move button { flex: 1; min-height: 36px; }
+      #unitCard { display: grid; grid-template-columns: minmax(0, 1fr) 78px; gap: 8px; }
+      #unitStage { position: relative; min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      #unitCard .side { display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+      #unitCard .side button { flex: 1; min-height: 40px; padding: 2px; font-size: 10px; }
+      /* the drawn unit: PLAY.Pocket's (a stomp box, an amp head, a cab), laid out at one size and zoomed to fill the room (unitFit) */
+      #unitDraw { --pc: #2fb36b; --ks: 56px; position: relative; border-radius: 14px; color: #111; display: flex; flex-direction: column; flex: none; touch-action: none; }
+      #unitDraw.off { filter: saturate(0.45) brightness(0.8); }
+      #unitDraw .krow { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 6px; }
+      #unitDraw .plate { text-align: center; font: 900 16px ui-monospace, Menlo, monospace; letter-spacing: 2px; color: rgba(0, 0, 0, 0.8); }
+      #unitDraw .led { width: 12px; height: 12px; border-radius: 50%; background: #3a0000; border: 1px solid #000; flex: none; }
+      #unitDraw:not(.off) .led { background: #ff2a2a; box-shadow: 0 0 10px 3px rgba(255, 40, 40, 0.7); }
+      #xp #unitDraw .fs { width: 64px; height: 64px; min-height: 0; border-radius: 50%; padding: 0; background: radial-gradient(circle at 40% 35%, #eee, #888 60%, #555); border: 3px solid #333; box-shadow: 0 4px 0 #222; }
+      #unitDraw .fs::after { content: ""; display: block; width: 28px; height: 28px; margin: auto; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #fff, #999); border: 2px solid #444; }
+      #xp #unitDraw .fs:active { transform: translateY(3px); box-shadow: 0 1px 0 #222; }
+      #unitDraw.pedal { width: 250px; background: linear-gradient(160deg, color-mix(in srgb, var(--pc) 88%, #fff) 0%, var(--pc) 45%, color-mix(in srgb, var(--pc) 70%, #000) 100%); box-shadow: 0 10px 0 color-mix(in srgb, var(--pc) 45%, #000), 0 18px 30px rgba(0, 0, 0, 0.45); padding: 14px 8px 0; }
+      #unitDraw.pedal.wide { width: 340px; --ks: 46px; }
+      #unitDraw.pedal .led { align-self: center; margin: 10px 0 8px; }
+      #unitDraw.pedal .fs { align-self: center; margin-bottom: 10px; }
+      #unitDraw.pedal .plate { margin: 0 -8px; padding: 8px 0 10px; border-top: 2px solid rgba(0, 0, 0, 0.35); border-radius: 0 0 14px 14px; background: rgba(0, 0, 0, 0.08); }
+      #unitDraw .jack { position: absolute; top: 50%; width: 16px; height: 30px; margin-top: -15px; background: #222; border: 2px solid #555; border-radius: 3px; }
+      #unitDraw .jack.in { right: -14px; }
+      #unitDraw .jack.out { left: -14px; }
+      #unitDraw .jl { position: absolute; top: calc(50% - 32px); font: 800 9px ui-monospace, Menlo, monospace; letter-spacing: 1px; color: rgba(0, 0, 0, 0.7); }
+      #unitDraw .jl.in { right: 8px; }
+      #unitDraw .jl.out { left: 8px; }
+      #unitDraw.amp { --ks: 44px; width: 360px; padding: 12px; background: #1b1714; border: 3px solid #0c0a08; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5); }
+      #unitDraw.amp .top { display: flex; align-items: center; gap: 10px; padding: 0 4px 10px; }
+      #unitDraw.amp .plate { flex: 1; color: #e8d9b5; text-align: left; font-size: 15px; font-style: italic; }
+      #unitDraw.amp .panel { padding: 8px 2px; border-radius: 6px; background: linear-gradient(#d8c08a, #b49a62); border: 2px solid #6b5a33; }
+      #unitDraw.amp .krow { gap: 6px 2px; }
+      #unitDraw.amp .fs, #unitDraw.cab .fs { width: 44px; height: 44px; border-width: 2px; }
+      #unitDraw.amp .fs::after, #unitDraw.cab .fs::after { width: 18px; height: 18px; }
+      #unitDraw.amp .grill { height: 34px; margin-top: 10px; border-radius: 4px; background: repeating-linear-gradient(45deg, #3a332b 0 3px, #2a241f 3px 6px); }
+      #unitDraw.cab { --ks: 46px; width: 220px; padding: 10px; background: #1b1714; border: 3px solid #0c0a08; box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5); }
+      #unitDraw.cab .strip { display: flex; align-items: center; gap: 8px; padding: 6px; border-radius: 6px; background: linear-gradient(#d8c08a, #b49a62); }
+      #unitDraw.cab .krow { flex: 1; }
+      #unitDraw.cab .spk { margin: 10px auto 4px; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle, #555 0 9%, #1a1a1a 10% 13%, #333 14% 40%, #222 41% 62%, #111 63% 66%, #2a2a2a 67% 100%); border: 4px solid #0c0a08; }
+      #unitDraw.cab .plate { color: #e8d9b5; font-size: 13px; }
+      #unitDraw .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; width: calc(var(--ks) + 20px); touch-action: none; cursor: ns-resize; user-select: none; -webkit-user-select: none; }
+      #unitDraw.amp .knob, #unitDraw.cab .knob { width: calc(var(--ks) + 14px); }
+      #unitDraw .knob svg { width: var(--ks); height: var(--ks); overflow: visible; display: block; }
+      #unitDraw .knob i { display: block; font-style: normal; }
+      #unitDraw .knob .sc { stroke: rgba(0, 0, 0, 0.55); stroke-width: 2; stroke-linecap: round; }
+      #unitDraw .knob .cap { fill: #1b1b1b; stroke: #000; stroke-width: 1.5; }
+      #unitDraw .knob .ptr { stroke: #fff; stroke-width: 3; stroke-linecap: round; }
+      #unitDraw .knob .arc { fill: none; stroke: rgba(255, 255, 255, 0.85); stroke-width: 3; stroke-linecap: round; }
+      #unitDraw .knob b { font: 900 11px ui-monospace, Menlo, monospace; letter-spacing: 1px; color: rgba(0, 0, 0, 0.8); }
+      #unitDraw .knob small { font: 700 10px ui-monospace, Menlo, monospace; color: rgba(0, 0, 0, 0.65); min-height: 12px; }
+      #unitDraw.amp .knob b, #unitDraw.cab .knob b { font-size: 9px; }
+      #unitDraw .knob.turn { filter: drop-shadow(0 0 4px #fff8); }
+      /* the pedal board: PLAY.Pocket's, all the units in the order of the chain, drag one to move it, tap to turn it on or off */
+      #panePed { position: relative; }
+      #xpBoard { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; gap: 6px; padding: 6px; border-radius: 14px; background: var(--tray); box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 6px #000a; }
+      #xpBoard[hidden] { display: none; }
+      #xpBoard .bhead { flex: none; display: flex; align-items: center; gap: 8px; }
+      #xpBoard .bhead button { width: 110px; }
+      #xpBoard .bhead .xpLcd { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; }
+      #bdWrap { flex: 1; min-height: 0; position: relative; }
+      #bdGrid { position: absolute; inset: 0; display: grid; grid-template: repeat(3, 1fr) / repeat(8, 1fr); touch-action: none; user-select: none; -webkit-user-select: none; }
+      #bdCable { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+      #bdCable path { fill: none; stroke: #000; stroke-width: 6; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+      #bdCable path + path { stroke: var(--lit); stroke-width: 2; stroke-dasharray: 6 10; opacity: 0.45; }
+      #bdCable.live path + path { opacity: 1; animation: bdflow 0.6s linear infinite; }
+      @keyframes bdflow { to { stroke-dashoffset: -16; } }
+      #xp #bdGrid .sq { position: relative; margin: 4px; min-height: 0; min-width: 0; padding: 3px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; overflow: hidden; font: 800 9px/1.1 ui-monospace, Menlo, monospace; text-align: center; color: #111; background: var(--pc); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--pc) 55%, #000), 0 3px 0 #000a; }
+      #xp #bdGrid .sq.dark { color: #eee; }
+      #xp #bdGrid .sq.off { filter: saturate(0.4) brightness(0.7); }
+      #xp #bdGrid .sq .ki { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; opacity: 0.6; }
+      #xp #bdGrid .sq .ki.wide { width: 28px; }
+      #xp #bdGrid .sq small { font: 700 7px ui-monospace, Menlo, monospace; opacity: 0.75; }
+      #bdGrid .sq .led { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; border-radius: 50%; background: #3a0000; border: 1px solid #000; }
+      #bdGrid .sq:not(.off) .led { background: #ff2a2a; box-shadow: 0 0 6px 2px rgba(255, 40, 40, 0.7); }
+      #xp #bdGrid .sq.lift { z-index: 5; pointer-events: none; opacity: 0.85; box-shadow: 0 8px 20px #0008; transition: none; }
+      #xp #bdGrid .sq.drop { outline: 3px dashed var(--lit); }
+      #xp #bdGrid .sq:active { transform: none; }
       #chain { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; padding: 4px 8px; }
       #chain .end { flex: none; font: 900 9px ui-monospace, Menlo, monospace; letter-spacing: 1px; opacity: 0.8; }
       #chain .arrow { flex: none; opacity: 0.55; font-size: 10px; }
@@ -597,7 +662,7 @@
       #chain .links button { flex: 0 1 150px; min-width: 0; min-height: 34px; padding: 2px 3px; font-size: 9px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-shadow: inset 0 -3px 0 var(--col, #666), inset 0 0 0 1px var(--rim); }
       #chain .links .none { font: 600 10px system-ui, sans-serif; opacity: 0.7; padding-left: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       #xp.open ~ #toast { top: auto; bottom: 10px; }
-      @media (max-height: 380px) { .xpbar { height: 38px; } #xp { gap: 4px; } #unitCard .move button, .xpKinds button { min-height: 32px; } }
+      @media (max-height: 380px) { .xpbar { height: 38px; } #xp { gap: 4px; } #unitCard .side button, .xpKinds button { min-height: 32px; } }
       @media (max-width: 700px) { .xpbar .name { display: none; } }
     </style>
   </head>
@@ -648,9 +713,12 @@
             <div id="unitGrid" class="xpWell"></div>
           </div>
           <div id="unitCard" class="xpWell">
-            <div class="head"><div class="xpLcd" id="unitName"></div><button id="unitOn" title="ON">OFF</button></div>
-            <div id="unitKnobs"></div>
-            <div class="move"><button id="unitEarlier" title="Earlier">&#9664; EARLIER</button><button id="unitLater" title="Later">LATER &#9654;</button></div>
+            <div id="unitStage"><div id="unitDraw"></div></div>
+            <div class="side"><button id="unitOn" title="ON">OFF</button><button id="unitEarlier" title="Earlier">&#9664; EARLIER</button><button id="unitLater" title="Later">LATER &#9654;</button></div>
+          </div>
+          <div id="xpBoard" hidden>
+            <div class="bhead"><button id="bdBack" title="Back to the units">&#9664; UNITS</button><div class="xpLcd" id="bdInfo"></div></div>
+            <div id="bdWrap"><div id="bdGrid"></div></div>
           </div>
           <div id="chain" class="xpWell"></div>
         </section>
@@ -2866,7 +2934,7 @@
           "Type in the box at the top of FIRMWARE to search by name, author or text. **MANUAL** on a card shows the README of the firmware's repository, and keeps it on this device once read. The **?** button in the left column opens the manual of the running firmware.",
           "## PEDALS and LIVE FX (this app only)",
           "The two tabs on the right edge of the FM-1, **PEDALS** and **LIVE FX**, are not part of the FM-1: they are an expansion this app adds, so the sound of any firmware can go through pedals and effects before it reaches the speakers. Tap a tab, or swipe left from the edge; swipe right (or tap **FM-1**) to come back.",
-          "**PEDALS** has the units of PLAY.Pocket's pedal board: pedals, amps and cabs. Tap a unit to choose it and tap it again, or **ON**, to turn it on. Its knobs are on the right (drag them up or down), and **EARLIER** and **LATER** move it in the chain, which is shown along the bottom. **LIVE FX** has twelve pads for the whole sound (lo-fi, tape, radio, echo, stutter and more): with **LATCH** a tap turns one on or off, and with **HOLD** it plays while you hold it.",
+          "**PEDALS** has the units of PLAY.Pocket's pedal board: pedals, amps and cabs, drawn as they are in PLAY. Tap a unit in the list to choose it and tap it again, or **ON**, or the footswitch on the drawing, to turn it on. Drag the knobs of the drawing up or down, and **EARLIER** and **LATER** move the unit in the chain, which is shown along the bottom. **BOARD**, at the right of PEDALS, AMPS and CABS, opens the pedal board: every unit as a square in the order of the chain. Tap a square to turn it on or off, drag it onto another place to move it (the chain changes the same as with EARLIER and LATER), and hold it to open it. **LIVE FX** has twenty-four pads for the whole sound: octave up and down, unison, fifth, choir, alien, robot and megaphone, filters, radio, phone, underwater, lo-fi, tape, crunch, drive, flanger, stutter, gate, echo and reverb. With **LATCH** a tap turns one on or off, and with **HOLD** it plays while you hold it.",
           "With nothing on (**BYPASS** at the top right) the sound goes out exactly as the FM-1 made it. Your pedals are kept on this device. These screens work in the browser; the Android app plays the sound itself, so they are hidden there.",
           "## MIDI",
           "**CONNECT MIDI** finds your keyboards and controllers, and their keys play the FM-1 through its MIDI IN. On known controllers (Akai MPK mini, Launchkey) the knobs and pads start on the FM-1's controls. Knobs 1 to 4 are KNOB1 to 4 and knobs 5 to 8 are MASTER, SELECT, PRESETS and ALGORITHM. Pads 1 to 4 are HOME, SAVE, PLAY and REC, and pads 5 to 8 are FX, SEL, ENV and LFO.",
@@ -2902,7 +2970,7 @@
           "Escribe en la caja de arriba de FIRMWARE para buscar por nombre, autor o texto. **MANUAL** en una tarjeta muestra el README del repositorio del firmware, y lo guarda en este dispositivo al leerlo. El botón **?** de la columna de la izquierda abre el manual del firmware que está en marcha.",
           "## PEDALS y LIVE FX (solo esta app)",
           "Las dos pestañas del borde derecho del FM-1, **PEDALS** y **LIVE FX**, no son parte del FM-1: son una ampliación que añade esta app, para que el sonido de cualquier firmware pase por pedales y efectos antes de llegar a los altavoces. Toca una pestaña, o desliza a la izquierda desde el borde; desliza a la derecha (o toca **FM-1**) para volver.",
-          "**PEDALS** tiene las unidades de la pedalera de PLAY.Pocket: pedales, amplis y cajas. Toca una unidad para elegirla y tócala otra vez, o **ON**, para encenderla. Sus mandos están a la derecha (arrástralos arriba o abajo), y **ANTES** y **DESPUÉS** la mueven en la cadena, que se ve abajo. **LIVE FX** tiene doce pads para todo el sonido (lo-fi, cinta, radio, eco, stutter y más): con **LATCH** un toque enciende o apaga uno, y con **HOLD** suena mientras lo mantienes pulsado.",
+          "**PEDALS** tiene las unidades de la pedalera de PLAY.Pocket: pedales, amplis y cajas, dibujados como en PLAY. Toca una unidad de la lista para elegirla y tócala otra vez, o **ON**, o el pedal de pie del dibujo, para encenderla. Arrastra arriba o abajo los mandos del dibujo, y **ANTES** y **DESPUÉS** mueven la unidad en la cadena, que se ve abajo. **BOARD**, a la derecha de PEDALS, AMPS y CABS, abre la pedalera: cada unidad es un cuadrado, en el orden de la cadena. Toca un cuadrado para encenderlo o apagarlo, arrástralo a otro sitio para moverlo (la cadena cambia igual que con ANTES y DESPUÉS) y mantenlo pulsado para abrirlo. **LIVE FX** tiene veinticuatro pads para todo el sonido: octava arriba y abajo, unísono, quinta, coro, alien, robot y megáfono, filtros, radio, teléfono, bajo el agua, lo-fi, cinta, crunch, drive, flanger, stutter, puerta, eco y reverb. Con **LATCH** un toque enciende o apaga uno, y con **HOLD** suena mientras lo mantienes pulsado.",
           "Sin nada encendido (**BYPASS** arriba a la derecha) el sonido sale exactamente como lo hace el FM-1. Tus pedales se guardan en este dispositivo. Estas pantallas funcionan en el navegador; la app de Android reproduce el sonido por su cuenta, así que allí están ocultas.",
           "## MIDI",
           "**CONECTAR MIDI** busca tus teclados y controladores, y sus teclas tocan el FM-1 por su MIDI IN. En los controladores conocidos (Akai MPK mini, Launchkey) los potes y los pads empiezan en los controles del FM-1. Los potes 1 a 4 son KNOB1 a 4 y los potes 5 a 8 son MASTER, SELECT, PRESETS y ALGORITHM. Los pads 1 a 4 son HOME, SAVE, PLAY y REC, y los pads 5 a 8 son FX, SEL, ENV y LFO.",
@@ -3658,7 +3726,7 @@
       // PEDALS and FX: two app-only screens (docks on the device's right edge, swipe or tap) for the sound of any firmware. The units are
       // PLAY.Pocket's (vendor/fx.js). With nothing switched on the sound goes from the emulator to the speakers as it always did (a true
       // bypass: the chain is not even connected); the chain is wired in only while a pedal or a live FX is on. Saved as fm1.rack.
-      // shortcut: switching a unit off cuts its tail (a delay or reverb stops at once), and units cannot be dragged, only moved a step; upgrade if asked
+      // shortcut: switching a unit off cuts its tail (a delay or reverb stops at once); upgrade if asked
       // ======================================================================
       const T = (en, es) => (lang === "es" ? es : en);
       const rack = (() => {
@@ -3725,7 +3793,7 @@
         for (const t of ["pointerup", "pointercancel"]) elm.addEventListener(t, () => (p = null));
       }
       swipe($("#xpDock"), (d) => d > 0 && !xp && xpGo(1));
-      swipe($("#xp"), (d) => xpGo(Math.max(0, Math.min(2, xp + d))), ".kn, .xpad, #unitGrid button, #chain button");
+      swipe($("#xp"), (d) => xpGo(Math.max(0, Math.min(2, xp + d))), ".kn, .knob, .xpad, #unitGrid button, #chain button, #xpBoard");
       $("#dockPed").onclick = () => xpGo(xp === 1 ? 0 : 1);
       $("#dockFx").onclick = () => xpGo(xp === 2 ? 0 : 2);
       $("#xpBack").onclick = () => xpGo(0);
@@ -3798,6 +3866,13 @@
             b.onclick = () => ((pKind = k), (sel = unitsOf(k).some((u) => u.id === sel) ? sel : unitsOf(k)[0].id), toast(T("Showing " + n, "Mostrando " + n), 900), pedFace());
             return b;
           }),
+          (() => {
+            const b = el("button", "board", "BOARD");
+            b.id = "bdOpen";
+            b.title = T("Open the pedal board: every unit laid out in the order of the chain. Tap one to turn it on or off, drag it to move it, hold it to open it", "Abrir la pedalera: todas las unidades en el orden de la cadena. Toca una para encenderla o apagarla, arrástrala para moverla, mantenla pulsada para abrirla");
+            b.onclick = () => boardOpen(true);
+            return b;
+          })(),
         );
         $("#unitGrid").replaceChildren(
           ...unitsOf(pKind).map((u) => {
@@ -3808,30 +3883,60 @@
             return b;
           }),
         );
-        $("#unitName").textContent = p.name + " · " + p.kind.toUpperCase();
         $("#unitOn").textContent = s.on ? "ON" : "OFF";
         $("#unitOn").classList.toggle("on", s.on);
         $("#unitOn").title = s.on ? T("Turn " + p.name + " off", "Apagar " + p.name) : T("Turn " + p.name + " on", "Encender " + p.name);
         $("#unitEarlier").title = T("Move " + p.name + " one place earlier in the chain (the sound reaches it sooner)", "Mover " + p.name + " un puesto antes en la cadena (el sonido llega antes a él)");
         $("#unitLater").title = T("Move " + p.name + " one place later in the chain", "Mover " + p.name + " un puesto después en la cadena");
-        $("#unitKnobs").replaceChildren(
-          ...p.knobs.map((k) => {
-            const d = el("div", "kn"), cap = el("div", "cap"), out = el("output"), l = el("label", "", k[1]);
-            d.dataset.k = k[0];
-            d.title = p.name + " " + k[1] + T(": drag up or down to turn it", ": arrastra arriba o abajo para girarlo");
-            cap.append(el("i"));
-            d.append(l, cap, out);
-            knobFace(d, p, k);
-            return d;
-          }),
-        );
+        unitDraw(p, s);
         chainFace();
         fxSync();
       }
+      // the drawn unit: PLAY.Pocket's markup and look (a stomp box with jacks and a footswitch, an amp head, a cab), its knobs drawn as PLAY draws them
+      const ANG = 135;
+      function knobSvg(f) {
+        const a = -ANG + f * 2 * ANG, r = 26, pt = (deg, rr) => [32 + rr * Math.sin((deg * Math.PI) / 180), 32 - rr * Math.cos((deg * Math.PI) / 180)];
+        let ticks = "";
+        for (let i = 0; i <= 10; i++) {
+          const [x1, y1] = pt(-ANG + (i * 2 * ANG) / 10, 29), [x2, y2] = pt(-ANG + (i * 2 * ANG) / 10, 32);
+          ticks += `<line class="sc" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`;
+        }
+        const [ax, ay] = pt(-ANG, r - 4), [bx, by] = pt(a, r - 4), [px, py] = pt(a, r - 8);
+        const arc = f > 0.001 ? `<path class="arc" d="M${ax} ${ay} A${r - 4} ${r - 4} 0 ${a + ANG > 180 ? 1 : 0} 1 ${bx} ${by}"/>` : "";
+        return `<svg viewBox="0 0 64 64">${ticks}<circle class="cap" cx="32" cy="32" r="${r - 4}"/>${arc}<line class="ptr" x1="32" y1="32" x2="${px}" y2="${py}"/></svg>`;
+      }
+      function unitDraw(p, s) {
+        const u = $("#unitDraw"), name = p.name.replace(/[<>&"]/g, "");
+        u.className = p.kind + (p.knobs.length > 3 && p.kind === "pedal" ? " wide" : "") + (s.on ? "" : " off");
+        u.style.setProperty("--pc", p.col || "#888");
+        const kn = p.knobs.map((k, i) => `<div class="knob" data-k="${i}" role="slider" aria-label="${k[1]}"><i></i><b>${k[1]}</b><small></small></div>`).join("");
+        const sw = (t) => `<button class="fs" title="${t}" aria-label="${t}" aria-pressed="${s.on}"></button>`;
+        u.innerHTML = p.kind === "pedal"
+          ? `<span class="jack out"></span><span class="jl out">◁ OUT</span><span class="jack in"></span><span class="jl in">IN ◁</span><div class="krow">${kn}</div><span class="led"></span>${sw(T("Footswitch: the pedal on or off", "Pedal de pie: enciende o apaga el pedal"))}<div class="plate">${name}</div>`
+          : p.kind === "amp"
+            ? `<div class="top"><div class="plate">${name}</div><span class="led"></span>${sw(T("Power: the amp on or off", "Corriente: enciende o apaga el ampli"))}</div><div class="panel"><div class="krow">${kn}</div></div><div class="grill"></div>`
+            : `<div class="strip"><div class="krow">${kn}</div><span class="led"></span>${sw(T("The cab on or off", "Enciende o apaga la caja"))}</div><div class="spk"></div><div class="plate">${name}</div>`;
+        u.title = name + " · " + p.kind.toUpperCase();
+        p.knobs.forEach((k, i) => {
+          const d = u.querySelector(`.knob[data-k="${i}"]`);
+          d.title = p.name + " " + k[1] + T(": drag up or down to turn it", ": arrastra arriba o abajo para girarlo");
+          knobFace(d, p, k);
+        });
+        unitFit();
+      }
+      // laid out at one size, then zoomed to fill the room it has (the knobs and their numbers grow with it)
+      function unitFit() {
+        const u = $("#unitDraw"), st = $("#unitStage");
+        if (!st.clientWidth || !u.offsetWidth) return;
+        u.style.zoom = 1;
+        u.style.zoom = Math.max(0.4, Math.min((st.clientWidth - 40) / u.offsetWidth, (st.clientHeight - 24) / u.offsetHeight, 1.6)).toFixed(3);
+      }
+      new ResizeObserver(unitFit).observe($("#unitStage"));
       function knobFace(d, p, k) {
-        const v = rack.u[p.id][k[0]];
-        d.style.setProperty("--a", -135 + (270 * (v - k[2])) / (k[3] - k[2]) + "deg");
-        d.querySelector("output").textContent = k[5](v, k);
+        const v = rack.u[p.id][k[0]], t = k[5](v, k);
+        d.querySelector("i").innerHTML = knobSvg((v - k[2]) / (k[3] - k[2]));
+        d.querySelector("small").textContent = t;
+        d.setAttribute("aria-valuetext", t);
       }
       function chainFace() {
         const on = rack.order.filter((id) => rack.u[id].on),
@@ -3867,21 +3972,21 @@
       }
       $("#unitEarlier").onclick = () => unitMove(-1);
       $("#unitLater").onclick = () => unitMove(1);
-      // a knob: drag up or down, as the FM-1's own
+      // a knob: drag up or down, as the FM-1's own; the footswitch turns the unit on or off
       {
-        const drag = new Map();
-        $("#unitKnobs").addEventListener("pointerdown", (e) => {
-          const d = e.target.closest(".kn");
+        const drag = new Map(), U = $("#unitDraw");
+        U.addEventListener("pointerdown", (e) => {
+          const d = e.target.closest(".knob");
           if (!d) return;
           e.preventDefault();
-          d.setPointerCapture(e.pointerId);
+          try { d.setPointerCapture(e.pointerId); } catch {}
           d.classList.add("turn");
           drag.set(e.pointerId, { d, y: upY(e) });
         });
-        $("#unitKnobs").addEventListener("pointermove", (e) => {
+        U.addEventListener("pointermove", (e) => {
           const g = drag.get(e.pointerId);
           if (!g) return;
-          const p = FXE.FXI[sel], k = p.knobs.find((x) => x[0] === g.d.dataset.k), y = upY(e);
+          const p = FXE.FXI[sel], k = p.knobs[+g.d.dataset.k], y = upY(e);
           rack.u[sel][k[0]] = Math.max(k[2], Math.min(k[3], rack.u[sel][k[0]] + ((g.y - y) / 140) * (k[3] - k[2])));
           g.y = y;
           knobFace(g.d, p, k);
@@ -3895,8 +4000,113 @@
           saveRack();
           fxe?.apply(rack, sel, null); // the reverb rebuilds its tail when the knob is let go
         };
-        $("#unitKnobs").addEventListener("pointerup", end);
-        $("#unitKnobs").addEventListener("pointercancel", end);
+        U.addEventListener("pointerup", end);
+        U.addEventListener("pointercancel", end);
+        U.addEventListener("click", (e) => e.target.closest(".fs") && unitToggle(sel));
+      }
+      // ---- the pedal board: every unit as a square, in the order of the chain (the same order EARLIER and LATER change); drag one to move it
+      const KICON = {
+        pedal: '<svg class="ki" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2.5" width="12" height="19" rx="2"/><circle cx="9.5" cy="7" r="1.3"/><circle cx="14.5" cy="7" r="1.3"/><circle cx="12" cy="16" r="2.6"/></svg>',
+        amp: '<svg class="ki wide" viewBox="0 0 32 24" aria-hidden="true"><rect x="2" y="4" width="28" height="16" rx="2"/><circle cx="7" cy="8" r="1.2"/><circle cx="12" cy="8" r="1.2"/><circle cx="17" cy="8" r="1.2"/><circle cx="22" cy="8" r="1.2"/><path d="M5 12h22M5 14.5h22M5 17h22"/></svg>',
+        cab: '<svg class="ki" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="12" cy="12" r="6.2"/><circle cx="12" cy="12" r="2"/></svg>',
+      };
+      const BD = { drag: null, dragged: false, hold: 0, cols: 8 };
+      const bdRC = (i) => [Math.floor(i / BD.cols), Math.floor(i / BD.cols) % 2 ? BD.cols - 1 - (i % BD.cols) : i % BD.cols]; // the cable snakes: left to right, then right to left
+      function boardFace() {
+        const g = $("#bdGrid"), n = rack.order.length, rows = Math.ceil(n / BD.cols);
+        g.style.gridTemplate = `repeat(${rows}, 1fr) / repeat(${BD.cols}, 1fr)`;
+        const pts = [[0, 50], ...rack.order.map((_, i) => bdRC(i)).map(([r, c]) => [c * 100 + 50, r * 100 + 50])];
+        const path = "M" + pts.map((q) => q.join(" ")).join(" L");
+        const cab = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        cab.id = "bdCable";
+        cab.setAttribute("viewBox", `0 0 ${BD.cols * 100} ${rows * 100}`);
+        cab.setAttribute("preserveAspectRatio", "none");
+        cab.innerHTML = `<path d="${path}"/><path d="${path}"/>`;
+        cab.classList.toggle("live", fxOn);
+        const sq = rack.order.map((id, i) => {
+          const u = FXE.FXI[id], on = rack.u[id].on, b = el("button", "sq" + (on ? "" : " off") + (u.kind === "cab" || id === "dist" || id === "comp" ? " dark" : ""));
+          b.dataset.i = i;
+          b.style.cssText = `grid-row:${bdRC(i)[0] + 1};grid-column:${bdRC(i)[1] + 1};--pc:${u.col || (u.kind === "amp" ? "#c9ad72" : "#4a4038")}`;
+          b.title = u.name + " (" + (on ? T("on", "encendido") : T("off", "apagado")) + "): " + T("tap to turn it on or off, drag to move it, hold to open it", "toca para encenderlo o apagarlo, arrastra para moverlo, mantén para abrirlo");
+          b.innerHTML = '<span class="led"></span>' + KICON[u.kind];
+          b.append(u.name, el("small", "", u.kind.toUpperCase()));
+          return b;
+        });
+        g.replaceChildren(cab, ...sq);
+        const on = rack.order.filter((id) => rack.u[id].on).length;
+        $("#bdInfo").textContent = T("FM-1 ▸ " + on + " ON ▸ OUT · DRAG TO REORDER", "FM-1 ▸ " + on + " ACTIVAS ▸ SALIDA · ARRASTRA PARA ORDENAR");
+      }
+      function boardOpen(on, say = true) {
+        $("#xpBoard").hidden = !on;
+        if (on) boardFace();
+        else pedFace();
+        if (say) toast(on ? T("PEDAL BOARD: tap a unit to turn it on or off, drag it to move it in the chain, hold it to open it", "PEDALERA: toca una unidad para encenderla o apagarla, arrástrala para moverla en la cadena, mantenla para abrirla") : T("Back to the units", "De vuelta a las unidades"), on ? 2600 : 900);
+      }
+      $("#bdBack").onclick = () => boardOpen(false);
+      {
+        const G = $("#bdGrid"), at = (x, y) => document.elementFromPoint(x, y)?.closest("#bdGrid .sq");
+        G.addEventListener("pointerdown", (e) => {
+          const q = e.target.closest(".sq");
+          BD.dragged = false;
+          clearTimeout(BD.hold);
+          if (!q) return;
+          BD.drag = { q, i: +q.dataset.i, x: bodyX(e), y: upY(e), moved: false };
+          BD.hold = setTimeout(() => {
+            if (!BD.drag || BD.drag.moved) return;
+            BD.dragged = true; // the click after a long press is not a tap
+            const u = FXE.FXI[rack.order[BD.drag.i]];
+            BD.drag = null;
+            buzz(15);
+            (pKind = u.kind), (sel = u.id);
+            boardOpen(false, false);
+            toast(u.name, 800);
+          }, 480);
+        });
+        G.addEventListener("pointermove", (e) => {
+          const d = BD.drag;
+          if (!d) return;
+          const dx = bodyX(e) - d.x, dy = upY(e) - d.y;
+          if (!d.moved && Math.hypot(dx, dy) < 10) return;
+          clearTimeout(BD.hold);
+          if (!d.moved) try { G.setPointerCapture(e.pointerId); } catch {} // only now: a plain tap must still click its square
+          d.moved = true;
+          d.q.classList.add("lift");
+          d.q.style.transform = `translate(${dx}px, ${dy}px)`;
+          G.querySelectorAll(".drop").forEach((x) => x.classList.remove("drop"));
+          const t = at(e.clientX, e.clientY);
+          if (t && t !== d.q) t.classList.add("drop");
+        });
+        const done = (e, cancel) => {
+          clearTimeout(BD.hold);
+          const d = BD.drag;
+          BD.drag = null;
+          if (!d?.moved) return;
+          BD.dragged = true; // the click that follows a drag is not a tap
+          const t = cancel ? null : at(e.clientX, e.clientY), j = t ? +t.dataset.i : -1;
+          if (j >= 0 && j !== d.i) {
+            const [id] = rack.order.splice(d.i, 1);
+            rack.order.splice(j, 0, id);
+            saveRack();
+            fxSync();
+            chainFace();
+            toast(T(FXE.FXI[id].name + " moved to place " + (j + 1), FXE.FXI[id].name + " pasa al puesto " + (j + 1)), 1400);
+          }
+          boardFace();
+        };
+        G.addEventListener("pointerup", (e) => done(e));
+        G.addEventListener("pointercancel", (e) => done(e, true));
+        G.addEventListener("contextmenu", (e) => e.preventDefault()); // a long press must not open the browser's menu
+        G.addEventListener("click", (e) => {
+          const q = e.target.closest(".sq");
+          if (!q || BD.dragged) return;
+          const id = rack.order[+q.dataset.i], s = rack.u[id];
+          s.on = !s.on;
+          saveRack();
+          fxSync();
+          chainFace();
+          boardFace();
+          toast(FXE.FXI[id].name + (s.on ? T(" on", " encendido") : T(" off", " apagado")), 900);
+        });
       }
       // the words that change with the language
       function xpFace() {

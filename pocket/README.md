@@ -36,7 +36,7 @@ knobs and buttons. In OPTIONS, DEVICE shows a drawing of your keyboard, and MAP 
 
 On the right edge of the FM-1 there are two tabs, PEDALS and LIVE FX, that are not part of the real FM-1: they are an expansion
 this app adds. Tap one, or swipe left from the edge, to slide in a screen where the sound of any firmware can go through
-PLAY.Pocket's pedals, amps and cabs, or through live effects such as lo-fi, tape, echo and stutter. With nothing switched on
+PLAY.Pocket's pedals, amps and cabs, or through twenty-four live effects such as octave up and down, choir, lo-fi, tape, echo and stutter. The pedals are drawn as they are in PLAY.Pocket, and a BOARD button opens the pedal board, where you drag the units to change the order of the chain. With nothing switched on
 the sound goes out exactly as the FM-1 makes it. They work in the browser and are hidden in the Android app.
 
 MANUAL explains both this app and the FM-1 itself. The button at the top left of the menu switches the whole app
