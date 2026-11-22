@@ -9,8 +9,7 @@
 // the page, 0 off), FM1_CAP=0 keeps the boot budget of 20 ms of emulated time per quantum after
 // audio starts (the page caps it to 1.5 quanta when it runs ahead). "over" counts steady quanta that took longer
 // than the 2.9 ms they stand for: at 1x those are where a device of this speed drops out.
-// FM1_LEAD=ms: the PWA's lead (fm1_lead, topped up by fm1_fill for 2 ms of each quantum, as
-// pocket/vendor/worklet.js). FM1_REALTIME=1: each quantum is due on the wall clock, with 3 quanta of
+// FM1_REALTIME=1: each quantum is due on the wall clock, with 3 quanta of
 // the device's slack, as a browser plays it; "late" counts quanta (once audio plays) done after
 // they were due, and "gaps" those that had less than their 128 frames: both are heard.
 import { readFileSync, writeFileSync } from "node:fs";
@@ -58,9 +57,6 @@ if (x.fm1_ahead) x.fm1_ahead(ahead);
 else if (ahead) console.error("this build has no fm1_ahead: quanta run only for their own frames");
 // as the worklet: 20 ms of emulated time per quantum while booting, 1.5 quanta once audio plays
 const bootBudget = Math.ceil(mhz * 1e6 * 0.02), playBudget = Math.ceil(mhz * 1e6 * 1.5 * 128 / 44100);
-const leadFrames = Math.round(+(process.env.FM1_LEAD || 0) * 44.1);
-if (leadFrames && !x.fm1_lead) throw new Error("this build has no fm1_lead");
-if (leadFrames) x.fm1_lead(leadFrames);
 const realtime = !!process.env.FM1_REALTIME, quantum = 128 / 44.1;
 let late = 0, gaps = 0, playing = false, due0;
 const cap = process.env.FM1_CAP !== "0" && !!x.fm1_ahead && ahead > 0;
@@ -98,7 +94,6 @@ while (x.fm1_ms() < secs * 1000) {
   }
   const start = performance.now();
   const have = x.fm1_render(128, budget);
-  if (leadFrames) while (performance.now() - start < 2 && x.fm1_fill(100000)) {}
   if (have && !playing) { playing = true; due0 = durations.length; due0t = performance.now() + 3 * quantum; }
   else if (playing) {
     if (realtime && performance.now() > due0t + (durations.length - due0) * quantum) {
@@ -136,7 +131,7 @@ const result = { mhz, ahead: x.fm1_ahead ? ahead : 0, cap, requestedMs: secs * 1
   steadyQuanta: steady.length, steadyOver: over, idleShare: idleMs === null ? null : idleMs / emulatedMs,
   steadyRealtime: steadyStart === undefined ? null : (emulatedMs - steadyMs) / (end - steadyStart),
   steadyAudioFrames: real - steadyFrames, jit: stats, warmupJit, memoryStart, memoryEnd: x.memory.buffer.byteLength,
-  tableSlots: x.__indirect_function_table.length, script, lead: leadFrames, late, gaps };
+  tableSlots: x.__indirect_function_table.length, script, late, gaps };
 if (process.env.FM1_PROFILE) {
   const ptr = x.fm1_profile_report(), bytes = new Uint8Array(x.memory.buffer);
   result.profile = JSON.parse(new TextDecoder().decode(bytes.subarray(ptr, bytes.indexOf(0, ptr))));
@@ -152,7 +147,7 @@ console.log(`${(emulatedMs / 1000).toFixed(3)} s emulated at ${mhz} MHz in ${wal
   `(${real} real frames, ${short} short quanta); steady quanta p50 ${ms(result.steadyRenderMs.p50)} p99 ${ms(result.steadyRenderMs.p99)} ` +
   `max ${ms(result.steadyRenderMs.max)} ms, ${over} of ${steady.length} over ${quantumMs.toFixed(1)} ms` +
   (idleMs === null ? "" : `; ${Math.round(100 * result.idleShare)}% of the time idle skipped`) +
-  (realtime ? `; in real time: ${late} late (by second ${JSON.stringify(lateAt)}), ${gaps} gaps` : leadFrames ? `; ${gaps} gaps` : ""));
+  (realtime ? `; in real time: ${late} late (by second ${JSON.stringify(lateAt)}), ${gaps} gaps` : ""));
 if (MT) console.log(`stats ${[0,1,2,3,4,5,6,7].map(i => x.fm1_mt_stats(i))} threaded ${x.fm1_threaded()} core1_thread ${x.fm1_core1_thread()} cpu1_fault ${x.fm1_cpu1_fault?.()}`);
 if (MT) console.log(`two threads: core 1 ran ${x.fm1_mt_stats(3)} instructions in the Worker (started ${x.fm1_core1_thread()}); core 0 waited for it ${x.fm1_mt_stats(0)} times, core 1 for core 0 ${x.fm1_mt_stats(1)}, for the chip ${x.fm1_mt_stats(2)}`);
 console.log(JSON.stringify(result));

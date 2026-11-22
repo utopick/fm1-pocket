@@ -147,8 +147,8 @@ and the messages it understands are described in [`firmware/PROTOCOL.md`](firmwa
 - The FM-1 colours are matched by eye.
 - Quixotic7: [MvaveFM1Unbricker](https://github.com/Quixotic7/MvaveFM1Unbricker) and
   [FM1Backups](https://github.com/Quixotic7/FM1Backups), which the app points to for bringing a unit back, and
-  [RemoteFM1](https://github.com/Quixotic7/RemoteFM1), whose notes on keeping the emulator's sound even showed us how
-  to make the browser's steadier.
+  [RemoteFM1](https://github.com/Quixotic7/RemoteFM1), another way to play the FM-1's firmwares on a computer or phone,
+  whose notes on pacing the emulator's sound we learned from.
 - Menu icons: [Open Game Icons](https://open-game-icons.net/), CC BY 3.0, by Lorc and Delapouite.
 - Not affiliated with M-VAVE.
 
