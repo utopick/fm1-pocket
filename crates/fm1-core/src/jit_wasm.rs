@@ -400,7 +400,6 @@ const END: u8 = 0x0b;
 const BR: u8 = 0x0c;
 const BR_IF: u8 = 0x0d;
 const BR_TABLE: u8 = 0x0e;
-const RETURN: u8 = 0x0f;
 const CALL: u8 = 0x10;
 const LOCAL_GET: u8 = 0x20;
 const LOCAL_SET: u8 = 0x21;
@@ -504,6 +503,31 @@ const L_FA: u32 = 12;
 const L_FB: u32 = 13;
 /// a block's probe points: the stop pc when it lies inside the block (`block`), else 0
 const L_STOPI: u32 = 14;
+/// the guest registers, sp and flags, kept in locals for the whole call (`cached`), and the
+/// value the region's one exit returns
+const L_R0: u32 = 15;
+const L_SP: u32 = 31;
+const L_FLAGS: u32 = 32;
+const L_RET: u32 = 33;
+
+/// The local a Cpu field lives in during a call, if it is one kept there.
+fn cached(off: u32) -> Option<u32> {
+    let r0 = off_reg(0);
+    if (r0..r0 + 64).contains(&off) && (off - r0) % 4 == 0 {
+        Some(L_R0 + (off - r0) / 4)
+    } else if off == off_sp() {
+        Some(L_SP)
+    } else if off == off_flags() {
+        Some(L_FLAGS)
+    } else {
+        None
+    }
+}
+/// those of them in `mask` (bit k: the local L_R0 + k)
+fn cached_in(mask: u32) -> impl Iterator<Item = (u32, u32)> {
+    (0..16u8).map(|r| (off_reg(r), L_R0 + r as u32)).chain([(off_sp(), L_SP), (off_flags(), L_FLAGS)]).filter(move |&(_, l)| mask >> (l - L_R0) & 1 != 0)
+}
+const ALL_CACHED: u32 = (1 << (L_FLAGS - L_R0 + 1)) - 1;
 
 fn off_reg(r: u8) -> u32 {
     (offset_of!(Cpu, regs) + 4 * (r & 15) as usize) as u32
@@ -564,19 +588,28 @@ struct Gen<'a> {
     stops: bool,
     /// record the exit reason and the memory paths (`Jit::profile`)
     prof: bool,
+    /// the cached locals the code reads or writes (`touched`) and writes (`written`), as
+    /// `cached_in` masks, recorded by a first pass (`rec`); the second loads only the touched
+    /// ones and writes back only the written ones
+    touched: u32,
+    written: u32,
+    rec: bool,
 }
 
 impl Gen<'_> {
     /// `op` through the interpreter's executor (`h_op`); a jump it made is taken.
     fn exec_op(&mut self, op: Fast, idx: u32, next_pc: u32, count: u32) {
-        let p: &'static Fast = Box::leak(Box::new(op));
+        let p = if self.rec { 0 } else { Box::leak(Box::new(op)) as *const Fast as u32 }; // the first pass is thrown away
+        self.flush();
         self.get(L_CTX);
-        self.i32c(p as *const Fast as u32);
+        self.i32c(p);
         self.idx(idx);
         self.i32c(next_pc);
         self.call(F_OP);
-        self.c.push(LOCAL_TEE);
+        self.c.push(LOCAL_SET);
         uleb(&mut self.c, L_OPRES as u64);
+        self.reload();
+        self.get(L_OPRES);
         self.c.push(I64_CONST);
         sleb(&mut self.c, 32);
         self.op(I64_SHR_U);
@@ -629,7 +662,7 @@ impl Gen<'_> {
         self.set(L_VAL);
         self.get(L_CPU);
         self.get(L_VAL);
-        self.mem_op(I32_STORE, 2, off_reg(d));
+        self.st_cpu(off_reg(d));
         self.get(L_CPU);
         // N (F_N is bit 0, so the sign bit shifted down is the flag)
         self.get(L_VAL);
@@ -660,7 +693,7 @@ impl Gen<'_> {
         self.i32c(crate::F_V);
         self.op(I32_MUL);
         self.op(I32_OR);
-        self.mem_op(I32_STORE, 2, off_flags());
+        self.st_cpu(off_flags());
     }
     /// The ops `add_flags` computes in place of the executor; false: not one of them.
     fn flag_op(&mut self, f: Fast) -> bool {
@@ -699,15 +732,26 @@ impl Gen<'_> {
     fn op(&mut self, b: u8) {
         self.c.push(b);
     }
+    fn mark(&mut self, l: u32, w: bool) {
+        if self.rec && (L_R0..=L_FLAGS).contains(&l) {
+            self.touched |= 1 << (l - L_R0);
+            if w {
+                self.written |= 1 << (l - L_R0);
+            }
+        }
+    }
     fn get(&mut self, l: u32) {
+        self.mark(l, false);
         self.c.push(LOCAL_GET);
         uleb(&mut self.c, l as u64);
     }
     fn set(&mut self, l: u32) {
+        self.mark(l, true);
         self.c.push(LOCAL_SET);
         uleb(&mut self.c, l as u64);
     }
     fn tee(&mut self, l: u32) {
+        self.mark(l, true);
         self.c.push(LOCAL_TEE);
         uleb(&mut self.c, l as u64);
     }
@@ -720,25 +764,67 @@ impl Gen<'_> {
         uleb(&mut self.c, align as u64);
         uleb(&mut self.c, off as u64);
     }
-    /// push the guest register r
+    /// push the guest register r (a local for the whole call: `cached`)
     fn ld_reg(&mut self, r: u8) {
-        self.get(L_CPU);
-        self.mem_op(I32_LOAD, 2, off_reg(r));
+        self.get(L_R0 + (r & 15) as u32);
     }
     /// guest register d = local l
     fn st_reg_from(&mut self, d: u8, l: u32) {
-        self.get(L_CPU);
         self.get(l);
-        self.mem_op(I32_STORE, 2, off_reg(d));
+        self.set(L_R0 + (d & 15) as u32);
     }
     fn ld_field(&mut self, off: u32) {
+        if let Some(l) = cached(off) {
+            return self.get(l);
+        }
         self.get(L_CPU);
         self.mem_op(I32_LOAD, 2, off);
     }
     fn st_field_from(&mut self, off: u32, l: u32) {
+        if let Some(c) = cached(off) {
+            self.get(l);
+            return self.set(c);
+        }
         self.get(L_CPU);
         self.get(l);
         self.mem_op(I32_STORE, 2, off);
+    }
+    /// the Cpu field at off = the value on top of the stack, with the cpu pointer under it (the
+    /// code's old shape: the engine drops the dead pointer)
+    fn st_cpu(&mut self, off: u32) {
+        match cached(off) {
+            Some(l) => {
+                self.set(l);
+                self.op(0x1a); // drop
+            }
+            None => self.mem_op(I32_STORE, 2, off),
+        }
+    }
+    /// the cached registers, sp and flags the code writes back into the Cpu (before a return
+    /// or the executor); not marked, as they are the cache's own traffic
+    fn flush(&mut self) {
+        for (off, l) in cached_in(self.written) {
+            self.get(L_CPU);
+            self.c.push(LOCAL_GET);
+            uleb(&mut self.c, l as u64);
+            self.mem_op(I32_STORE, 2, off);
+        }
+    }
+    /// and the ones it touches from it again (at entry, after the executor). (A written one is
+    /// loaded too: a path that does not write it still stores it back at the exit.)
+    fn reload(&mut self) {
+        for (off, l) in cached_in(self.touched) {
+            self.get(L_CPU);
+            self.mem_op(I32_LOAD, 2, off);
+            self.c.push(LOCAL_SET);
+            uleb(&mut self.c, l as u64);
+        }
+    }
+    /// return done + count through the region's one exit, which writes the cached fields back
+    fn ret(&mut self) {
+        self.set(L_RET);
+        self.op(BR);
+        uleb(&mut self.c, (self.n - self.cur + self.nest) as u64);
     }
     /// push done + count
     fn done_plus(&mut self, count: u32) {
@@ -754,13 +840,13 @@ impl Gen<'_> {
         self.i32c(pc);
         self.mem_op(I32_STORE, 2, off_pc());
         self.done_plus(count);
-        self.op(RETURN);
+        self.ret();
     }
     /// leave with pc = local l
     fn exit_local(&mut self, l: u32, count: u32) {
         self.st_field_from(off_pc(), l);
         self.done_plus(count);
-        self.op(RETURN);
+        self.ret();
     }
     /// continue at the pc in local l (a return, a pc popped, a table branch, a helper's jump):
     /// the region's block there, found in its table, else back to Rust. (Every such jump used
@@ -894,8 +980,10 @@ impl Gen<'_> {
         self.if_();
         // the registers against the probe's, a word at a time (a loop: unrolled, 17 tests at
         // each point made Bubba Machine's regions a third bigger), then sp; all equal: leave
+        self.flush();
         self.op(BLOCK);
         self.op(VOID);
+        self.nest += 1;
         self.i32c(0);
         self.set(L_A);
         self.op(LOOP);
@@ -925,7 +1013,7 @@ impl Gen<'_> {
         uleb(&mut self.c, 0);
         self.reason(2);
         self.exit_imm(pc, ins);
-        self.op(END);
+        self.end();
         self.ld_field(off_stop_io());
         self.done_plus(ins + crate::STRETCH_ROOM);
         self.get(L_LIMIT);
@@ -1199,25 +1287,41 @@ fn helpers<B: Bus>(profile: bool) -> [u32; 3] {
 }
 
 fn compile<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u8)], mem: &JitMem, stops: bool, prof: bool) -> Vec<u8> {
+    // twice: the first pass records which cached locals the code uses (`Gen::rec`)
+    let table = jump_table(blocks);
+    let (_, touched, written) = gen::<B>(blocks, swaps, mem, stops, prof, table, None);
+    gen::<B>(blocks, swaps, mem, stops, prof, table, Some((touched, written))).0
+}
+
+/// One pass of `compile`: the module and the masks; `masks` None records them (that pass's
+/// code is thrown away), Some uses them.
+fn gen<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u8)], mem: &JitMem, stops: bool, prof: bool, table: Option<(u32, u32)>, masks: Option<(u32, u32)>) -> (Vec<u8>, u32, u32) {
     let n = blocks.len() as u32;
+    let (touched, written) = masks.unwrap_or((ALL_CACHED, ALL_CACHED));
     let mut g = Gen {
         c: Vec::with_capacity(64 * blocks.iter().map(|b| b.2.len()).sum::<usize>()),
         mem,
         swaps,
         index: blocks.iter().enumerate().map(|(k, b)| (b.1, k as u32)).collect(),
-        table: jump_table(blocks),
+        table,
         pred: None,
         cur: 0,
         n,
         nest: 0,
         stops,
         prof,
+        touched: if masks.is_some() { touched } else { 0 },
+        written: if masks.is_some() { written } else { 0 },
+        rec: masks.is_none(),
     };
     // loop { block_{n-1} { .. block_0 { br_table cur } code_0 } code_1 .. } code_{n-1} }: a br
     // to depth k from the innermost block lands on code_k; code_k reaches the loop through the
     // n - 1 - k blocks still open
+    g.reload();
     g.get(L_START);
     g.set(L_CUR);
+    g.op(BLOCK); // the one exit (`Gen::ret`)
+    g.op(VOID);
     g.op(LOOP);
     g.op(VOID);
     for _ in 0..n {
@@ -1240,7 +1344,10 @@ fn compile<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fas
     g.op(END); // loop
     g.op(0x00); // unreachable: every block's code leaves or branches
     g.op(END);
-    module(&g.c)
+    g.flush();
+    g.get(L_RET);
+    g.op(END);
+    (module(&g.c), g.touched, g.written)
 }
 
 /// The code of one block of a region.
@@ -1420,10 +1527,10 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 // Save the full result before writing either half (sources may alias).
                 g.set(L_OPRES);
                 g.get(L_CPU); g.get(L_OPRES); g.op(I32_WRAP_I64);
-                g.mem_op(I32_STORE, 2, off_reg(lo));
+                g.st_cpu(off_reg(lo));
                 g.get(L_CPU); g.get(L_OPRES);
                 g.op(I64_CONST); sleb(&mut g.c, 32); g.op(I64_SHR_U); g.op(I32_WRAP_I64);
-                g.mem_op(I32_STORE, 2, off_reg(lo + 1));
+                g.st_cpu(off_reg(lo + 1));
             }
             // rev8 / rev16 / revs / popcnt (`exec_raw`'s route 22), the bytes swapped with rotates
             Fast::Raw { route: 22, raw } => {
@@ -1445,7 +1552,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                         if kind == 2 { g.i32c(16); g.op(I32_SHR_S); }
                     }
                 }
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             // an add / subtract whose flags are read later (`BOp::flags_only`): this code keeps
             // no flags, the interpreter's executor does
@@ -1457,26 +1564,26 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
             Fast::MovI { d, v } => {
                 g.get(L_CPU);
                 g.i32c(v);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Mov { d, s } => {
                 g.get(L_CPU);
                 g.ld_reg(s);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::AddRI { d, s, v } => {
                 g.get(L_CPU);
                 g.ld_reg(s);
                 g.i32c(v);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::ShlI { d, s, n } | Fast::SarI { d, s, n } => {
                 g.get(L_CPU);
                 g.ld_reg(s);
                 g.i32c(n as u32 & 31);
                 g.op(if matches!(op.fast, Fast::ShlI { .. }) { I32_SHL } else { I32_SHR_S });
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Alu3 { d, a, b, op } => {
                 g.ld_reg(a);
@@ -1485,7 +1592,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.set(L_B);
                 g.get(L_CPU);
                 g.alu(op);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Alu3I { d, a, v, op } => {
                 g.ld_reg(a);
@@ -1494,7 +1601,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.set(L_B);
                 g.get(L_CPU);
                 g.alu(op);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Alu2 { d, b, op } => {
                 g.ld_reg(d);
@@ -1503,7 +1610,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.set(L_B);
                 g.get(L_CPU);
                 g.alu(op);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Alu2I { d, v, op } => {
                 g.ld_reg(d);
@@ -1512,7 +1619,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.set(L_B);
                 g.get(L_CPU);
                 g.alu(op);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::A4 { d, s, op, rk, rv } => {
                 g.rhs(rk, rv);
@@ -1520,7 +1627,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.set(L_A);
                 g.get(L_CPU);
                 g.alu(op);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::MemA4 { b, off, op, rk, rv } => {
                 // [R + off] = [R + off] op rhs: one read and one write, as the interpreter
@@ -1551,7 +1658,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                     g.i32c(if l == 0 { u32::MAX } else { (1u32 << l).wrapping_sub(1) });
                     g.op(I32_AND);
                 }
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::BitIns { d, s, p, l } => {
                 let (p, l) = (p as u32 & 31, l as u32 & 31);
@@ -1566,7 +1673,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.i32c(p);
                 g.op(I32_SHL);
                 g.op(I32_OR);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::SetIe { on: false } => {
                 // `cli` (`sti` goes through the helper: it opens the bus's interrupt window)
@@ -1581,10 +1688,9 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.mem_op(I32_LOAD, 2, offset_of!(Cpu, sreg_store) as u32 + 20);
                 g.i32c(!0xf);
                 g.op(I32_AND);
-                g.get(L_CPU);
-                g.mem_op(I32_LOAD, 2, off_flags());
+                g.ld_field(off_flags());
                 g.op(I32_OR);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Mov2 { dh, dl, sh, sl } => {
                 // both read before either is written
@@ -1598,10 +1704,10 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
             Fast::Mov2I { dh, dl, v } => {
                 g.get(L_CPU);
                 g.i32c(v);
-                g.mem_op(I32_STORE, 2, off_reg(dl));
+                g.st_cpu(off_reg(dl));
                 g.get(L_CPU);
                 g.i32c(((v as i32) >> 31) as u32);
-                g.mem_op(I32_STORE, 2, off_reg(dh));
+                g.st_cpu(off_reg(dh));
             }
             Fast::Ext { d, s, part, signed } => {
                 g.get(L_CPU);
@@ -1626,7 +1732,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                         g.op(I32_SHR_S);
                     }
                 }
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::MinMax { d, a, b, kind } => {
                 g.ld_reg(a);
@@ -1641,7 +1747,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 // select(a, b, a OP b): smin a <s b, smax a >s b, umin a <u b, umax a >u b
                 g.op(match kind { 0 => I32_LT_S, 1 => I32_GT_S, 2 => I32_LT_U, _ => I32_GT_U });
                 g.op(SELECT);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             // ---- the FPU (fm1-isa's fpu.rs, the interpreter's `fpu`), as wasm's own f32 ops,
             // which are the IEEE single precision Rust's are in this build: + - * / as they
@@ -1718,26 +1824,26 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 if !to_int {
                     g.op(I32_REINTERPRET_F32);
                 }
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::SpAdd { v } => {
                 g.get(L_CPU);
                 g.ld_field(off_sp());
                 g.i32c(v);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_sp());
+                g.st_cpu(off_sp());
             }
             Fast::SpFromR { s } => {
                 g.get(L_CPU);
                 g.ld_reg(s);
-                g.mem_op(I32_STORE, 2, off_sp());
+                g.st_cpu(off_sp());
             }
             Fast::RFromSp { d, v } => {
                 g.get(L_CPU);
                 g.ld_field(off_sp());
                 g.i32c(v);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_reg(d));
+                g.st_cpu(off_reg(d));
             }
             Fast::Ld { d, b, off, w, signed } => {
                 g.addr(b, off);
@@ -1823,7 +1929,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 }
                 g.op(I32_ADD);
                 g.tee(L_ADDR);
-                g.mem_op(I32_STORE, 2, off_reg(b));
+                g.st_cpu(off_reg(b));
                 g.load(w, signed, idx);
                 g.st_reg_from(d, L_VAL);
                 bus_used = true;
@@ -1839,7 +1945,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 }
                 g.op(I32_ADD);
                 g.tee(L_ADDR);
-                g.mem_op(I32_STORE, 2, off_reg(b));
+                g.st_cpu(off_reg(b));
                 g.ld_reg(s);
                 g.set(L_VAL);
                 g.store(w, idx);
@@ -1991,7 +2097,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.ld_reg(b);
                 g.i32c(inc);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_reg(b));
+                g.st_cpu(off_reg(b));
                 bus_used = true;
             }
             Fast::StPost { s, b, w, inc } => {
@@ -2004,7 +2110,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.ld_reg(b);
                 g.i32c(inc);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_reg(b));
+                g.st_cpu(off_reg(b));
                 bus_used = true;
             }
             Fast::Rmw { b, w, op: rop, off, v } => {
@@ -2049,7 +2155,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.get(L_ADDR);
                 g.i32c(4);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_sp());
+                g.st_cpu(off_sp());
                 g.jump_local(L_VAL, count, 5);
                 ended = true;
             }
@@ -2087,7 +2193,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                     g.get(L_ADDR);
                     g.i32c(4);
                     g.op(I32_ADD);
-                    g.mem_op(I32_STORE, 2, off_sp());
+                    g.st_cpu(off_sp());
                 }
                 g.ld_field(off_sp());
                 g.set(L_ADDR);
@@ -2096,7 +2202,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.get(L_ADDR);
                 g.i32c(4);
                 g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_sp());
+                g.st_cpu(off_sp());
                 g.jump_local(L_VAL, count, 5);
                 ended = true;
             }
@@ -2240,7 +2346,7 @@ fn block_ops<B: Bus>(g: &mut Gen<'_>, pc0: u32, ops: &[crate::BOp], probe: bool)
                 g.load(4, false, idx);
                 g.get(L_CPU); g.get(L_VAL); g.mem_op(I32_STORE, 2, off_rets());
                 g.get(L_CPU); g.get(L_ADDR); g.i32c(4); g.op(I32_ADD);
-                g.mem_op(I32_STORE, 2, off_sp());
+                g.st_cpu(off_sp());
                 bus_used = true;
             }
             Fast::Tb { r, half } => {
@@ -2628,9 +2734,9 @@ fn module(body: &[u8]) -> Vec<u8> {
     ex.extend_from_slice(&[0x00, F_RUN as u8]);
     section(&mut m, 7, &ex);
     // code: locals a, b, addr, val, off, done, cur (i32), the op result (i64), fa, fb (f32),
-    // the probe points' stop (i32)
+    // the probe points' stop (i32); the registers, sp, flags and the return value (i32)
     let mut f = Vec::new();
-    f.extend_from_slice(&[4, 7, T_I32, 1, T_I64, 2, T_F32, 1, T_I32]);
+    f.extend_from_slice(&[4, 7, T_I32, 1, T_I64, 2, T_F32, 20, T_I32]);
     f.extend_from_slice(body);
     let mut code = Vec::new();
     uleb(&mut code, 1);
