@@ -18,7 +18,7 @@ js = d.execute_script
 FAKE = """
 window.__calls = []; window.__queue = []; window.__polls = 0; window.__errs = [];
 addEventListener('error', e => __errs.push(String(e.message)));
-window.FM1Native = { post: j => __calls.push(['post', j]), boot: (j, p, s, x) => __calls.push(['boot', j, p.length, s, x]), version: () => 'fake', page: () => __calls.push(['page']) };
+window.FM1Native = { post: j => __calls.push(['post', j]), boot: (j, p, s, x) => __calls.push(['boot', j, p.length, s, x]), version: () => 'fake', page: () => __calls.push(['page']), fx: on => __calls.push(['fx', on]) };
 // the poll's answer: u32 count, then per message u32 jsonLen, json, u32 blobs, each u32 nameLen, name, u32 typeLen, type, u32 byteLen, bytes
 window.pack = (msgs) => {
   const parts = [], enc = new TextEncoder(), u32 = n => new Uint8Array(new Uint32Array([n]).buffer), str = s => [u32(enc.encode(s).length), enc.encode(s)];
@@ -32,7 +32,9 @@ window.pack = (msgs) => {
   return out.buffer;
 };
 const realFetch = fetch;
-window.fetch = (u, ...r) => String(u).endsWith('/native/poll') ? (__polls++, Promise.resolve(new Response(__queue.length ? __queue.shift() : pack([])))) : realFetch(u, ...r);
+window.__pcm = 0;  // /native/pcm: 1024 frames of a sine each time, as the app's muted sound
+window.fetch = (u, ...r) => String(u).endsWith('/native/poll') ? (__polls++, Promise.resolve(new Response(__queue.length ? __queue.shift() : pack([]))))
+  : String(u).endsWith('/native/pcm') ? (__pcm++, Promise.resolve(new Response(new Float32Array(2048).map((_, i) => 0.5 * Math.sin(i / 20)).buffer))) : realFetch(u, ...r);
 """
 try:
     d.execute_cdp_cmd("Emulation.setDeviceMetricsOverride", {"width": 844, "height": 390, "deviceScaleFactor": 1, "mobile": True})
@@ -67,6 +69,13 @@ try:
     js("setKey(0, true)")
     time.sleep(0.3)
     assert any(c[0] == "post" and '"key"' in c[1] for c in js("return __calls")), "a key did not go through FM1Native.post: %s" % js("return __calls.map(c => c[1])")
+    # PEDALS in the app: a pedal on tells the app to hand its sound over, the page fetches it and plays it through the chain; all off gives it back
+    assert js("return getComputedStyle(document.getElementById('xpDock')).display") != "none", "the PEDALS and LIVE FX tabs are hidden in the app"
+    assert js("return __pcm") == 0, "the sound is fetched while nothing is on"
+    js("rack.u.od.on = true; fxSync()"); time.sleep(1.5)
+    assert ["fx", True] in js("return __calls") and js("return __pcm") > 10 and js("return fxInfo().active"), (js("return __calls.filter(c => c[0] === 'fx')"), js("return __pcm"))
+    js("rack.u.od.on = false; fxSync()"); time.sleep(0.3); n = js("return __pcm"); time.sleep(0.5)
+    assert js("return __calls.filter(c => c[0] === 'fx').pop()") == ["fx", False] and js("return __pcm") == n, "the sound is still taken after all is off"
     # an error shows the page over the app's native play screen
     js("__queue.push(pack([[{type: 'error', seq: arguments[0], message: 'test error'}, {}]]))", seq); time.sleep(0.5)
     assert ["page"] in js("return __calls"), "an error did not bring the page forward"
@@ -79,6 +88,7 @@ try:
     js("document.querySelector('#power').click()")
     time.sleep(0.3); n = js("return __polls"); time.sleep(0.5)
     assert js("return __polls") == n, "the poll goes on after power off"
+    assert js("return __calls.filter(c => c[0] === 'fx').pop()") == ["fx", False]
     assert any(c[0] == "post" and "cancel-boot" in c[1] for c in js("return __calls")), "power off did not stop the native core"
     assert js("return __errs") == [], js("return __errs")
     print("native bridge ok")

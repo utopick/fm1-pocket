@@ -524,8 +524,6 @@
       /* ---- the expansion: PEDALS and FX, two app-only screens (not part of the FM-1) that slide in from the right over the device.
          Drawn as a rack module bolted to the FM-1: a faceplate with screws, engraved labels, an LCD readout, lit switches */
       #fm { padding-right: 52px; }
-      .native #xpDock, .native #xp { display: none; }
-      .native #fm { padding-right: 6px; }
       #xpDock { position: absolute; top: 6px; bottom: 6px; right: 6px; width: 40px; z-index: 2; display: flex; flex-direction: column; gap: 6px; padding: 5px 4px; border-radius: 10px; touch-action: none;
         background: repeating-linear-gradient(90deg, #0000 0 2px, #00000026 2px 3px), var(--tray); box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 6px #000a; }
       #xpDock .tag { flex: none; writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; font: 800 8px ui-monospace, Menlo, monospace; letter-spacing: 1.5px; color: var(--silk); opacity: 0.7; white-space: nowrap; }
@@ -1565,6 +1563,7 @@
       // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
       // worklet messages (docs: pocket/android/README.md). nat is the poll timer; the object it makes stands in for the AudioWorkletNode.
       let nat = null,
+        nac = null, // the app's own small sound graph for PEDALS and LIVE FX: the native sound, sent as blocks, through fxe to the speakers
         natEvery = 0; // ms between polls: as often as the timer runs, or every 250 ms while the app's native play screen covers the page
       window.nativeSlow = (on) => (natEvery = on ? 250 : 0);
       const b64of = (buf) => {
@@ -1602,12 +1601,47 @@
           last = performance.now();
           try {
             for (const data of nativeMessages(await (await fetch("/native/poll")).arrayBuffer())) me.port.onmessage({ data });
+            if (fxOn && nac) nac.feed(new Float32Array(await (await fetch("/native/pcm")).arrayBuffer()));
           } catch (e) {
             console.warn("poll", e);
           }
           busy = false;
         }, 16);
         return me;
+      }
+      // PEDALS and LIVE FX in the Android app: while something is on, the app mutes its own sound and the page fetches it (/native/pcm, interleaved
+      // stereo floats) and plays it through fm1-reader (worklet.js) and the chain. The price is the poll's delay, about 50 ms, and only while an effect is on.
+      async function nativeGraph() {
+        const a = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }),
+          url = URL.createObjectURL(new Blob([$("#worklet").textContent], { type: "text/javascript" }));
+        try {
+          await a.audioWorklet.addModule(url);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+        const lead = 2048,
+          reader = new AudioWorkletNode(a, "fm1-reader", { numberOfInputs: 0, outputChannelCount: [2], processorOptions: { lead } }),
+          ch = new MessageChannel();
+        reader.port.postMessage(ch.port1, [ch.port1]);
+        let played = 0, sent = 0, rest = new Float32Array(0);
+        ch.port2.onmessage = (e) => (played = e.data.played);
+        a.feed = (f) => { // in blocks of 128 frames, as the reader takes them; the leftover waits for the next fetch
+          const all = new Float32Array(rest.length + f.length);
+          all.set(rest), all.set(f, rest.length);
+          let o = 0;
+          for (; o + 256 <= all.length; o += 256) {
+            if (sent - played > lead + 4096) continue; // the two sound clocks drift apart: drop a block rather than lag behind
+            const l = new Float32Array(128), r = new Float32Array(128);
+            for (let i = 0; i < 128; i++) (l[i] = all[o + 2 * i]), (r[i] = all[o + 2 * i + 1]);
+            ch.port2.postMessage({ l, r }, [l.buffer, r.buffer]);
+            sent += 128;
+          }
+          rest = all.slice(o);
+        };
+        fxe = FXE.build(a, await FXE.load(a));
+        reader.connect(fxe.in);
+        fxe.out.connect(a.destination);
+        return a;
       }
       // A trial, ?worker=1 (&lead=46: the ms of sound kept queued): the emulator runs in a Worker and the audio thread only plays what it sends
       // (vendor/emu-worker.js says why). The object this makes stands in for the AudioWorkletNode, as nativeNode's does.
@@ -1630,6 +1664,9 @@
         if (window.FM1Native) {
           node = nativeNode();
           node.port.onmessage = onWorklet;
+          fxOn = false;
+          nac = await nativeGraph().catch((e) => (console.warn("fx", e), null));
+          fxSync();
           powerFace();
           send({ type: "pot", value: pot });
           return boot();
@@ -1664,6 +1701,7 @@
       function powerOff() {
         seq++;
         if (ac) (clearInterval(ac._peak), ac.close());
+        if (nac) (nac.close(), (nac = null), window.FM1Native.fx?.(false));
         if (nat) send({ type: "cancel-boot" }); // the native core has no AudioContext to close: this stops it (and the app lets the screen sleep)
         clearInterval(nat);
         stopCore1();
@@ -2935,7 +2973,7 @@
           "## PEDALS and LIVE FX (this app only)",
           "The two tabs on the right edge of the FM-1, **PEDALS** and **LIVE FX**, are not part of the FM-1: they are an expansion this app adds, so the sound of any firmware can go through pedals and effects before it reaches the speakers. Tap a tab, or swipe left from the edge; swipe right (or tap **FM-1**) to come back.",
           "**PEDALS** has the units of PLAY.Pocket's pedal board: pedals, amps and cabs, drawn as they are in PLAY. Tap a unit in the list to choose it and tap it again, or **ON**, or the footswitch on the drawing, to turn it on. Drag the knobs of the drawing up or down, and **EARLIER** and **LATER** move the unit in the chain, which is shown along the bottom. **BOARD**, at the right of PEDALS, AMPS and CABS, opens the pedal board: every unit as a square in the order of the chain. Tap a square to turn it on or off, drag it onto another place to move it (the chain changes the same as with EARLIER and LATER), and hold it to open it. **LIVE FX** has twenty-four pads for the whole sound: octave up and down, unison, fifth, choir, alien, robot and megaphone, filters, radio, phone, underwater, lo-fi, tape, crunch, drive, flanger, stutter, gate, echo and reverb. With **LATCH** a tap turns one on or off, and with **HOLD** it plays while you hold it.",
-          "With nothing on (**BYPASS** at the top right) the sound goes out exactly as the FM-1 made it. Your pedals are kept on this device. These screens work in the browser; the Android app plays the sound itself, so they are hidden there.",
+          "With nothing on (**BYPASS** at the top right) the sound goes out exactly as the FM-1 made it. Your pedals are kept on this device. In the Android app they work too, but while something is on the sound comes about 50 ms later, because it goes through the page.",
           "## MIDI",
           "**CONNECT MIDI** finds your keyboards and controllers, and their keys play the FM-1 through its MIDI IN. On known controllers (Akai MPK mini, Launchkey) the knobs and pads start on the FM-1's controls. Knobs 1 to 4 are KNOB1 to 4 and knobs 5 to 8 are MASTER, SELECT, PRESETS and ALGORITHM. Pads 1 to 4 are HOME, SAVE, PLAY and REC, and pads 5 to 8 are FX, SEL, ENV and LFO.",
           "**DEVICE** shows a drawing of your controller. Tap a control on it, choose what it does and press LEARN to bind the real one. A controller's knob has ends but the FM-1's knobs have none, so turn it back and forth to keep going.",
@@ -2971,7 +3009,7 @@
           "## PEDALS y LIVE FX (solo esta app)",
           "Las dos pestañas del borde derecho del FM-1, **PEDALS** y **LIVE FX**, no son parte del FM-1: son una ampliación que añade esta app, para que el sonido de cualquier firmware pase por pedales y efectos antes de llegar a los altavoces. Toca una pestaña, o desliza a la izquierda desde el borde; desliza a la derecha (o toca **FM-1**) para volver.",
           "**PEDALS** tiene las unidades de la pedalera de PLAY.Pocket: pedales, amplis y cajas, dibujados como en PLAY. Toca una unidad de la lista para elegirla y tócala otra vez, o **ON**, o el pedal de pie del dibujo, para encenderla. Arrastra arriba o abajo los mandos del dibujo, y **ANTES** y **DESPUÉS** mueven la unidad en la cadena, que se ve abajo. **BOARD**, a la derecha de PEDALS, AMPS y CABS, abre la pedalera: cada unidad es un cuadrado, en el orden de la cadena. Toca un cuadrado para encenderlo o apagarlo, arrástralo a otro sitio para moverlo (la cadena cambia igual que con ANTES y DESPUÉS) y mantenlo pulsado para abrirlo. **LIVE FX** tiene veinticuatro pads para todo el sonido: octava arriba y abajo, unísono, quinta, coro, alien, robot y megáfono, filtros, radio, teléfono, bajo el agua, lo-fi, cinta, crunch, drive, flanger, stutter, puerta, eco y reverb. Con **LATCH** un toque enciende o apaga uno, y con **HOLD** suena mientras lo mantienes pulsado.",
-          "Sin nada encendido (**BYPASS** arriba a la derecha) el sonido sale exactamente como lo hace el FM-1. Tus pedales se guardan en este dispositivo. Estas pantallas funcionan en el navegador; la app de Android reproduce el sonido por su cuenta, así que allí están ocultas.",
+          "Sin nada encendido (**BYPASS** arriba a la derecha) el sonido sale exactamente como lo hace el FM-1. Tus pedales se guardan en este dispositivo. En la app de Android también funcionan, pero mientras algo está encendido el sonido llega unos 50 ms más tarde, porque pasa por la página.",
           "## MIDI",
           "**CONECTAR MIDI** busca tus teclados y controladores, y sus teclas tocan el FM-1 por su MIDI IN. En los controladores conocidos (Akai MPK mini, Launchkey) los potes y los pads empiezan en los controles del FM-1. Los potes 1 a 4 son KNOB1 a 4 y los potes 5 a 8 son MASTER, SELECT, PRESETS y ALGORITHM. Los pads 1 a 4 son HOME, SAVE, PLAY y REC, y los pads 5 a 8 son FX, SEL, ENV y LFO.",
           "**DISPOSITIVO** muestra un dibujo de tu controlador. Toca un control, elige qué hace y pulsa LEARN para enlazar el real. El pote de un controlador tiene topes pero los del FM-1 no, así que gíralo adelante y atrás para seguir.",
@@ -3747,7 +3785,10 @@
       const bodyX = (e) => (matchMedia("(orientation: portrait) and (pointer: coarse)").matches ? e.clientY : e.clientX); // the page is drawn turned on an upright phone
       // the sound's wiring: called after anything changes
       function fxSync() {
-        if (fxe && ac && node) {
+        if (fxe && nac && node) { // the app: the native sound comes to the page only while the chain is on
+          const act = fxe.sync(rack, live);
+          if (act !== fxOn) ((fxOn = act), window.FM1Native.fx?.(act));
+        } else if (fxe && ac && node) {
           const act = fxe.sync(rack, live);
           if (act !== fxOn) {
             fxOn = act;

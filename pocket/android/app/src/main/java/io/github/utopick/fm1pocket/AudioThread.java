@@ -9,6 +9,8 @@ import android.media.AudioFormat;
 import android.media.AudioTrack;
 import android.os.Build;
 import android.os.Process;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -24,6 +26,30 @@ final class AudioThread extends Thread {
     /** The native screen's keys and knobs, handed to the core between two slices of sound: the UI thread never waits for the emulator. */
     private static final ConcurrentLinkedQueue<String> inbox = new ConcurrentLinkedQueue<>();
     static void send(String json) { inbox.add(json); }
+
+    /** The page's PEDALS and LIVE FX are on (MainActivity's Bridge.fx): the track keeps the pace but is muted, and the sound goes to the page through /native/pcm. */
+    static volatile boolean tap;
+    private static final int RING = 16384; // frames (372 ms); the oldest go when the page falls behind
+    private static final float[] ring = new float[RING * 2];
+    private static int head, held; // where the oldest frame is, and how many frames wait (both under the ring's lock)
+    private static void keep(float[] b, int frames) {
+        synchronized (ring) {
+            for (int i = 0; i < frames; i++) {
+                int at = (head + held) % RING;
+                ring[at * 2] = b[i * 2];
+                ring[at * 2 + 1] = b[i * 2 + 1];
+                if (held < RING) held++; else head = (head + 1) % RING;
+            }
+        }
+    }
+    /** What waits for the page, as little-endian interleaved stereo floats, and empties it. */
+    static byte[] drain() {
+        synchronized (ring) {
+            ByteBuffer out = ByteBuffer.allocate(held * 8).order(ByteOrder.LITTLE_ENDIAN);
+            for (; held > 0; held--, head = (head + 1) % RING) out.putFloat(ring[head * 2]).putFloat(ring[head * 2 + 1]);
+            return out.array();
+        }
+    }
 
     AudioThread(Context c) {
         super("fm1-audio");
@@ -68,7 +94,7 @@ final class AudioThread extends Thread {
         if (size <= 0) size = track.getBufferCapacityInFrames(); // refused: keep the whole buffer, as before
         bufferFrames = size;
         float[] buf = new float[CHUNK * 2];
-        boolean playing = false;
+        boolean playing = false, muted = false;
         long calm = System.nanoTime(); // since when no dropout (or the last halving)
         try {
             while (!stop) {
@@ -81,6 +107,8 @@ final class AudioThread extends Thread {
                 for (String m; (m = inbox.poll()) != null; ) Native.post(m);
                 int frames = Native.render(buf);
                 if (frames <= 0) { Arrays.fill(buf, 0f); frames = CHUNK; } // off or between firmwares: silence keeps the pace
+                if (tap != muted) { muted = tap; track.setVolume(muted ? 0f : 1f); if (!muted) drain(); }
+                if (muted) keep(buf, Math.min(frames, CHUNK));
                 track.write(buf, 0, Math.min(frames, CHUNK) * 2, AudioTrack.WRITE_BLOCKING);
                 int u = track.getUnderrunCount();
                 long now = System.nanoTime();

@@ -174,8 +174,8 @@ try:
     click("#dockFx"); assert "pad" in js("return document.querySelector('#toast').textContent"), js("return document.querySelector('#toast').textContent")
     size(1280, 720); fits("#xp", "FX on a desktop window"); shot("6-fx-desktop"); click("#tabPed"); fits("#xp", "PEDALS on a desktop window"); shot("7-pedals-desktop")
     size(844, 360); fits("#xp", "PEDALS, a short phone"); click("#tabFx"); fits("#xp", "FX, a short phone")
-    # the Android app (class native) plays the sound itself: no dock there
-    js("document.documentElement.classList.add('native')"); assert js("return getComputedStyle(document.querySelector('#xpDock')).display") == "none"
+    # the Android app (class native) has the dock too (tests/native.py checks its sound path)
+    js("document.documentElement.classList.add('native')"); assert js("return getComputedStyle(document.querySelector('#xpDock')).display") != "none"
     assert js("return __errs") == [], js("return __errs")
     print("fx: ok")
 finally:
