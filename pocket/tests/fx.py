@@ -1,4 +1,4 @@
-"""The FX and PEDALS screens: the dock, swiping and tapping between them, the sound's wiring (a true bypass until something is on), the saved settings.
+"""The PEDALS and FX screens: the dock, swiping and tapping between them, the sound's wiring (a true bypass until something is on), the saved settings.
 
     python3 pocket/build.py && python pocket/tests/fx.py      (needs: pip install selenium, Chrome; no firmware needed: it runs Tether, which is built in)
 SHOT=/some/folder saves a screenshot of the device and of each screen.
@@ -50,11 +50,12 @@ try:
     assert js("return document.querySelector('#xp').inert") and pane() == 0
     fits("#xpDock", "the dock"); shot("1-device")
     # tapping: the dock opens each screen, the tabs and BACK move between them
-    click("#dockFx"); assert pane() == 1 and not js("return document.querySelector('#xp').inert"); fits("#xp", "FX"); shot("2-fx")
+    assert js("return [...document.querySelectorAll('#xpDock button, .xpTabs button')].map(b => b.textContent).join()") == "PEDALS,FX,PEDALS,FX"
+    click("#dockFx"); assert pane() == 2 and not js("return document.querySelector('#xp').inert"); fits("#xp", "FX"); shot("2-fx")
     assert js("return document.querySelectorAll('#fxPads .xpad').length") == 12
-    click("#tabPed"); assert pane() == 2; fits("#xp", "PEDALS"); shot("3-pedals")
+    click("#tabPed"); assert pane() == 1; fits("#xp", "PEDALS"); shot("3-pedals")
     click("#xpBack"); assert pane() == 0
-    click("#dockPed"); assert pane() == 2; click("#dockPed"); assert pane() == 0
+    click("#dockPed"); assert pane() == 1; click("#dockPed"); assert pane() == 0
     # swiping: left from the dock opens FX, left again goes to PEDALS, right goes back and back out
     swipe("#xpDock", -120); assert pane() == 1, pane()
     swipe("#xp .xpbar", -120); assert pane() == 2

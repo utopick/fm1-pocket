@@ -10,7 +10,7 @@
 
   Layout of this file
     <head>    install (manifest, service worker), skin bootstrap, <style>: the device drawn with CSS, the skins, the views
-    <body>    the rail (logo, power, flip, menu), the device (upper part: knobs, screen, buttons; keys, and on its right edge the dock of the app-only FX and PEDALS
+    <body>    the rail (logo, power, flip, menu), the device (upper part: knobs, screen, buttons; keys, and on its right edge the dock of the app-only PEDALS and FX
               screens), those screens (#xp, sliding in over the device), the menu, toast
     <script>  the Pocket apps' MIDI device panel (as it is in them), data blocks (worklet, firmware list, core), then: helpers, storage, the device (built once, placed by CSS),
               screen and lights, input, power and boot, saves, firmware list and files, views / keys / skins, MIDI,
@@ -24,7 +24,7 @@
 
   Storage (namespaced fm1.*)
     localStorage  fm1.fw (firmware picked), fm1.view (complete | keys | up), fm1.keys (fm | piano), fm1.skin, fm1.fx (screen filter),
-                  fm1.rack (the FX and PEDALS screens: the order of the units, which are on and their knobs, latch or hold; vetted when read)
+                  fm1.rack (the PEDALS and FX screens: the order of the units, which are on and their knobs, latch or hold; vetted when read)
     IndexedDB     "fm1-pocket" / kv:  pkg:<id>   { name, version, bytes }  a downloaded or opened package: it runs offline
                                       save:<hash of the package>  [[offset, 4096 bytes], ...]  the flash sectors a firmware changed
                                       catalog   the firmware list as last fetched from fm1-emu's page
@@ -521,7 +521,7 @@
       #sureNo { min-height: clamp(44px, 12vmin, 90px); font-size: 1em; border-radius: 10px; border: 1px solid var(--rim); background: linear-gradient(var(--btn1), var(--btn2)); color: var(--ink); cursor: pointer; }
       #toast { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 14px; border-radius: 999px; font: 700 12px ui-monospace, Menlo, monospace; opacity: 0; pointer-events: none; transition: opacity 0.15s; max-width: 92%; text-align: center; z-index: 9; }
       #toast.show { opacity: 1; }
-      /* ---- the expansion: FX and PEDALS, two app-only screens (not part of the FM-1) that slide in from the right over the device.
+      /* ---- the expansion: PEDALS and FX, two app-only screens (not part of the FM-1) that slide in from the right over the device.
          Drawn as a rack module bolted to the FM-1: a faceplate with screws, engraved labels, an LCD readout, lit switches */
       #fm { padding-right: 52px; }
       .native #xpDock, .native #xp { display: none; }
@@ -555,7 +555,7 @@
       .xpTrack { flex: 1; min-height: 0; display: flex; width: 200%; transition: transform 0.25s ease; }
       #xp[data-pane="2"] .xpTrack { transform: translateX(-50%); }
       .xpTrack > section { flex: 0 0 50%; width: 50%; min-width: 0; min-height: 0; padding: 0 2px; display: grid; gap: 8px; }
-      #xp[data-pane="1"] #panePed, #xp[data-pane="2"] #paneFx { visibility: hidden; }
+      #xp[data-pane="1"] #paneFx, #xp[data-pane="2"] #panePed { visibility: hidden; }
       .xpWell { background: var(--tray); border-radius: 14px; padding: 8px; box-shadow: inset 0 0 0 1px var(--rim), inset 0 2px 6px #000a; min-width: 0; min-height: 0; }
       .xpLcd { background: #0c1016; color: #9fd8b4; border-radius: 6px; padding: 5px 9px; font: 700 11px ui-monospace, Menlo, monospace; letter-spacing: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: inset 0 0 0 1px #000, inset 0 2px 6px #000; }
       /* FX: the live pads, a grid of six by two, a bar under them */
@@ -626,8 +626,8 @@
       <div id="kb"></div>
       <div id="xpDock" data-notr>
         <span class="tag">APP ONLY</span>
-        <button id="dockFx" title="FX">FX</button>
         <button id="dockPed" title="PEDALS">PEDALS</button>
+        <button id="dockFx" title="FX">FX</button>
       </div>
     </div>
     <div id="xp" data-notr inert aria-hidden="true" data-pane="1">
@@ -635,21 +635,13 @@
         <button id="xpBack" title="Back to the FM-1">&#9664; FM-1</button>
         <span class="name">FM-1 <b>EXP</b></span>
         <div class="xpTabs">
-          <button id="tabFx" title="FX">FX</button>
           <button id="tabPed" title="PEDALS">PEDALS</button>
+          <button id="tabFx" title="FX">FX</button>
         </div>
         <span class="gap"></span>
         <span id="xpLed" class="xpLed" role="status">BYPASS</span>
       </div>
       <div class="xpTrack">
-        <section id="paneFx">
-          <div id="fxPads" class="xpWell"></div>
-          <div class="xpFoot xpWell">
-            <button id="fxLatch" title="LATCH">LATCH</button>
-            <div class="xpLcd" id="fxInfo"></div>
-            <button id="fxOff" title="ALL OFF">ALL OFF</button>
-          </div>
-        </section>
         <section id="panePed">
           <div class="left">
             <div class="xpKinds xpWell" id="xpKinds"></div>
@@ -661,6 +653,14 @@
             <div class="move"><button id="unitEarlier" title="Earlier">&#9664; EARLIER</button><button id="unitLater" title="Later">LATER &#9654;</button></div>
           </div>
           <div id="chain" class="xpWell"></div>
+        </section>
+        <section id="paneFx">
+          <div id="fxPads" class="xpWell"></div>
+          <div class="xpFoot xpWell">
+            <button id="fxLatch" title="LATCH">LATCH</button>
+            <div class="xpLcd" id="fxInfo"></div>
+            <button id="fxOff" title="ALL OFF">ALL OFF</button>
+          </div>
         </section>
       </div>
     </div>
@@ -9027,8 +9027,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           "**INSTALL ON MY FM-1** appears on each firmware card only when the unit is in the protector's MIDI mode and a backup of it shows the protector, so there is no custom firmware without the protector. The unit checks the package before it erases anything. To go back, use M-Flasher with your backup.",
           "## Firmwares",
           "Type in the box at the top of FIRMWARE to search by name, author or text. **MANUAL** on a card shows the README of the firmware's repository, and keeps it on this device once read. The **?** button in the left column opens the manual of the running firmware.",
-          "## FX and PEDALS (this app only)",
-          "The two tabs on the right edge of the FM-1, **FX** and **PEDALS**, are not part of the FM-1: they are an expansion this app adds, so the sound of any firmware can go through pedals and effects before it reaches the speakers. Tap a tab, or swipe left from the edge; swipe right (or tap **FM-1**) to come back.",
+          "## PEDALS and FX (this app only)",
+          "The two tabs on the right edge of the FM-1, **PEDALS** and **FX**, are not part of the FM-1: they are an expansion this app adds, so the sound of any firmware can go through pedals and effects before it reaches the speakers. Tap a tab, or swipe left from the edge; swipe right (or tap **FM-1**) to come back.",
           "**PEDALS** has the units of PLAY.Pocket's pedal board: pedals, amps and cabs. Tap a unit to choose it and tap it again, or **ON**, to turn it on. Its knobs are on the right (drag them up or down), and **EARLIER** and **LATER** move it in the chain, which is shown along the bottom. **FX** has twelve pads for the whole sound (lo-fi, tape, radio, echo, stutter and more): with **LATCH** a tap turns one on or off, and with **HOLD** it plays while you hold it.",
           "With nothing on (**BYPASS** at the top right) the sound goes out exactly as the FM-1 made it. Your pedals are kept on this device. These screens work in the browser; the Android app plays the sound itself, so they are hidden there.",
           "## MIDI",
@@ -9063,8 +9063,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           "**INSTALAR EN MI FM-1** aparece en cada tarjeta de firmware solo cuando el aparato está en el modo MIDI del protector y una copia suya muestra el protector, así que sin protector no hay firmware propio. El aparato comprueba el paquete antes de borrar nada. Para volver atrás, usa M-Flasher con tu copia.",
           "## Firmwares",
           "Escribe en la caja de arriba de FIRMWARE para buscar por nombre, autor o texto. **MANUAL** en una tarjeta muestra el README del repositorio del firmware, y lo guarda en este dispositivo al leerlo. El botón **?** de la columna de la izquierda abre el manual del firmware que está en marcha.",
-          "## FX y PEDALS (solo esta app)",
-          "Las dos pestañas del borde derecho del FM-1, **FX** y **PEDALS**, no son parte del FM-1: son una ampliación que añade esta app, para que el sonido de cualquier firmware pase por pedales y efectos antes de llegar a los altavoces. Toca una pestaña, o desliza a la izquierda desde el borde; desliza a la derecha (o toca **FM-1**) para volver.",
+          "## PEDALS y FX (solo esta app)",
+          "Las dos pestañas del borde derecho del FM-1, **PEDALS** y **FX**, no son parte del FM-1: son una ampliación que añade esta app, para que el sonido de cualquier firmware pase por pedales y efectos antes de llegar a los altavoces. Toca una pestaña, o desliza a la izquierda desde el borde; desliza a la derecha (o toca **FM-1**) para volver.",
           "**PEDALS** tiene las unidades de la pedalera de PLAY.Pocket: pedales, amplis y cajas. Toca una unidad para elegirla y tócala otra vez, o **ON**, para encenderla. Sus mandos están a la derecha (arrástralos arriba o abajo), y **ANTES** y **DESPUÉS** la mueven en la cadena, que se ve abajo. **FX** tiene doce pads para todo el sonido (lo-fi, cinta, radio, eco, stutter y más): con **LATCH** un toque enciende o apaga uno, y con **HOLD** suena mientras lo mantienes pulsado.",
           "Sin nada encendido (**BYPASS** arriba a la derecha) el sonido sale exactamente como lo hace el FM-1. Tus pedales se guardan en este dispositivo. Estas pantallas funcionan en el navegador; la app de Android reproduce el sonido por su cuenta, así que allí están ocultas.",
           "## MIDI",
@@ -9818,7 +9818,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       $("#shClose").onclick = () => ($("#sheet").hidden = true);
 
       // ======================================================================
-      // FX and PEDALS: two app-only screens (docks on the device's right edge, swipe or tap) for the sound of any firmware. The units are
+      // PEDALS and FX: two app-only screens (docks on the device's right edge, swipe or tap) for the sound of any firmware. The units are
       // PLAY.Pocket's (vendor/fx.js). With nothing switched on the sound goes from the emulator to the speakers as it always did (a true
       // bypass: the chain is not even connected); the chain is wired in only while a pedal or a live FX is on. Saved as fm1.rack.
       // shortcut: switching a unit off cuts its tail (a delay or reverb stops at once), and units cannot be dragged, only moved a step; upgrade if asked
@@ -9866,9 +9866,9 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         o.inert = n === 0;
         o.setAttribute("aria-hidden", n === 0);
         if (n) o.dataset.pane = n;
-        $("#tabFx").classList.toggle("on", n === 1);
-        $("#tabPed").classList.toggle("on", n === 2);
-        if (n && say) toast(n === 1 ? T("FX: live effects on the whole sound. Tap a pad, or hold it", "FX: efectos en vivo sobre todo el sonido. Toca un pad, o mantenlo pulsado") : T("PEDALS: pedals, amps and cabs, in the order the sound goes through them", "PEDALS: pedales, amplis y cajas, en el orden por el que pasa el sonido"));
+        $("#tabPed").classList.toggle("on", n === 1);
+        $("#tabFx").classList.toggle("on", n === 2);
+        if (n && say) toast(n === 2 ? T("FX: live effects on the whole sound. Tap a pad, or hold it", "FX: efectos en vivo sobre todo el sonido. Toca un pad, o mantenlo pulsado") : T("PEDALS: pedals, amps and cabs, in the order the sound goes through them", "PEDALS: pedales, amplis y cajas, en el orden por el que pasa el sonido"));
         else if (!n && say) toast(T("Back to the FM-1", "De vuelta al FM-1"));
       }
       // a swipe over el: fn(+1) for one to the left, fn(-1) to the right. skip: what must not start one (the knobs and pads)
@@ -9889,11 +9889,11 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       }
       swipe($("#xpDock"), (d) => d > 0 && !xp && xpGo(1));
       swipe($("#xp"), (d) => xpGo(Math.max(0, Math.min(2, xp + d))), ".kn, .xpad, #unitGrid button, #chain button");
-      $("#dockFx").onclick = () => xpGo(xp === 1 ? 0 : 1);
-      $("#dockPed").onclick = () => xpGo(xp === 2 ? 0 : 2);
+      $("#dockPed").onclick = () => xpGo(xp === 1 ? 0 : 1);
+      $("#dockFx").onclick = () => xpGo(xp === 2 ? 0 : 2);
       $("#xpBack").onclick = () => xpGo(0);
-      $("#tabFx").onclick = () => xpGo(1);
-      $("#tabPed").onclick = () => xpGo(2);
+      $("#tabPed").onclick = () => xpGo(1);
+      $("#tabFx").onclick = () => xpGo(2);
       // ---- FX: the live pads
       function fxFace() {
         $("#fxPads").replaceChildren(
