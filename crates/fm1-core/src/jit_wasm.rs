@@ -484,6 +484,12 @@ const F_READ: u32 = 0;
 const F_WRITE: u32 = 1;
 const F_OP: u32 = 2;
 const F_RUN: u32 = 3;
+/// the loads' slow paths (`Gen::slow_read`), one per `slow_variant`
+const F_SLOW_READ: u32 = 4;
+const SLOW_VARIANTS: [(u8, bool); 5] = [(4, false), (2, false), (2, true), (1, false), (1, true)];
+fn slow_variant(w: u8, signed: bool) -> u32 {
+    SLOW_VARIANTS.iter().position(|&v| v == (w, signed && w != 4)).unwrap() as u32
+}
 
 // locals: params cpu, ctx, limit, start; then i32 temporaries, the instructions done in this call
 // before the current block, the block to run next, one i64, and two f32 (the FPU's fmin / fmax)
@@ -1173,28 +1179,63 @@ impl Gen<'_> {
             _ => I32_LOAD8_S,
         };
         let align = match w { 4 => 2, 2 => 1, _ => 0 };
-        for (gbase, len, host) in [(mem.ram_base, mem.ram_len, mem.ram as u32), (mem.xip_base, mem.xip_len, mem.xip as u32)] {
-            self.get(L_ADDR);
-            self.i32c(gbase);
-            self.op(I32_SUB);
-            if w == 2 {
-                self.i32c(!1u32); // a halfword is the one at addr & !1 (Soc read16)
-                self.op(I32_AND);
-            }
-            self.tee(L_OFF);
-            self.i32c(len.saturating_sub(w as u32));
-            self.op(I32_LE_U);
-            self.if_();
-            self.count(if gbase == mem.ram_base { 0 } else { 1 });
-            self.get(L_OFF);
-            self.mem_op(ld, align, host);
-            self.set(L_VAL);
-            self.op(ELSE);
-        }
-        self.count(2);
+        self.in_range(L_ADDR, L_OFF, mem.ram_base, mem.ram_len, w);
+        self.if_();
+        self.count(0);
+        self.get(L_OFF);
+        self.mem_op(ld, align, mem.ram as u32);
+        self.set(L_VAL);
+        self.op(ELSE);
+        self.get(L_CPU); // (unused: the slow path has run's first parameters)
         self.get(L_CTX);
         self.get(L_ADDR);
         self.idx(idx);
+        self.call(F_SLOW_READ + slow_variant(w, signed));
+        self.set(L_VAL);
+        self.end();
+    }
+    /// push whether guest address local `addr` minus `base` (into local `off`; a halfword's
+    /// rounded down, as the Soc's read16) leaves w bytes inside len
+    fn in_range(&mut self, addr: u32, off: u32, base: u32, len: u32, w: u8) {
+        self.get(addr);
+        self.i32c(base);
+        self.op(I32_SUB);
+        if w == 2 {
+            self.i32c(!1u32);
+            self.op(I32_AND);
+        }
+        self.tee(off);
+        self.i32c(len.saturating_sub(w as u32));
+        self.op(I32_LE_U);
+    }
+    /// The body of a load's slow path, one function per width and sign (`slow_variant`), so a
+    /// load inlines only its RAM path: XIP inline, else the bus. Its parameters (_, ctx, addr,
+    /// idx) and one local (off).
+    fn slow_read(&mut self, w: u8, signed: bool) -> Vec<u8> {
+        const ADDR: u32 = 2;
+        const IDX: u32 = 3;
+        const OFF: u32 = 4;
+        let saved = std::mem::take(&mut self.c);
+        let mem = *self.mem;
+        self.c.extend_from_slice(&[1, 1, T_I32]);
+        let (ld, align) = match (w, signed) {
+            (4, _) => (I32_LOAD, 2),
+            (2, false) => (I32_LOAD16_U, 1),
+            (2, true) => (I32_LOAD16_S, 1),
+            (1, false) => (I32_LOAD8_U, 0),
+            _ => (I32_LOAD8_S, 0),
+        };
+        self.in_range(ADDR, OFF, mem.xip_base, mem.xip_len, w);
+        self.op(IF);
+        self.op(T_I32);
+        self.count(1);
+        self.get(OFF);
+        self.mem_op(ld, align, mem.xip as u32);
+        self.op(ELSE);
+        self.count(2);
+        self.get(L_CTX);
+        self.get(ADDR);
+        self.get(IDX);
         self.i32c(w as u32);
         self.call(F_READ);
         match (w, signed) {
@@ -1202,15 +1243,20 @@ impl Gen<'_> {
             (1, true) => self.op(I32_EXTEND8_S),
             _ => {}
         }
-        self.set(L_VAL);
-        self.end();
-        self.end();
+        self.op(END);
+        self.op(END);
+        std::mem::replace(&mut self.c, saved)
     }
 
     /// store(w) of local val at guest address local addr: inline RAM, else the bus (and so is a
     /// store to a word of RAM code: the bus counts it, see `Bus::code_writes`).
     fn store(&mut self, w: u8, idx: u32) {
         let mem = *self.mem;
+        // block { if ram { if not code { store; br out } count 4 } else { count 5 } bus }: one
+        // call site for the bus
+        self.op(BLOCK);
+        self.op(VOID);
+        self.nest += 1;
         self.get(L_ADDR);
         self.i32c(mem.ram_base);
         self.op(I32_SUB);
@@ -1240,12 +1286,15 @@ impl Gen<'_> {
             2 => self.mem_op(I32_STORE16, 1, mem.ram as u32),
             _ => self.mem_op(I32_STORE8, 0, mem.ram as u32),
         }
-        self.op(ELSE);
-        self.count(4);
-        self.store_bus(w, idx);
+        self.op(BR);
+        uleb(&mut self.c, 2);
         self.end();
-        self.op(ELSE);
-        self.count(5);
+        self.count(4);
+        if self.prof {
+            self.op(ELSE);
+            self.count(5);
+        }
+        self.end();
         self.store_bus(w, idx);
         self.end();
     }
@@ -1347,7 +1396,8 @@ fn gen<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u
     g.flush();
     g.get(L_RET);
     g.op(END);
-    (module(&g.c), g.touched, g.written)
+    let slow: Vec<Vec<u8>> = SLOW_VARIANTS.iter().map(|&(w, s)| g.slow_read(w, s)).collect();
+    (module(&g.c, &slow), g.touched, g.written)
 }
 
 /// The code of one block of a region.
@@ -2684,7 +2734,7 @@ fn jump_table(blocks: &[(usize, u32, Vec<crate::BOp>)]) -> Option<(u32, u32)> {
 }
 
 /// The whole module around one function body.
-fn module(body: &[u8]) -> Vec<u8> {
+fn module(body: &[u8], slow: &[Vec<u8>]) -> Vec<u8> {
     let mut m = vec![0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00];
     let section = |m: &mut Vec<u8>, id: u8, content: &[u8]| {
         m.push(id);
@@ -2727,7 +2777,9 @@ fn module(body: &[u8]) -> Vec<u8> {
         im.extend_from_slice(&[0x00, ty as u8]);
     }
     section(&mut m, 2, &im);
-    section(&mut m, 3, &[1, TY_RUN as u8]);
+    let mut fs = vec![1 + slow.len() as u8, TY_RUN as u8];
+    fs.extend(slow.iter().map(|_| TY_READ as u8));
+    section(&mut m, 3, &fs);
     let mut ex = Vec::new();
     uleb(&mut ex, 1);
     name(&mut ex, "run");
@@ -2739,9 +2791,11 @@ fn module(body: &[u8]) -> Vec<u8> {
     f.extend_from_slice(&[4, 7, T_I32, 1, T_I64, 2, T_F32, 20, T_I32]);
     f.extend_from_slice(body);
     let mut code = Vec::new();
-    uleb(&mut code, 1);
-    uleb(&mut code, f.len() as u64);
-    code.extend_from_slice(&f);
+    uleb(&mut code, 1 + slow.len() as u64);
+    for b in std::iter::once(&f).chain(slow) {
+        uleb(&mut code, b.len() as u64);
+        code.extend_from_slice(b);
+    }
     section(&mut m, 10, &code);
     m
 }
