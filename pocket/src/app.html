@@ -764,6 +764,7 @@
     </script>
     <script type="text/plain" id="worklet">/*@WORKLET@*/</script>
     <script type="text/plain" id="core1worker">/*@CORE1WORKER@*/</script>
+    <script type="text/plain" id="emuworker">/*@EMUWORKER@*/</script>
     <script type="application/json" id="fwlist">/*@FIRMWARES@*/</script>
     <script type="text/plain" id="wasm">/*@WASM@*/</script>
     <script>
@@ -1284,7 +1285,7 @@
           stopCore1();
           const mt = window.FM1Native ? null : await threadedCore();
           if (mine !== seq || !node) return;
-          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, wallPace: !/[?&]wallpace=0/.test(location.search) });
+          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;
@@ -1418,6 +1419,23 @@
         }, 16);
         return me;
       }
+      // A trial, ?worker=1 (&lead=46: the ms of sound kept queued): the emulator runs in a Worker and the audio thread only plays what it sends
+      // (vendor/emu-worker.js says why). The object this makes stands in for the AudioWorkletNode, as nativeNode's does.
+      let emu = null;
+      function workerNode() {
+        const lead = Math.max(2, Math.round(((+/[?&]lead=(\d+)/.exec(location.search)?.[1] || 46) * 44.1) / 128)) * 128,
+          [head, tail] = $("#emuworker").textContent.split("/*@FM1@*/"),
+          url = URL.createObjectURL(new Blob([head, $("#worklet").textContent, tail], { type: "text/javascript" })),
+          reader = new AudioWorkletNode(ac, "fm1-reader", { numberOfInputs: 0, outputChannelCount: [2], processorOptions: { lead } }),
+          page = new MessageChannel(),
+          sound = new MessageChannel();
+        emu = new Worker(url);
+        URL.revokeObjectURL(url);
+        emu.onerror = (e) => status("no sound: " + e.message);
+        reader.port.postMessage(sound.port1, [sound.port1]);
+        emu.postMessage({ page: page.port2, reader: sound.port2, lead, sampleRate: ac.sampleRate }, [page.port2, sound.port2]);
+        return { port: page.port1, connect: (to) => reader.connect(to) };
+      }
       async function powerOn() {
         if (window.FM1Native) {
           node = nativeNode();
@@ -1435,7 +1453,7 @@
         } finally {
           URL.revokeObjectURL(url);
         }
-        node = new AudioWorkletNode(ac, "fm1", { numberOfInputs: 0, outputChannelCount: [2] });
+        node = /[?&]worker=1/.test(location.search) ? workerNode() : new AudioWorkletNode(ac, "fm1", { numberOfInputs: 0, outputChannelCount: [2] });
         const meter = ac.createAnalyser(),
           buf = new Float32Array(256);
         meter.fftSize = 256;
@@ -1454,7 +1472,8 @@
         if (nat) send({ type: "cancel-boot" }); // the native core has no AudioContext to close: this stops it (and the app lets the screen sleep)
         clearInterval(nat);
         stopCore1();
-        ac = nat = node = run = null;
+        emu?.terminate();
+        ac = nat = node = run = emu = null;
         allUp();
         dark();
         powerFace();

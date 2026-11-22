@@ -327,3 +327,33 @@ class Fm1 extends AudioWorkletProcessor {
   }
 }
 registerProcessor("fm1", Fm1);
+
+// The reader of the page's ?worker=1 trial (emu-worker.js): the emulator runs in a Worker and sends its sound here in blocks of
+// 128 frames. This only copies them out. It starts once the lead is nearly there, and after running dry it waits for the lead
+// again, so one slow stretch is one gap. Every call tells the Worker how many frames were played, which is the Worker's clock.
+class Fm1Reader extends AudioWorkletProcessor {
+  constructor(o) {
+    super();
+    Object.assign(this, { q: [], lead: o.processorOptions.lead, played: 0, dry: 0, on: false });
+    this.port.onmessage = ({ data: src }) => {   // the Worker's port, handed on by the page
+      this.src = src;
+      src.onmessage = (e) => this.q.push(e.data);
+    };
+  }
+  process(_inputs, outputs) {
+    const out = outputs[0];
+    if (!this.src) return true;
+    // shortcut: whole blocks of 128, the size of every browser's render quantum today; split them if that ever changes
+    if (!this.on && this.q.length * 128 >= this.lead - 256) this.on = true;
+    if (this.on && !this.q.length) (this.on = false), this.dry++;
+    if (this.on) {
+      const b = this.q.shift();
+      out[0].set(b.l);
+      if (out[1]) out[1].set(b.r);
+      this.played += 128;
+    }
+    this.src.postMessage({ played: this.played, dry: this.dry });
+    return true;
+  }
+}
+registerProcessor("fm1-reader", Fm1Reader);

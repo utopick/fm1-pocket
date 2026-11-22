@@ -4,7 +4,7 @@
     python3 pocket/build.py
 
 src/app.html is the page you edit. The build puts into it the fm1-emu core (vendor/fm1_web.wasm, as base64),
-its audio worklet (vendor/worklet.js), the firmware list (vendor/firmwares.json), the Pocket apps' MIDI device
+its audio worklet (vendor/worklet.js), the ?worker=1 trial's Worker (vendor/emu-worker.js), the firmware list (vendor/firmwares.json), the Pocket apps' MIDI device
 panel (vendor/midi-device.js). No dependencies.
 """
 import base64, hashlib, os
@@ -13,7 +13,7 @@ read = lambda p, mode="r": open(os.path.join(here, p), mode, **({} if "b" in mod
 b64 = lambda p: base64.b64encode(read(p, "rb")).decode()
 sha = lambda p: hashlib.sha256(read(p, "rb")).hexdigest()
 page = read("src/app.html")
-parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@CORE1WORKER@*/": read("vendor/core1-worker.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
+parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@CORE1WORKER@*/": read("vendor/core1-worker.js"), "/*@EMUWORKER@*/": read("vendor/emu-worker.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
          "/*@MIDIDEVICE@*/": read("vendor/midi-device.js"),  # the Pocket apps' MIDI device panel, the same file as theirs
          "/*@LICENSE_EMU@*/": read("vendor/LICENSE-fm1-emu").replace("&", "&amp;").replace("<", "&lt;"),
          "/*@LICENSE_MBOOT@*/": read("vendor/mboot/LICENSE-m-bootloader").replace("&", "&amp;").replace("<", "&lt;"),
