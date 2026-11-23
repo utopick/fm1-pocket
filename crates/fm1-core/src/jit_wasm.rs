@@ -595,18 +595,19 @@ struct Gen<'a> {
     /// record the exit reason and the memory paths (`Jit::profile`)
     prof: bool,
     /// the cached locals the code reads or writes (`touched`) and writes (`written`), as
-    /// `cached_in` masks, recorded by a first pass (`rec`); the second loads only the touched
-    /// ones and writes back only the written ones
+    /// `cached_in` masks, recorded while generating; the loads and write-backs inside the body
+    /// are only noted in `fix` (position, true = flush) and put in by `gen` once the masks are
+    /// final: it loads only the touched ones and writes back only the written ones
     touched: u32,
     written: u32,
-    rec: bool,
+    fix: Vec<(usize, bool)>,
 }
 
 impl Gen<'_> {
     /// `op` through the interpreter's executor (`h_op`); a jump it made is taken.
     fn exec_op(&mut self, op: Fast, idx: u32, next_pc: u32, count: u32) {
-        let p = if self.rec { 0 } else { Box::leak(Box::new(op)) as *const Fast as u32 }; // the first pass is thrown away
-        self.flush();
+        let p = Box::leak(Box::new(op)) as *const Fast as u32;
+        self.fix.push((self.c.len(), true));
         self.get(L_CTX);
         self.i32c(p);
         self.idx(idx);
@@ -614,7 +615,7 @@ impl Gen<'_> {
         self.call(F_OP);
         self.c.push(LOCAL_SET);
         uleb(&mut self.c, L_OPRES as u64);
-        self.reload();
+        self.fix.push((self.c.len(), false));
         self.get(L_OPRES);
         self.c.push(I64_CONST);
         sleb(&mut self.c, 32);
@@ -739,7 +740,7 @@ impl Gen<'_> {
         self.c.push(b);
     }
     fn mark(&mut self, l: u32, w: bool) {
-        if self.rec && (L_R0..=L_FLAGS).contains(&l) {
+        if (L_R0..=L_FLAGS).contains(&l) {
             self.touched |= 1 << (l - L_R0);
             if w {
                 self.written |= 1 << (l - L_R0);
@@ -986,7 +987,7 @@ impl Gen<'_> {
         self.if_();
         // the registers against the probe's, a word at a time (a loop: unrolled, 17 tests at
         // each point made Bubba Machine's regions a third bigger), then sp; all equal: leave
-        self.flush();
+        self.fix.push((self.c.len(), true));
         self.op(BLOCK);
         self.op(VOID);
         self.nest += 1;
@@ -1336,37 +1337,26 @@ fn helpers<B: Bus>(profile: bool) -> [u32; 3] {
 }
 
 fn compile<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u8)], mem: &JitMem, stops: bool, prof: bool) -> Vec<u8> {
-    // twice: the first pass records which cached locals the code uses (`Gen::rec`)
-    let table = jump_table(blocks);
-    let (_, touched, written) = gen::<B>(blocks, swaps, mem, stops, prof, table, None);
-    gen::<B>(blocks, swaps, mem, stops, prof, table, Some((touched, written))).0
-}
-
-/// One pass of `compile`: the module and the masks; `masks` None records them (that pass's
-/// code is thrown away), Some uses them.
-fn gen<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u8)], mem: &JitMem, stops: bool, prof: bool, table: Option<(u32, u32)>, masks: Option<(u32, u32)>) -> (Vec<u8>, u32, u32) {
     let n = blocks.len() as u32;
-    let (touched, written) = masks.unwrap_or((ALL_CACHED, ALL_CACHED));
     let mut g = Gen {
         c: Vec::with_capacity(64 * blocks.iter().map(|b| b.2.len()).sum::<usize>()),
         mem,
         swaps,
         index: blocks.iter().enumerate().map(|(k, b)| (b.1, k as u32)).collect(),
-        table,
+        table: jump_table(blocks),
         pred: None,
         cur: 0,
         n,
         nest: 0,
         stops,
         prof,
-        touched: if masks.is_some() { touched } else { 0 },
-        written: if masks.is_some() { written } else { 0 },
-        rec: masks.is_none(),
+        touched: 0,
+        written: 0,
+        fix: Vec::new(),
     };
     // loop { block_{n-1} { .. block_0 { br_table cur } code_0 } code_1 .. } code_{n-1} }: a br
     // to depth k from the innermost block lands on code_k; code_k reaches the loop through the
     // n - 1 - k blocks still open
-    g.reload();
     g.get(L_START);
     g.set(L_CUR);
     g.op(BLOCK); // the one exit (`Gen::ret`)
@@ -1393,11 +1383,21 @@ fn gen<B: Bus>(blocks: &[(usize, u32, Vec<crate::BOp>)], swaps: &[(Fast, Fast, u
     g.op(END); // loop
     g.op(0x00); // unreachable: every block's code leaves or branches
     g.op(END);
-    g.flush();
+    g.fix.push((g.c.len(), true));
     g.get(L_RET);
     g.op(END);
     let slow: Vec<Vec<u8>> = SLOW_VARIANTS.iter().map(|&(w, s)| g.slow_read(w, s)).collect();
-    (module(&g.c, &slow), g.touched, g.written)
+    // the masks are final: the entry loads, then the body with its write-backs and reloads put in
+    let (body, fix) = (std::mem::take(&mut g.c), std::mem::take(&mut g.fix));
+    g.reload();
+    let mut at = 0;
+    for (p, flush) in fix {
+        g.c.extend_from_slice(&body[at..p]);
+        at = p;
+        if flush { g.flush() } else { g.reload() }
+    }
+    g.c.extend_from_slice(&body[at..]);
+    module(&g.c, &slow)
 }
 
 /// The code of one block of a region.
