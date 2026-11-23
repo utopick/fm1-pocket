@@ -1007,7 +1007,7 @@
       // the clock keepUp stepped down to, per firmware, kept on this device (fm1.slow). Never raised by the page: choosing a clock by hand (CPU CLOCK) empties it
       let slow = {};
       try { slow = JSON.parse(stored("fm1.slow")) || {}; } catch {}
-      const capOf = (f) => (f && CLOCKS.includes(slow[f.id]) ? slow[f.id] : Infinity); // (a stranger's value is ignored)
+      const capOf = (hash) => (CLOCKS.includes(slow[hash]) ? slow[hash] : Infinity); // by the package's SHA-256, so local files are told apart (a stranger's value is ignored)
       let bank = null; // a DX7 bank (.syx) for the next start: M-VAVE's own firmware takes its 32 voices, once
       const MAX_PACKAGE = 32 * 1024 * 1024,
         SECTOR = 4096;
@@ -1454,12 +1454,12 @@
       async function boot(fresh) {
         const f = current(),
           mine = ++seq;
-        mhz = Math.min(clock, capOf(f));
         $("#clock i").textContent = mhz + " MHz";
         if (!f) return toast("Choose a firmware first");
         try {
           const bytes = await packageOf(f),
             hash = hex(await crypto.subtle.digest("SHA-256", bytes));
+          if (!window.FM1Native) (mhz = Math.min(clock, capOf(hash)), ($("#clock i").textContent = mhz + " MHz")); // (the app keeps the clock it was given)
           if (fresh) await kvDel("save:" + hash);
           const saved = new Map(vetSave(await kvGet("save:" + hash)));
           if (mine !== seq || !node) return;
@@ -1540,7 +1540,7 @@
         perf.log = [...(perf.log || []), Math.round(100 * load) + "%" + (late ? " late" : "")].slice(-10);
         if (++perf.secs <= 4 || m.halted) return; // the first seconds: booting, compiling
         perf.bad = load > 0.95 || late ? perf.bad + 1 : 0;
-        if (perf.bad < 3 || perf.asked || !run || !$("#sure").hidden || window.FM1Native) return; // (the Android app runs at the real clock and does not step down)
+        if (perf.bad < 3 || perf.asked || !run || !$("#sure").hidden) return;
         const name = run.f.name;
         if (load <= 0.95) {
           if (latency === "playback") return;
@@ -1550,11 +1550,13 @@
         perf.asked = true;
         const c = lowerClock(load, idle, mhz);
         if (!c) return toast("This device cannot run " + name + " in real time, so the sound breaks up", 5000);
-        slow[run.f.id] = c; // the page does not record audio, so nothing is lost but the firmware's own unsaved state, as with any restart
+        if (window.FM1Native) return sure("This device cannot keep up with " + name + " at " + mhz + " MHz, so the sound breaks up. Slide to restart it at " + c + " MHz. What it has not saved is lost.", () => ((mhz = c), (perf.asked = false), boot(), toast(name + " at " + c + " MHz"))); // the app: asks, as before
+        const was = mhz;
+        slow[run.hash] = c; // the page does not record audio, so nothing is lost but the firmware's own unsaved state, as with any restart
         store("fm1.slow", JSON.stringify(slow));
         perf.asked = false;
         boot();
-        stepNote = (name + " now runs at " + c + " MHz, because this device could not keep up at " + mhz + " MHz. CPU CLOCK in OPTIONS lets you choose again.");
+        stepNote = (name + " now runs at " + c + " MHz, because this device could not keep up at " + was + " MHz. CPU CLOCK in OPTIONS lets you choose again.");
       }
       function onWorklet(e) {
         const m = e.data;
@@ -1744,6 +1746,8 @@
         ac && ac.resume();
         // the hidden seconds look like a slow device: do not judge them
         Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
+        // the app only (the browser keeps the step, see fm1.slow): give the clock back if they already lowered it
+        if (window.FM1Native && mhz < clock && run && node && $("#sure").hidden) sure("The clock was lowered to " + mhz + " MHz. Slide to restart " + run.f.name + " at " + clock + " MHz. What it has not saved is lost.", () => ((mhz = clock), (perf.asked = false), boot(), toast(run.f.name + " at " + clock + " MHz")));
       });
       addEventListener("pagehide", flush);
 
@@ -3586,7 +3590,9 @@
         [/^No room to keep (.+) on this device$/, "No hay sitio para guardar $1 en este dispositivo"],
         [/^The sound of (.+) drops out although this device has time to spare, because its audio buffer is too small\. Slide to restart with a larger one, and the keys will answer a little later\. What it has not saved is lost\.$/, "El sonido de $1 se corta aunque a este dispositivo le sobra tiempo, porque su búfer de audio es demasiado pequeño. Desliza para reiniciar con uno mayor, y las teclas responderán un poco más tarde. Lo que no haya guardado se pierde."],
         [/^This device cannot run (.+) in real time, so the sound breaks up$/, "Este dispositivo no puede ejecutar $1 en tiempo real, así que el sonido se corta"],
-        [/^(.+) now runs at (\d+) MHz, because this device could not keep up at (\d+) MHz\. CPU CLOCK in OPTIONS lets you choose again\.$/, "$1 funciona ahora a $2 MHz, porque este dispositivo no daba abasto a $3 MHz. CPU CLOCK, en OPTIONS, te deja elegir otra vez."],
+        [/^The clock was lowered to (\d+) MHz\. Slide to restart (.+) at (\d+) MHz\. What it has not saved is lost\.$/, "El reloj se bajó a $1 MHz. Desliza para reiniciar $2 a $3 MHz. Lo que no haya guardado se pierde."],
+        [/^This device cannot keep up with (.+) at (\d+) MHz, so the sound breaks up\. Slide to restart it at (\d+) MHz\. What it has not saved is lost\.$/, "Este dispositivo no da abasto con $1 a $2 MHz y el sonido se corta. Desliza para reiniciarlo a $3 MHz. Lo que no haya guardado se pierde."],
+        [/^(.+) now runs at (\d+) MHz, because this device could not keep up at (\d+) MHz\. CPU CLOCK in OPTIONS lets you choose again\.$/, "$1 funciona ahora a $2 MHz, porque este dispositivo no daba abasto a $3 MHz. RELOJ CPU, en OPCIONES, te deja elegir otra vez."],
         [/^The clock is how fast the emulated FM-1 runs\. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up \(the Android app at 240\)\. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare\. It is (\d+) MHz now\. Slide to keep your choice and restart (.+)\. What it has not saved is lost\.$/, "El reloj es la velocidad a la que funciona el FM-1 emulado. El FM-1 real va a 240 MHz, y esta app empieza a 100 MHz para que más dispositivos den abasto (la app de Android a 240). Elige menos si el sonido se corta, o más si un firmware va lento y este dispositivo tiene potencia de sobra. Ahora está a $1 MHz. Desliza para guardar tu elección y reiniciar $2. Lo que no haya guardado se pierde."],
         [/^The clock is how fast the emulated FM-1 runs\. The real FM-1 runs at 240 MHz, and this app starts at 100 MHz so that more devices keep up \(the Android app at 240\)\. Choose less if the sound breaks up, or more if a firmware feels slow and this device has power to spare\. It is (\d+) MHz now\. Slide to keep your choice\.$/, "El reloj es la velocidad a la que funciona el FM-1 emulado. El FM-1 real va a 240 MHz, y esta app empieza a 100 MHz para que más dispositivos den abasto (la app de Android a 240). Elige menos si el sonido se corta, o más si un firmware va lento y este dispositivo tiene potencia de sobra. Ahora está a $1 MHz. Desliza para guardar tu elección."],
         [/^CPU clock at (\d+) MHz$/, "Reloj de la CPU a $1 MHz"],

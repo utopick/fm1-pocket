@@ -152,11 +152,12 @@ try:
     assert js("return [lowerClock(1.2, 0, 100), lowerClock(1.2, 0.8, 100), lowerClock(1.2, 0, 60)]") == [60, None, None]
     js("Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: 0, secs: 9, bad: 2, asked: false }); keepUp({ busy: 30, quanta: 10, frames: 128, emulated: 29, idle: 0 })")
     assert js("return document.querySelector('#sure').hidden"), "no dialog: the clock steps down by itself"
-    assert js("return stepNote") and js("return mhz") == 60 and js("return JSON.parse(localStorage['fm1.slow'])") == {"local": 60}, "no step down"
+    assert js("return stepNote") and js("return mhz") == 60 and list(js("return JSON.parse(localStorage['fm1.slow'])").values()) == [60], "no step down"
     for _ in range(60):  # the message shows once the restarted firmware is on
         time.sleep(0.5)
         if "now runs at 60 MHz" in q("#toast"): break
     else: raise AssertionError("no toast: " + q("#toast"))
+    assert q("#toast") == js("return run.f.name") + " now runs at 60 MHz, because this device could not keep up at 100 MHz. CPU CLOCK in OPTIONS lets you choose again.", q("#toast")
     # remembered: after a reload the firmware starts at 60 although the chosen clock is still 100; never raised by itself
     d.refresh(); time.sleep(1.5); power_on()
     assert js("return [clock, mhz, document.querySelector('#clock i').textContent]") == [100, 60, "60 MHz"], "the step was not remembered"
