@@ -3,8 +3,8 @@
     python3 pocket/build.py && FM1_MT_WASM=path/to/fm1_web_mt.wasm python pocket/tests/threads.py path/to/firmware.fwsc
 
 FM1_MT_WASM is web/build-threads.sh's output (the test serves it as vendor/fm1_web_mt.wasm without putting it in the repo).
-Needs selenium and Chrome. The first visit is not isolated (the service worker has not taken the page yet) and must play on
-one thread; the second is isolated and runs core 1 on its Worker; ?threads=0 and a missing SharedArrayBuffer fall back.
+Needs selenium and Chrome. The first visit loads without isolation, the service worker takes over and the page reloads itself once, so it
+ends up isolated and runs core 1 on its Worker (and the flag says it reloaded once); the second visit too; ?threads=0 and a missing SharedArrayBuffer fall back.
 """
 import functools, http.server, os, sys, threading, time
 from selenium import webdriver
@@ -58,11 +58,15 @@ def play(d, want, why):
 
 d = browser()
 try:
-    d.get(url); time.sleep(1)
-    d.execute_async_script("navigator.serviceWorker.ready.then(() => arguments[0]())")
-    time.sleep(1)
-    assert not d.execute_script("return crossOriginIsolated"), "the first visit should not be isolated"
-    play(d, "single", "first visit")
+    d.get(url)
+    for _ in range(40):  # the worker installs, takes the page, and the page reloads once to be isolated
+        time.sleep(0.5)
+        try:
+            if d.execute_script("return crossOriginIsolated"): break
+        except Exception: pass  # (the reload)
+    else: raise AssertionError("the first visit did not become isolated")
+    assert d.execute_script("return sessionStorage.getItem('fm1.coi')") == "1", "no flag"
+    play(d, "threads", "first visit, after its one reload")
     d.get(url); time.sleep(1.5)
     assert d.execute_script("return crossOriginIsolated && typeof SharedArrayBuffer"), "the second visit is not isolated"
     play(d, "threads", "second visit")

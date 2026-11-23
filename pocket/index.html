@@ -54,7 +54,19 @@
       // the Android app (pocket/android) injects FM1Native: the emulator and the sound run natively there, so no service worker, install or sound-output options
       if (window.FM1Native) document.documentElement.classList.add("native");
       else if ("serviceWorker" in navigator && (location.protocol === "https:" || ["localhost", "127.0.0.1"].includes(location.hostname)))
-        addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(console.warn));
+        addEventListener("load", () => navigator.serviceWorker.register("sw.js").then(isolateOnce).catch(console.warn));
+      // GitHub Pages cannot send COOP/COEP, and sw.js adds them only to pages it controls (the second visit). So on the first visit,
+      // once the worker controls the page and has kept the threaded core, reload ONCE, before any firmware is on, to be isolated now.
+      // sessionStorage stops a second try (a browser that ignores credentialless, Safari, stays unisolated and is left alone).
+      async function isolateOnce() {
+        if (window.crossOriginIsolated || !("credentialless" in HTMLIFrameElement.prototype) || sessionStorage.getItem("fm1.coi")) return;
+        await navigator.serviceWorker.ready;
+        if (!navigator.serviceWorker.controller) await new Promise((ok) => (navigator.serviceWorker.addEventListener("controllerchange", ok, { once: true }), setTimeout(ok, 4000)));
+        if (!navigator.serviceWorker.controller || !(await caches.match("vendor/fm1_web_mt.wasm"))) return;
+        if (node || local) return; // (the app's own variables: a firmware is on or a file is waiting, so never interrupt)
+        sessionStorage.setItem("fm1.coi", "1");
+        location.reload();
+      }
       try {
         document.documentElement.dataset.skin = localStorage.getItem("fm1.skin") || "black";
       } catch {}
@@ -7668,7 +7680,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         }
       }
       const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
-      // Two threads: where the page is cross-origin isolated (sw.js adds the headers from the second visit on) and the threaded
+      // Two threads: where the page is cross-origin isolated (sw.js adds the headers from the second visit on, and the first visit reloads once to get them: isolateOnce) and the threaded
       // core (vendor/fm1_web_mt.wasm, web/build-threads.sh) is there, the audio thread's instance runs on a shared memory and
       // core 1 runs in a Worker on it. Anywhere else, or if anything here fails, the one-thread core plays as before.
       // window.FM1Threads says which: mode "threads" or "single", the instructions core 1 has run in the Worker (insns), whether the
