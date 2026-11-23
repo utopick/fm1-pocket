@@ -76,6 +76,7 @@ static int32_t fm1_enc_take(uint32_t e) { int32_t v = host_enc[e % HOST_NENC]; h
 static uint64_t host_leds;                      /* bit id: LED id lit (0..13 buttons, 14..40 keys) */
 static void fm1_irq_off(void) {}                 /* (the host's audio runs between the main loop's passes) */
 static void fm1_irq_on(void) {}
+static void fm1_wait_irq(void) {}
 static void fm1_led_key(uint32_t id, int on) { if (on) host_leds |= (uint64_t)1 << id; else host_leds &= ~((uint64_t)1 << id); }
 static uint64_t host_glow;                      /* the dim layer (not in the film log) */
 static void fm1_led_key_glow(uint32_t id, int on) { if (on) host_glow |= (uint64_t)1 << id; else host_glow &= ~((uint64_t)1 << id); }
