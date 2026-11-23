@@ -592,5 +592,6 @@ static void app_main(void)
         clock_poll();
         if (!linked && ui_dirty) ctl_draw();
         if (!linked) meter_poll();
+        fm1_wait_irq();                         /* sleep to the next interrupt (TIMER5 is every 100 us): USB and the scan run in it */
     }
 }
