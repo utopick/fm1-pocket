@@ -45,6 +45,14 @@ try:
     assert bare == [], "controls without a title: %s" % bare
     assert js("return FIRMWARES.length") > 20 and js("return vetCatalog([{id: 'x', name: '<b>', package: 'javascript:1'}, {id: 'ok', name: 'n', package: 'https://a.b/c', about: 7}])") == [{"id": "ok", "name": "n", "version": "", "author": "", "license": "", "about": "", "package": "https://a.b/c", "chip": "", "date": "", "repo": ""}]
 
+    # the emulator runs in the Worker by default on a phone (a coarse pointer), ?worker=0 turns it off, ?worker=1 forces it on anywhere
+    base_url = "http://127.0.0.1:%d/index.html" % srv.server_address[1]; got = []
+    for coarse in (False, True):
+        d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": coarse, "maxTouchPoints": 5})
+        for qs in ("", "?worker=0", "?worker=1"):
+            d.get(base_url + qs); time.sleep(1); got.append(js("return useWorker()"))
+    d.execute_cdp_cmd("Emulation.setTouchEmulationEnabled", {"enabled": False}); d.get(base_url); time.sleep(1.5)
+    assert got == [False, False, True, True, False, True], "worker default / override: %s" % got
     # vertical: the whole FM-1 rearranged, the keys in two rows
     parts(1, 1, "vertical"); assert js("return document.querySelectorAll('#kb .krow').length") == 2
     size(390, 844, "vertical")
@@ -155,7 +163,7 @@ try:
           const p = node.port.postMessage.bind(node.port); node.port.postMessage = (m, t) => (m.type === 'boot' && __ev.push('boot'), p(m, t))""")
     js("Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: 0, secs: 9, bad: 2, asked: false }); keepUp({ busy: 30, quanta: 10, frames: 128, emulated: 29, idle: 0 })")
     assert js("return document.querySelector('#sure').hidden"), "no dialog: the clock steps down by itself"
-    assert js("return stepNote") and js("return mhz") == 60 and list(js("return JSON.parse(localStorage['fm1.slow'])").values()) == [60], "no step down"
+    assert js("return mhz") == 60 and list(js("return JSON.parse(localStorage['fm1.slow'])").values()) == [60], "no step down: %s" % js("return [stepNote, mhz, clock, localStorage['fm1.slow'], !!run, perf.asked]")
     for _ in range(60):  # the message shows once the restarted firmware is on
         time.sleep(0.5)
         if "now runs at 60 MHz" in q("#toast"): break

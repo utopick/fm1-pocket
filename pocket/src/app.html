@@ -1679,10 +1679,10 @@
         fxe.out.connect(a.destination);
         return a;
       }
-      // A trial, ?worker=1 (&lead=46: the ms of sound kept queued): the emulator runs in a Worker and the audio thread only plays what it sends
+      // The Worker (on a phone by default, ?worker=1 anywhere; &lead=46: the ms of sound kept queued): the emulator runs in a Worker and the audio thread only plays what it sends
       // (vendor/emu-worker.js says why). The object this makes stands in for the AudioWorkletNode, as nativeNode's does.
       let emu = null;
-      const useWorker = () => !window.FM1Native && /[?&]worker=1/.test(location.search); // a trial, ?worker=1
+      const useWorker = () => !window.FM1Native && (/[?&]worker=1/.test(location.search) || (!/[?&]worker=0/.test(location.search) && matchMedia("(pointer: coarse)").matches));
       function workerNode() {
         const lead = Math.max(2, Math.round(((+/[?&]lead=(\d+)/.exec(location.search)?.[1] || 46) * 44.1) / 128)) * 128,
           [head, tail] = $("#emuworker").textContent.split("/*@FM1@*/"),
