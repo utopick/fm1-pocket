@@ -151,8 +151,18 @@ try:
     # a device that cannot keep up: a lower clock where one helps (a firmware that mostly idles costs the same at any clock)
     assert js("return [lowerClock(1.2, 0, 100), lowerClock(1.2, 0.8, 100), lowerClock(1.2, 0, 60)]") == [60, None, None]
     js("Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: 0, secs: 9, bad: 2, asked: false }); keepUp({ busy: 30, quanta: 10, frames: 128, emulated: 29, idle: 0 })")
-    assert "60 MHz" in q("#sureText") and not js("return document.querySelector('#sure').hidden"), "no offer of a lower clock"
-    js("document.querySelector('#sureNo').click()"); assert js("return mhz") == 100
+    assert js("return document.querySelector('#sure').hidden"), "no dialog: the clock steps down by itself"
+    assert js("return stepNote") and js("return mhz") == 60 and js("return JSON.parse(localStorage['fm1.slow'])") == {"local": 60}, "no step down"
+    for _ in range(60):  # the message shows once the restarted firmware is on
+        time.sleep(0.5)
+        if "now runs at 60 MHz" in q("#toast"): break
+    else: raise AssertionError("no toast: " + q("#toast"))
+    # remembered: after a reload the firmware starts at 60 although the chosen clock is still 100; never raised by itself
+    d.refresh(); time.sleep(1.5); power_on()
+    assert js("return [clock, mhz, document.querySelector('#clock i').textContent]") == [100, 60, "60 MHz"], "the step was not remembered"
+    # choosing by hand (here 100) empties what was remembered and applies to the running firmware
+    js("document.querySelector('#clock').click()"); js("document.querySelectorAll('#sureOpt button')[2].click(); const s = document.querySelector('#sureSlide'); s.value = 100; s.onchange()"); time.sleep(0.5)
+    assert js("return [mhz, localStorage['fm1.slow']]") == [100, "{}"], "the choice by hand did not override"
     # a DX7 bank: its shape is checked, it goes with the next start once, and a refusal by the emulator leaves the machine running
     assert js("const b = new Uint8Array(4104); b.set([0xf0, 0x43, 0, 9, 0x20, 0]); b[4103] = 0xf7; window.b0 = b; return [vetBank(b), vetBank(b.slice(1)), vetBank(new Uint8Array(4104))]") == [True, False, False]
     js("bank = b0; boot()"); time.sleep(4)
