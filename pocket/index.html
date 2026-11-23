@@ -7729,9 +7729,13 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         core1Timer = setTimeout(() => core1Failed("core 1's thread did not start"), 5000); // the audio waits for it
         core1.postMessage({ wasm: mtBytes, memory: mtMem, sp: m.sp, tls: m.tls, ptr: m.ptr });
       }
+      // A restart while a machine plays in the audio thread: the old machine, saturated, never lets that thread answer the "boot" message (seconds, on a phone
+      // under load), so the sound is suspended first (no more process() calls, the queue drains) and resumed when the new machine is on. A Worker needs none.
+      const resumeSound = () => ac && !document.hidden && ac.state !== "running" && ac.resume().catch(() => {});
       async function boot(fresh) {
         const f = current(),
-          mine = ++seq;
+          mine = ++seq,
+          replacing = !!run?.base && !!ac && !useWorker() && !window.FM1Native;
         $("#clock i").textContent = mhz + " MHz";
         if (!f) return toast("Choose a firmware first");
         try {
@@ -7754,11 +7758,13 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           status("booting " + f.name + "…");
           stopCore1();
           const mt = window.FM1Native ? null : await threadedCore();
+          if (replacing && ac?.state === "running") await Promise.race([ac.suspend(), new Promise((r) => setTimeout(r, 500))]); // (a suspend that does not answer must not hold the restart)
           if (mine !== seq || !node) return;
           node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;
+          resumeSound();
           status(f.name + ": " + e.message);
           toast(f.name + ": " + e.message, 4000);
         }
@@ -7845,7 +7851,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         else if (m.type === "booted") {
           run.base = m.base;
           thr.mode = m.threaded ? "threads" : "single";
-          Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
+          Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0, stamp: null }); // (the sound clock stood still while suspended)
+          resumeSound();
           send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
           status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
           if (stepNote) (toast(stepNote, 6000), (stepNote = null));
@@ -7853,7 +7860,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           const r = run; // a picture of its screen for its card, once it has drawn it
           setTimeout(() => run === r && kvPut("shot:" + r.f.id, $("#lcd").toDataURL("image/png")).catch(() => {}), 8000);
         } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
-        else if (m.type === "error") (window.FM1Native?.page?.(), status(m.message), toast(m.message, 4000));
+        else if (m.type === "error") (resumeSound(), window.FM1Native?.page?.(), status(m.message), toast(m.message, 4000));
       }
       // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
       // worklet messages (docs: pocket/android/README.md). nat is the poll timer; the object it makes stands in for the AudioWorkletNode.
@@ -7941,6 +7948,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       // A trial, ?worker=1 (&lead=46: the ms of sound kept queued): the emulator runs in a Worker and the audio thread only plays what it sends
       // (vendor/emu-worker.js says why). The object this makes stands in for the AudioWorkletNode, as nativeNode's does.
       let emu = null;
+      const useWorker = () => !window.FM1Native && /[?&]worker=1/.test(location.search); // a trial, ?worker=1
       function workerNode() {
         const lead = Math.max(2, Math.round(((+/[?&]lead=(\d+)/.exec(location.search)?.[1] || 46) * 44.1) / 128)) * 128,
           [head, tail] = $("#emuworker").textContent.split("/*@FM1@*/"),
@@ -7975,7 +7983,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         } finally {
           URL.revokeObjectURL(url);
         }
-        node = /[?&]worker=1/.test(location.search) ? workerNode() : new AudioWorkletNode(ac, "fm1", { numberOfInputs: 0, outputChannelCount: [2] });
+        node = useWorker() ? workerNode() : new AudioWorkletNode(ac, "fm1", { numberOfInputs: 0, outputChannelCount: [2] });
         const meter = ac.createAnalyser(),
           buf = new Float32Array(256);
         meter.fftSize = 256;
