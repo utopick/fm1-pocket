@@ -2,7 +2,7 @@
 
     python3 pocket/build.py && python pocket/tests/smoke.py path/to/firmware.fwsc    (needs: pip install selenium, Chrome)
 
-The package is not in the repo (firmwares belong to their authors): download one from thefirmwarehub.com.
+The packages with an open licence are mirrored in the fm1-firmwares repo (update-firmwares.py), such as ../fm1-firmwares/386dx/<version>.fwsc.
 Pick one that makes a sound (386DX does): Tether is a MIDI controller and stays silent, so the sound check fails with it.
 SHOT=/some/folder saves a screenshot of each view there.
 """

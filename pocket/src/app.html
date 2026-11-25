@@ -1010,7 +1010,8 @@
         SECTOR = 4096;
       const CATALOG_URL = "https://joakimeriksson.github.io/fm1-emu/firmwares.json",
         HUB_CATALOG = "https://thefirmwarehub.com/catalog.json", // the Firmware Hub's own list: it has firmwares fm1-emu's lacks (same mapping as update-firmwares.py)
-        HUB_IMG = "https://thefirmwarehub.com/img/w160/"; // the Firmware Hub's picture of each firmware's screen, <id>.webp
+        HUB_IMG = "https://thefirmwarehub.com/img/w160/", // the Firmware Hub's picture of each firmware's screen, <id>.webp
+        hubPkg = (p) => (/^https:\/\//.test(p) ? p : "https://thefirmwarehub.com/" + p); // the hub's "pkg" is a path on it, or a whole link elsewhere
 
       // ======================================================================
       // storage: one IndexedDB store of keys and values. Nothing here is trusted when it comes back.
@@ -1384,19 +1385,26 @@
         // kept, and still the version of the list (or no way to get another): it runs from this device
         if (got && (got.version === f.version || !navigator.onLine)) return (f.bytes = got.bytes);
         status("downloading " + f.name + "…");
-        try {
-          const r = await fetch(f.package);
-          if (!r.ok) throw Error("status " + r.status);
-          const bytes = new Uint8Array(await r.arrayBuffer());
-          if (!vetPkg({ bytes })) throw Error("not a firmware package");
-          const lm = Date.parse(r.headers.get("last-modified") || "");
-          if (lm) kvPut("date:" + f.id, (fwDate[f.id] = new Date(lm).toISOString().slice(0, 10))).catch(() => {});
-          kvPut("pkg:" + f.id, { name: f.name, version: f.version, bytes }).then(() => (kept.add(f.id), listFace()), () => toast("No room to keep " + f.name + " on this device", 3000));
-          return (f.bytes = bytes);
-        } catch (e) {
-          if (got) return (f.bytes = got.bytes); // an older version kept is better than none
-          throw Error(navigator.onLine ? "the package did not download (" + e.message + "). Get it from its author and use OPEN FILE" : "you are offline and this firmware is not kept on this device yet");
+        let err;
+        // our mirror first (the fm1-firmwares repo, <id>/<version>.fwsc, made by its update.py), then the firmware's own link: a
+        // version the mirror lacks yet, or a firmware it may not copy, comes from there
+        const mirror = "https://utopick.github.io/fm1-firmwares/" + f.id + "/" + (f.version.replace(/[^\w.-]/g, "_") || "0") + ".fwsc";
+        for (const url of [mirror, f.package]) {
+          try {
+            const r = await fetch(url);
+            if (!r.ok) throw Error("status " + r.status);
+            const bytes = new Uint8Array(await r.arrayBuffer());
+            if (!vetPkg({ bytes })) throw Error("not a firmware package");
+            const lm = Date.parse(r.headers.get("last-modified") || "");
+            if (lm && url === f.package) kvPut("date:" + f.id, (fwDate[f.id] = new Date(lm).toISOString().slice(0, 10))).catch(() => {});
+            kvPut("pkg:" + f.id, { name: f.name, version: f.version, bytes }).then(() => (kept.add(f.id), listFace()), () => toast("No room to keep " + f.name + " on this device", 3000));
+            return (f.bytes = bytes);
+          } catch (e) {
+            err = err || e;
+          }
         }
+        if (got) return (f.bytes = got.bytes); // an older version kept is better than none
+        throw Error(navigator.onLine ? "the package did not download (" + err.message + "). Get it from its author and use OPEN FILE" : "you are offline and this firmware is not kept on this device yet");
       }
       const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
       // Two threads: where the page is cross-origin isolated (sw.js adds the headers from the second visit on) and the threaded
@@ -1962,8 +1970,10 @@
               if (!h) continue;
               if (CHIPS.includes(h.chip)) f.chip = h.chip;
               if (!f.date && /^\d{4}-\d{2}-\d{2}/.test(h.date)) f.date = h.date.slice(0, 10);
+              // the hub's current package: a pinned older version breaks as soon as the hub removes that file
+              if (typeof h.pkg === "string" && /^(https:\/\/)?[\w.\/-]{1,300}$/.test(h.pkg)) (f.package = hubPkg(h.pkg)), h.version && (f.version = str(String(h.version), 40));
             }
-            fresh.push(...vetCatalog((hub.firmwares || []).filter((h) => h && typeof h.pkg === "string" && !have.has(h.id) && !fresh.some((f) => f.id === h.id)).map((h) => ({ id: h.id, name: h.name, version: h.version, author: h.author, license: h.lic, about: h.what, date: h.date, chip: h.chip, package: "https://thefirmwarehub.com/" + h.pkg, repo: h.site || "" }))));
+            fresh.push(...vetCatalog((hub.firmwares || []).filter((h) => h && typeof h.pkg === "string" && !have.has(h.id) && !fresh.some((f) => f.id === h.id)).map((h) => ({ id: h.id, name: h.name, version: h.version, author: h.author, license: h.lic, about: h.what, date: h.date, chip: h.chip, package: hubPkg(h.pkg), repo: h.site || "" }))));
           } catch {}
           const run = current();
           FIRMWARES = withOwn(fresh.map((f) => (run && run.id === f.id && run.version === f.version ? run : f)));
