@@ -13,13 +13,16 @@ The hub's package and version replace fm1-emu's pinned ones, because the hub rem
 own script (TP/fm1-firmwares/update.py, next to this repo), which downloads the new packages there and commits; the page
 downloads from that mirror first. Push it afterwards with python3 ../fm1-firmwares/update.py --push. Standard library only.
 """
-import json, os, subprocess, sys, urllib.request
+import json, os, re, subprocess, sys, urllib.request
 
 here = os.path.dirname(os.path.abspath(__file__))
 JOAKIM = "https://joakimeriksson.github.io/fm1-emu/firmwares.json"
 HUB = "https://thefirmwarehub.com/"
 OUT = os.path.join(here, "vendor", "firmwares.json")
 MIRROR = os.path.join(here, "..", "..", "fm1-firmwares", "update.py")
+# licences the lists leave out or only point at, read in each repository's LICENSE (2026-11-26)
+# shortcut: kept by hand; when the hub or fm1-emu list a licence for one of these, theirs wins and this entry can go
+LICENCE = {"emb": "GPL-3.0", "tangram": "GPL-2.0-or-later", "fm1chimeravocal": "MIT + MPL-2.0 + BSD (CMUdict)", "vesper": "GPL-3.0 + SDK exception"}
 
 
 def get(url):
@@ -52,6 +55,8 @@ def main():
     for i, h in hubs.items():
         if i not in mine and i not in skipped and not any(f.get("hub") == i for f in joakim["firmwares"]):
             out.append(from_hub(h)); added.append(i)
+    for g in out:
+        if g["id"] in LICENCE and not re.match(r"^(GPL|LGPL|MPL|MIT|Apache|BSD)", g.get("license") or ""): g["license"] = LICENCE[g["id"]]
     before = json.load(open(OUT)) if os.path.exists(OUT) else []
     print("fm1-emu list: %d · hub catalogue: %d · built in before: %d · now: %d" % (len(joakim["firmwares"]), len(hubs), len(before), len(out)))
     print("added from the hub (%d): %s" % (len(added), ", ".join(added) or "none"))

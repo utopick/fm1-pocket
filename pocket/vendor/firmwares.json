@@ -784,7 +784,7 @@
   "name": "Evander's Music Box",
   "version": "1.5.2",
   "author": "Michail Tsakiroglou",
-  "license": "see the repository",
+  "license": "GPL-3.0",
   "about": "A bard's instrument for LARP, medieval and high fantasy: recorder, hurdy-gurdy, harp and a tavern kit on four tracks, encounters and songs for the table. \"Mother Melody hears thy song.\"",
   "repo": "https://github.com/MikeTsak/Evanders-Music-Box--FM-1-LARP-firmware",
   "package": "https://thefirmwarehub.com/fw/emb-1.5.2.fwsc",
@@ -2657,7 +2657,7 @@
   "name": "VESPER",
   "version": "2.0.2",
   "author": "Fat Cat Studios",
-  "license": "see the repository",
+  "license": "GPL-3.0 + SDK exception",
   "about": "An ambient worship synth. Each scene layers four lush voices in any major key around a crystal orbit home screen: pads, plucks, piano and swells. Shape them with drive, tone, granular clouds, shimmer, reverb and delay, then play live over the scene or record into it.",
   "repo": "https://github.com/fatcatstudios-hub/vesper-fm1",
   "package": "https://thefirmwarehub.com/fw/vesper-2.0.2.fwsc",
@@ -3187,7 +3187,8 @@
   "package": "https://thefirmwarehub.com/fw/fm1chimeravocal-1.1.1.fwsc",
   "repo": "https://github.com/shan-sherif/fm-1-chimera-vocal",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "license": "MIT + MPL-2.0 + BSD (CMUdict)"
  },
  {
   "id": "orgigs",
@@ -3822,7 +3823,8 @@
   "package": "https://thefirmwarehub.com/fw/tangram-1.0.fwsc",
   "repo": "https://github.com/Mr-Roboto/fm1-tangram",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "license": "GPL-2.0-or-later"
  },
  {
   "id": "shifl",
