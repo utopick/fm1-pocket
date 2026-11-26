@@ -62,7 +62,8 @@
   "minMhz": 100,
   "minMhzPackage": "2ba90c24c0586c75",
   "date": "2026-11-04",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "386dx-2.0.rfm1"
  },
  {
   "id": "aisling",
@@ -124,14 +125,14 @@
  {
   "id": "arctic",
   "name": "Arctic Scream",
-  "version": "2.1.6",
+  "version": "2.1.7",
   "author": "p0larpatch",
   "license": "GPL-3.0",
   "about": "Dark ambient drones and feedback screams from the frozen tundra. Built on GR!MM, with HOWL, a feedback-loop voice after the Synthux Audrey II that wakes out of silence and grows into a howl, and 46 arctic sounds.",
   "repo": "https://github.com/PolarPatch/Arctic-scream-FM-1",
-  "package": "https://thefirmwarehub.com/fw/arctic-2.1.6.fwsc",
+  "package": "https://thefirmwarehub.com/fw/arctic-2.1.7.fwsc",
   "hub": "arctic",
-  "date": "2026-11-24",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "arcticscream-2.1.4.rfm1"
  },
@@ -146,7 +147,8 @@
   "package": "https://thefirmwarehub.com/fw/arcturus-1.7.fwsc",
   "hub": "arcturus",
   "date": "2026-11-01",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "arcturus-1.7.rfm1"
  },
  {
   "id": "argo",
@@ -174,7 +176,8 @@
   "minMhz": 80,
   "minMhzPackage": "03dc25e0291ea0ed",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "artihive-2.0.6.rfm1"
  },
  {
   "id": "assid",
@@ -189,7 +192,8 @@
   "minMhz": 200,
   "minMhzPackage": "f869992c2d387301",
   "date": "2026-11-11",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "assid-1.0.rfm1"
  },
  {
   "id": "atek303",
@@ -204,7 +208,8 @@
   "minMhz": 160,
   "minMhzPackage": "d7fe6293e45fa003",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "atek303-1.4.rfm1"
  },
  {
   "id": "atlatl",
@@ -217,34 +222,35 @@
   "package": "https://thefirmwarehub.com/fw/atlatl-1.2.5.fwsc",
   "hub": "atlatl",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "atlatl-1.2.5.rfm1"
  },
  {
   "id": "b1",
   "name": "B1",
-  "version": "5.6",
+  "version": "5.9",
   "author": "Joppe Sikken (SikkenWorks)",
   "license": "GPL-3.0",
   "about": "B1 turns the M-VAVE FM1 into a compact drawbar rock organ with 91 shared tonewheels, nine drawbars per registration, percussion, Leslie, B3/ROCK tones, MIDI and expressive live controls.",
   "repo": "https://github.com/SikkenWorks/B1-Drawbar-Organ",
-  "package": "https://thefirmwarehub.com/fw/b1-5.6.fwsc",
+  "package": "https://thefirmwarehub.com/fw/b1-5.9.fwsc",
   "hub": "b1",
-  "date": "2026-11-02",
-  "chip": "any"
+  "date": "2026-11-26",
+  "chip": "new"
  },
  {
   "id": "b3organ",
   "name": "B3 ORGAN",
-  "version": "0.6.1",
+  "version": "0.7",
   "author": "R-Jeb",
   "license": "GPL-3.0",
   "about": "A B3 tonewheel organ: 91 wheels, nine drawbars, key click, vibrato and chorus, percussion, overdrive, reverb and a Leslie, computed from setBfree's own data and measured against it. All 110 setBfree programs and its default MIDI controllers.",
   "repo": "https://github.com/R-Jeb/setBfree-fm1",
-  "package": "https://thefirmwarehub.com/fw/b3organ-0.6.1.fwsc",
+  "package": "https://thefirmwarehub.com/fw/b3organ-0.7.fwsc",
   "hub": "b3organ",
   "minMhz": 80,
   "minMhzPackage": "31a7167286b6502c",
-  "date": "2026-11-22",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
@@ -265,27 +271,27 @@
  {
   "id": "beetle",
   "name": "BEETLE",
-  "version": "1.8.3",
+  "version": "1.90.0",
   "author": "Joppe Sikken (SikkenWorks)",
   "license": "GPL-3.0",
   "about": "A tracker for the FM-1: patterns written top to bottom, step by step, with note, instrument, chord and effect columns, the way trackers have always worked.",
   "repo": "https://github.com/SikkenWorks/BEETLE",
-  "package": "https://thefirmwarehub.com/fw/beetle-1.8.3.fwsc",
+  "package": "https://thefirmwarehub.com/fw/beetle-1.90.0.fwsc",
   "hub": "beetle",
-  "date": "2026-11-09",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
   "id": "beetleblue",
   "name": "BEETLE BLUE",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "author": "Joppe Sikken (SikkenWorks)",
   "license": "GPL-3.0",
   "about": "BEETLE BLUE turns your M-VAVE FM1 into a six-lane drum tracker. Build beats with BEETLE and MONOLITH kits, design custom drums, arrange songs, and perform setlists with Live Mode and hands-on effects.",
   "repo": "https://github.com/SikkenWorks/BEETLE-BLUE",
-  "package": "https://thefirmwarehub.com/fw/beetleblue-1.3.1.fwsc",
+  "package": "https://thefirmwarehub.com/fw/beetleblue-1.4.0.fwsc",
   "hub": "beetleblue",
-  "date": "2026-11-09",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
@@ -305,14 +311,14 @@
  {
   "id": "bigorna",
   "name": "Bigorna",
-  "version": "2026.11.25",
+  "version": "2026.11.26",
   "author": "Nuno Zimas",
   "license": "GPL-3.0",
   "about": "Rhythmic noise, power noise, industrial and IDM after the Elektron Digitone II: six tracks, four machines (4-OP, DRUM, WAVY, HIVE), parameter locks on a 16-step sequencer, a looper, send effects and USB audio.",
   "repo": "https://github.com/nzimas/bigorna",
-  "package": "https://thefirmwarehub.com/fw/bigorna-2026.11.25.fwsc",
+  "package": "https://thefirmwarehub.com/fw/bigorna-2026.11.26+aaa7a424.fwsc",
   "hub": "bigorna",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
@@ -326,7 +332,8 @@
   "package": "https://thefirmwarehub.com/fw/blop-1.1.0.fwsc",
   "hub": "blop",
   "date": "2026-11-03",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "blop-1.1.0.rfm1"
  },
  {
   "id": "bocjuhn",
@@ -388,14 +395,14 @@
  {
   "id": "caravel",
   "name": "Caravel",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "BonszaiMusic",
   "license": "GPL-3.0",
   "about": "Multi-engine synth firmware with DRONE, STASIS texture capture, Pair Morph, and per-track Random Morph and Morph Journey for evolving, ambient and experimental sound design. Sequencer, MIDI Learn, USB audio.",
   "repo": "https://github.com/bonszaimusic/caravel",
-  "package": "https://thefirmwarehub.com/fw/caravel-1.2.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/caravel-1.2.1.fwsc",
   "hub": "caravel",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "caravel-1.1.0.rfm1"
  },
@@ -441,7 +448,8 @@
   "installer": "https://profikid.github.io/fm1-break-choppah/install/",
   "hub": "choppah",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "choppah-1.6.rfm1"
  },
  {
   "id": "choralroot",
@@ -644,7 +652,8 @@
   "minMhz": 80,
   "minMhzPackage": "6e02c373a4bdfe91",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "deepfield-1.11.rfm1"
  },
  {
   "id": "delrio",
@@ -657,7 +666,8 @@
   "package": "https://thefirmwarehub.com/fw/delrio-1.0.1.fwsc",
   "hub": "delrio",
   "date": "2026-11-20",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "delrio-1.0.1.rfm1"
  },
  {
   "id": "demake",
@@ -675,14 +685,14 @@
  {
   "id": "dinghy",
   "name": "Dinghy",
-  "version": "0.6",
+  "version": "0.6.1",
   "author": "zvenson",
   "license": "GPL-3.0",
   "about": "Your base for your own FM-1 firmware: everything under it done and documented (updates, USB rescue, USB-MIDI, USB audio, keys, screen, settings), a 4-voice sine on top. Fork it, replace the sine.",
   "repo": "https://github.com/zvenson/dinghy",
-  "package": "https://thefirmwarehub.com/fw/dinghy-0.6.fwsc",
+  "package": "https://thefirmwarehub.com/fw/dinghy-0.6.1.fwsc",
   "hub": "dinghy",
-  "date": "2026-11-24",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
@@ -826,7 +836,8 @@
   "minMhz": 120,
   "minMhzPackage": "6889451585cd623e",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "estampie-0.4.0.rfm1"
  },
  {
   "id": "etch",
@@ -1148,18 +1159,18 @@
  {
   "id": "ghoulbox",
   "name": "GHOULBOX",
-  "version": "2.4",
+  "version": "2.4.1",
   "author": "jasonpersinger",
   "license": "GPL-3.0",
   "about": "Dungeon synth (a Felucca fork): cathedral reverb and dark drones.",
   "repo": "https://github.com/jasonpersinger/ghoulbox-fm1-dungeon-synth",
-  "package": "https://thefirmwarehub.com/fw/ghoulbox-2.4.fwsc",
+  "package": "https://thefirmwarehub.com/fw/ghoulbox-2.4.1.fwsc",
   "installer": "https://ghoulbox.messy.quest/webapp/installer/",
   "hub": "ghoulbox",
   "minMhz": 100,
   "minMhzPackage": "92630ae278d4a0b4",
-  "date": "2026-10-24",
-  "chip": "old",
+  "date": "2026-11-26",
+  "chip": "new",
   "rfm1": "ghoulbox-2.4.rfm1"
  },
  {
@@ -1327,7 +1338,8 @@
   "package": "https://thefirmwarehub.com/fw/j6-1.4.0.fwsc",
   "hub": "j6",
   "date": "2026-10-29",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "j6-1.4.0.rfm1"
  },
  {
   "id": "jam",
@@ -1357,7 +1369,8 @@
   "minMhz": 100,
   "minMhzPackage": "4111f8e9b2019ba4",
   "date": "2026-11-09",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "jamtrack-0.2.3.rfm1"
  },
  {
   "id": "jangada",
@@ -1381,9 +1394,9 @@
   "license": "GPL-3.0",
   "about": "A bio-synthetic groovebox: six tracks drawn as living beings, eight engines (FM6 with Dexed, analog, phase, voice), mutating macros and SLOOP's song mode. Still in development.",
   "repo": "https://github.com/juanjiant-bit/JIANT",
-  "package": "https://thefirmwarehub.com/fw/jiant-V10.8.48.fwsc",
+  "package": "https://thefirmwarehub.com/fw/jiant-V10.8.48+e8b2ad37.fwsc",
   "hub": "jiant",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "jiant-10.26.rfm1"
  },
@@ -1501,14 +1514,14 @@
  {
   "id": "loafbreaker",
   "name": "LOAF BREAKER",
-  "version": "0.9.80",
+  "version": "0.9.86",
   "author": "FLEXOR",
   "license": "MPL-2.0",
   "about": "A hardcore kick synthesizer powerhouse and a breakbeat chopper (gabber, terror, speedcore): a heavy kick with its own synth, DISTO and SCREAM distortion, effects and twenty memories, breaks sliced on the white keys, effects on the black keys, snare, hat, clap, songs with builds and drops, a…",
   "repo": "https://github.com/FLEXOR-R/loaf-breaker",
-  "package": "https://thefirmwarehub.com/fw/loafbreaker-0.9.80.fwsc",
+  "package": "https://thefirmwarehub.com/fw/loafbreaker-0.9.86.fwsc",
   "hub": "loafbreaker",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "loafbreaker-0.9.73.rfm1"
  },
@@ -1587,31 +1600,32 @@
  {
   "id": "manifold",
   "name": "Manifold",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "author": "stets43",
   "license": "MPL-2.0",
   "about": "Generative just-intonation firmware for the FM-1. Two layers of moving points wander a map of 41 scales and play the notes they pass; a rhythm without a grid drives four drums that follow the synth. Four knobs steer it, the keys play into it, and it can stream to Bluetooth speakers.",
   "repo": "https://github.com/stets43/Manifold",
-  "package": "https://thefirmwarehub.com/fw/manifold-1.0.7.fwsc",
+  "package": "https://thefirmwarehub.com/fw/manifold-1.0.8.fwsc",
   "hub": "manifold",
   "minMhz": 160,
   "minMhzPackage": "d6582bc5a401e9ea",
-  "date": "2026-11-23",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "manifold-1.0.7.rfm1"
  },
  {
   "id": "matryoshka",
   "name": "Matryoshka",
-  "version": "1.26.3",
+  "version": "1.27.1",
   "author": "glvno",
   "license": "GPL-3.0",
   "about": "A modular synth you patch in the browser: modules (oscillators, filters, envelopes, delays) nest into assemblies you save and reuse, and the patch plays on the FM-1, polyphonic with a Voicing module.",
   "repo": "https://github.com/glvno/matryoshka",
-  "package": "https://thefirmwarehub.com/fw/matryoshka-1.26.3.fwsc",
+  "package": "https://thefirmwarehub.com/fw/matryoshka-1.27.1.fwsc",
   "hub": "matryoshka",
   "minMhz": 100,
   "minMhzPackage": "5d52951efcc1d44c",
-  "date": "2026-11-24",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "matryoshka-1.24.1.rfm1"
  },
@@ -2018,7 +2032,8 @@
   "minMhz": 80,
   "minMhzPackage": "663f1dc8ec20cfac",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "paperlagoon-1.1.rfm1"
  },
  {
   "id": "patchwerk",
@@ -2083,14 +2098,14 @@
  {
   "id": "piterfly",
   "name": "Piterfly",
-  "version": "1.2.5",
+  "version": "1.2.6",
   "author": "Piotr Woźniak",
   "license": "GPL-3.0",
   "about": "A groovebox OS for M-VAVE FM-1, built on SLOOP and Felucca: seven synth parts plus drums, 24 patterns, 128 SONG positions, clearer 64-step views, live granular INSERT, selective kick ducking and MIDI THRU for external instruments. Includes a browser editor with audio preview.",
   "repo": "https://github.com/piotrwozniak/piterfly",
-  "package": "https://thefirmwarehub.com/fw/piterfly-1.2.5.fwsc",
+  "package": "https://thefirmwarehub.com/fw/piterfly-1.2.6.fwsc",
   "hub": "piterfly",
-  "date": "2026-11-17",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
@@ -2131,7 +2146,8 @@
   "installer": "https://charlesvestal.github.io/fm1-polly/",
   "hub": "polly",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "polly-0.6.4.rfm1"
  },
  {
   "id": "ptfm",
@@ -2157,7 +2173,8 @@
   "package": "https://thefirmwarehub.com/fw/pulhra-1.5.1.fwsc",
   "hub": "pulhra",
   "date": "2026-10-22",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "pulhra-1.5.1.rfm1"
  },
  {
   "id": "purplemonkey",
@@ -2187,7 +2204,8 @@
   "package": "https://thefirmwarehub.com/fw/quartet-3.1.fwsc",
   "hub": "quartet",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "quartet-3.1.rfm1"
  },
  {
   "id": "quest",
@@ -2211,12 +2229,12 @@
   "license": "GPL-3.0",
   "about": "A music toy for little hands (a Felucca fork).",
   "repo": "https://github.com/joshbartlettband-web/felucca-rainbow",
-  "package": "https://thefirmwarehub.com/fw/rainbow-1.1.5-rb+afb04479.fwsc",
+  "package": "https://thefirmwarehub.com/fw/rainbow-1.1.5-rb+9de082a0.fwsc",
   "installer": "https://joshbartlettband-web.github.io/felucca-rainbow/webapp/installer/",
   "hub": "rainbow",
   "minMhz": 80,
   "minMhzPackage": "22156c96381ff78f",
-  "date": "2026-11-17",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "rainbow-1.1.5-rb.rfm1"
  },
@@ -2436,7 +2454,8 @@
   "minMhz": 100,
   "minMhzPackage": "e4ded606db54e7e0",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sill-1.0.4-c5cfe9e.rfm1"
  },
  {
   "id": "skiff",
@@ -2583,7 +2602,8 @@
   "package": "https://thefirmwarehub.com/fw/splitmilk-1.0.fwsc",
   "hub": "splitmilk",
   "date": "2026-11-11",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "splitmilk-1.0.rfm1"
  },
  {
   "id": "tack",
@@ -2598,7 +2618,8 @@
   "minMhz": 80,
   "minMhzPackage": "0d69603d13c8bedf",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tack-0.15.0.rfm1"
  },
  {
   "id": "tastywaves",
@@ -2616,14 +2637,14 @@
  {
   "id": "tessera",
   "name": "Tessera",
-  "version": "3.7.5",
+  "version": "3.7.6",
   "author": "Theo Dainis (Rastapopolix)",
   "license": "GPL-3.0",
   "about": "Generative music on four tracks: each plays its own steps, an arpeggio or one of 13 generators (Turing, Euclid, Markov, Constellation, Chord and more), and the tracks evolve, follow and modulate each other. EVOLVE and FORM grow phrases into songs; 16 mod cords connect anything. A Melodee fork.",
   "repo": "https://github.com/Rastapopolix/tessera",
-  "package": "https://thefirmwarehub.com/fw/tessera-3.7.5.fwsc",
+  "package": "https://thefirmwarehub.com/fw/tessera-3.7.6.fwsc",
   "hub": "tessera",
-  "date": "2026-11-22",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "tessera-3.7.5.rfm1"
  },
@@ -2760,7 +2781,8 @@
   "minMhz": 80,
   "minMhzPackage": "9135b62169409efb",
   "date": "2026-11-02",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "wanderer-1.4.0.rfm1"
  },
  {
   "id": "waveloop",
@@ -2832,7 +2854,8 @@
   "minMhz": 80,
   "minMhzPackage": "85079c89d3e7f53a",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "xenolith-1.0.rfm1"
  },
  {
   "id": "xmod",
@@ -2886,7 +2909,8 @@
   "package": "https://thefirmwarehub.com/fw/gio-0.3.1-beta.fwsc",
   "repo": "https://github.com/GuinanNo1/fm1-gio",
   "date": "2026-11-17",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "gio-0.3.1-beta.rfm1"
  },
  {
   "id": "audiorouter",
@@ -2898,7 +2922,8 @@
   "package": "https://thefirmwarehub.com/fw/audiorouter-0.6.2.fwsc",
   "repo": "https://github.com/maxravedj/fm1-audio-router",
   "date": "2026-11-24",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "audiorouter-0.6.2.rfm1"
  },
  {
   "id": "dubbox",
@@ -2910,7 +2935,19 @@
   "package": "https://thefirmwarehub.com/fw/dubbox-1.0.9.fwsc",
   "repo": "https://github.com/altessproduction/DUB-BOX-FM1",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "dubbox-1.0.9.rfm1"
+ },
+ {
+  "id": "fm1sf2",
+  "name": "fm1-sf2",
+  "version": "1.2.0",
+  "author": "mwedmark",
+  "about": "A 40-voice, 16-channel General MIDI sound module for the FM-1. It plays a SoundFont converted in the browser to a compact bank, with filters, LFOs, reverb and chorus, over USB, DIN or Bluetooth MIDI. Installs over USB from a web page.",
+  "package": "https://thefirmwarehub.com/fw/fm1sf2-1.2.0.fwsc",
+  "repo": "https://github.com/mwedmark/fm1-sf2",
+  "date": "2026-11-19",
+  "chip": "any"
  },
  {
   "id": "fm1midimania",
@@ -2934,7 +2971,8 @@
   "package": "https://thefirmwarehub.com/fw/fm1yoga-1.0.fwsc",
   "repo": "https://github.com/michamilz/fm1-yoga",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fm1yoga-1.0.rfm1"
  },
  {
   "id": "hadal1",
@@ -2971,7 +3009,8 @@
   "package": "https://thefirmwarehub.com/fw/clavioline-1.3.fwsc",
   "repo": "https://github.com/MammothCheese/clavioline",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "clavioline-1.3.rfm1"
  },
  {
   "id": "rhytmsec1",
@@ -3055,7 +3094,8 @@
   "package": "https://thefirmwarehub.com/fw/drumtonic-0.9.7.fwsc",
   "repo": "https://github.com/fc79/drumtonic",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "drumtonic-0.9.7.rfm1"
  },
  {
   "id": "arpwav09",
@@ -3067,7 +3107,8 @@
   "package": "https://thefirmwarehub.com/fw/arpwav09-1.0.7.fwsc",
   "repo": "https://github.com/wav0902/wav-fm1",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "arpwav09-1.0.7.rfm1"
  },
  {
   "id": "golf",
@@ -3105,7 +3146,8 @@
   "package": "https://thefirmwarehub.com/fw/kurzhaar-1.1.fwsc",
   "repo": "https://github.com/kurzhaar168/kurzhaar",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "kurzhaar-1.1.rfm1"
  },
  {
   "id": "miniju08",
@@ -3117,7 +3159,8 @@
   "package": "https://thefirmwarehub.com/fw/miniju08-08-1.00.fwsc",
   "repo": "https://github.com/eldontyrellcorp/Mini-Ju08",
   "date": "2026-11-11",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "miniju08-08-1.00.rfm1"
  },
  {
   "id": "atlatltheatltuner",
@@ -3146,13 +3189,13 @@
  {
   "id": "mvsynth2",
   "name": "M-Vsynth2",
-  "version": "1.5.2",
+  "version": "1.6",
   "author": "Kris (bk40-home)",
   "license": "GPL-3.0",
   "about": "Synth2, the open-source recreation of Synth1, on eight voices across both cores: two oscillators and a sub, five filters (LPDL among them), two LFOs, distortions and phasers, EQ, delay, chorus and Synth1's arpeggiator. It plays Synth1's .sy1 patches, with the Synth2 Factory bank built in and 1024…",
-  "package": "https://thefirmwarehub.com/fw/mvsynth2-1.5.2.fwsc",
+  "package": "https://thefirmwarehub.com/fw/mvsynth2-1.6.fwsc",
   "repo": "https://github.com/bk40-home/M-Vsynth2",
-  "date": "2026-11-19",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "mvsynth2-1.5.2.rfm1"
  },
@@ -3197,13 +3240,13 @@
  {
   "id": "quartz",
   "name": "QUARTZ",
-  "version": "0.10",
+  "version": "0.11",
   "author": "f0nski",
   "license": "GPL-3.0",
   "about": "A four-track groovebox: Plaits' 24 models, a 16-pad kit, a step sequencer with p-locks and trig conditions, nine generative sources you can PRINT into steps (Game of Life, chords, Tonnetz, orbits, bytebeat, an improviser...), live transposition, punch-in effects, four projects and a scene per page.",
-  "package": "https://thefirmwarehub.com/fw/quartz-0.10.fwsc",
+  "package": "https://thefirmwarehub.com/fw/quartz-0.11.fwsc",
   "repo": "https://github.com/F0nski/quartz",
-  "date": "2026-11-21",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "quartz-0.10.rfm1"
  },
@@ -3230,7 +3273,8 @@
   "package": "https://thefirmwarehub.com/fw/juicy-0.1.fwsc",
   "repo": "https://github.com/DanielGilbert/Juicy",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "juicy-0.1.rfm1"
  },
  {
   "id": "fmlarynx",
@@ -3256,6 +3300,17 @@
   "repo": "https://github.com/DPangerl/fernbedienung",
   "date": "2026-11-23",
   "chip": "new"
+ },
+ {
+  "id": "visceratape",
+  "name": "VISCERA:TAPE",
+  "version": "2.9.2",
+  "author": "De-Pattern",
+  "about": "A four-track tape looper in the spirit of a cassette Portastudio. Record from Bluetooth or USB audio, overdub and punch in, set each track's speed, pitch and pan, bounce through a resonant filterbank, record knob motion, slice loops, and route two LFOs to any knob.",
+  "package": "https://thefirmwarehub.com/fw/visceratape-2.9.2.fwsc",
+  "repo": "https://github.com/De-Pattern/viscera",
+  "date": "2026-11-22",
+  "chip": "any"
  },
  {
   "id": "beiwagen",
@@ -3356,7 +3411,8 @@
   "package": "https://thefirmwarehub.com/fw/bluesbox-2.3.0.fwsc",
   "repo": "https://github.com/provostprovost/blues",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "bluesbox-2.3.0.rfm1"
  },
  {
   "id": "conductor",
@@ -3386,13 +3442,13 @@
  {
   "id": "quantumgammawave",
   "name": "Quantum GammaWave",
-  "version": "2.5.2",
+  "version": "2.16.3",
   "author": "Guille Lauría",
   "license": "GPL-3.0",
   "about": "A six-track groovebox for the M-VAVE FM-1: nine engines and 273 sounds (analog, six-operator FM, wavetable, digital drums), a 64-step sequencer with probability and ratchets, song mode, scales and chords, a mod matrix and three FX buses, plus a browser emulator and a web editor.",
-  "package": "https://thefirmwarehub.com/fw/quantumgammawave-2.5.2.fwsc",
+  "package": "https://thefirmwarehub.com/fw/quantumgammawave-2.16.3.fwsc",
   "repo": "https://github.com/Guillel51/Quantum-GammaWave",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "quantumgammawave-4.1.0.rfm1"
  },
@@ -3444,7 +3500,8 @@
   "package": "https://thefirmwarehub.com/fw/vnl1-0.9.2.fwsc",
   "repo": "https://github.com/pianomansam/fm1-vnl",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "vnl1-0.9.2.rfm1"
  },
  {
   "id": "moss1",
@@ -3456,18 +3513,19 @@
   "package": "https://thefirmwarehub.com/fw/moss1-1.0.fwsc",
   "repo": "https://github.com/theowecker/fm1-moss",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "moss1-1.0.rfm1"
  },
  {
   "id": "ruido",
   "name": "Ruido",
-  "version": "0.7.3",
+  "version": "0.8.0",
   "author": "Miguel Hernández Domenech",
   "license": "GPL-3.0",
   "about": "Ruido is a 4-oscillator drone and noise synthesizer firmware for the M-VAVE FM-1 with coupled voices, dual resonant filters, scene morphing, and pressure-sensitive performance effects. Designed as a dry stereo sound source for external pedals and modular setups.",
-  "package": "https://thefirmwarehub.com/fw/ruido-0.7.3.fwsc",
+  "package": "https://thefirmwarehub.com/fw/ruido-0.8.0.fwsc",
   "repo": "https://github.com/miguelhd/ruido",
-  "date": "2026-11-23",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "ruido-0.7.2.rfm1"
  },
@@ -3494,7 +3552,8 @@
   "package": "https://thefirmwarehub.com/fw/ambpond-0.1.2.fwsc",
   "repo": "https://github.com/superxor/amb-pond",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ambpond-0.1.2.rfm1"
  },
  {
   "id": "morse",
@@ -3549,13 +3608,13 @@
  {
   "id": "fm1tonic",
   "name": "FM1 TONIC",
-  "version": "1.8e",
+  "version": "1.8h",
   "author": "Luigi Rossi",
   "license": "GPL-3.0",
   "about": "A Microtonic-style drum machine for the FM-1, nothing sampled: eight tracks with their own sound engine, step sequencer with p-locks and chance, patterns, song mode, reverb, delay, sidechain, MIDI and CC. Try it in your browser first.",
-  "package": "https://thefirmwarehub.com/fw/fm1tonic-1.8e.fwsc",
+  "package": "https://thefirmwarehub.com/fw/fm1tonic-1.8h.fwsc",
   "repo": "https://github.com/luigirossi-music/fm1-tonic",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
@@ -3573,14 +3632,15 @@
  {
   "id": "plissken",
   "name": "Plissken",
-  "version": "0.31",
+  "version": "0.32",
   "author": "OscarDad",
   "license": "MPL-2.0",
   "about": "A seven-part FM-1 soundtrack sketch: play Juno-style synth, piano, Pro One-style synth, guitar, bass and LM-1 drums, with CS-50 and CS-80-inspired sounds, chord modes and phrase recording.",
-  "package": "https://thefirmwarehub.com/fw/plissken-0.31.fwsc",
+  "package": "https://thefirmwarehub.com/fw/plissken-0.32.fwsc",
   "repo": "https://github.com/dustekin/plissken",
-  "date": "2026-11-22",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "plissken-0.31.rfm1"
  },
  {
   "id": "sy1",
@@ -3617,7 +3677,8 @@
   "package": "https://thefirmwarehub.com/fw/zenith1-1.0.fwsc",
   "repo": "https://github.com/sparky480v/zenith-1",
   "date": "2026-11-18",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "zenith1-1.0.rfm1"
  },
  {
   "id": "u0u",
@@ -3683,13 +3744,13 @@
  {
   "id": "valle",
   "name": "Vallée",
-  "version": "0.9.1-alpha",
+  "version": "0.9-alpha",
   "author": "tammygucci",
   "license": "GPL-3.0",
-  "about": "An esoteric moodbox. Write your own songs, or let the alchemist conjure one whole. Cast THE SPELL to perform it live, each key a part of the song. Summon a being to improvise in your chords, and pour the mix through the ALEMBIC, a retro color engine. Built on Skiff by illuminus5.",
-  "package": "https://thefirmwarehub.com/fw/valle-0.9.1-alpha.fwsc",
+  "about": "An esoteric moodbox. Write your own songs, or let the alchemist conjure one whole. Cast THE SPELL to perform it live, each key a part of the song. Summon a being to improvise in your chords, and pour the mix through the ALEMBIC, a retro color engine, or play it off a cassette, tape, VHS or vinyl…",
+  "package": "https://thefirmwarehub.com/fw/valle-0.9-alpha.fwsc",
   "repo": "https://github.com/tammygucci/valee",
-  "date": "2026-11-23",
+  "date": "2026-11-19",
   "chip": "new"
  },
  {
@@ -3726,7 +3787,8 @@
   "package": "https://thefirmwarehub.com/fw/sq80-128-test.fwsc",
   "repo": "https://github.com/leonardolopezchavira/sq80-fm1",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sq80-128-test.rfm1"
  },
  {
   "id": "loopheads",
@@ -3738,7 +3800,8 @@
   "package": "https://thefirmwarehub.com/fw/loopheads-0.1.2.fwsc",
   "repo": "https://github.com/jaak-stjaaques/LOOPHEADS-public",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "loopheads-0.1.2.rfm1"
  },
  {
   "id": "pingos1",
@@ -3763,7 +3826,8 @@
   "package": "https://thefirmwarehub.com/fw/metronome-0.4.fwsc",
   "repo": "https://github.com/daviddwlee84/fm1-metronome",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "metronome-0.4.rfm1"
  },
  {
   "id": "castletunia",
@@ -3775,7 +3839,8 @@
   "package": "https://thefirmwarehub.com/fw/castletunia-1.4.1.fwsc",
   "repo": "https://github.com/provostprovost/castletunia",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "castletunia-1.4.1.rfm1"
  },
  {
   "id": "tether",
@@ -3799,7 +3864,8 @@
   "package": "https://thefirmwarehub.com/fw/clairpiano-1.0.1.fwsc",
   "repo": "https://github.com/tokumine/fm1-claire-piano",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "clairpiano-1.0.1.rfm1"
  },
  {
   "id": "burgerstudiofm1",
@@ -3823,7 +3889,8 @@
   "package": "https://thefirmwarehub.com/fw/fm1800-0.12.5.fwsc",
   "repo": "https://github.com/morbious22/FM1-800",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fm1800-0.12.5.rfm1"
  },
  {
   "id": "viber",
@@ -3835,7 +3902,8 @@
   "package": "https://thefirmwarehub.com/fw/viber-1.2+0060a196.fwsc",
   "repo": "https://github.com/ant25fr/viber",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "viber-1.2.rfm1"
  },
  {
   "id": "sillage",
@@ -3847,7 +3915,8 @@
   "package": "https://thefirmwarehub.com/fw/sillage-2.2.2.fwsc",
   "repo": "https://github.com/lelacnoir-lab/Sillage",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sillage-2.2.2.rfm1"
  },
  {
   "id": "basssomething2",
@@ -3871,7 +3940,8 @@
   "package": "https://thefirmwarehub.com/fw/chordrun-2.6.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/CHORD_RUN",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "chordrun-2.6.rfm1"
  },
  {
   "id": "volna",
@@ -3883,7 +3953,8 @@
   "package": "https://thefirmwarehub.com/fw/volna-1.1.fwsc",
   "repo": "https://github.com/MaxMaximoff/volna",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "volna-1.1.rfm1"
  },
  {
   "id": "insertcoin",
@@ -3895,7 +3966,8 @@
   "package": "https://thefirmwarehub.com/fw/insertcoin-0.9.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/INSERT_COIN",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "insertcoin-0.9.rfm1"
  },
  {
   "id": "alter",
@@ -3912,14 +3984,15 @@
  {
   "id": "grainpiano",
   "name": "GRAIN PIANO",
-  "version": "1.4",
+  "version": "1.5",
   "author": "swtdr34mz",
   "license": "GPL-3.0",
   "about": "A granular grand piano: the Salamander grand broken into grains. 8 presets with two macros each, smart HOLD, backwards grains, halos, textures (rain, vinyl, sea), MEMORY, PULSE, key pressure and 15 scales, some between the keys.",
-  "package": "https://thefirmwarehub.com/fw/grainpiano-1.4.fwsc",
+  "package": "https://thefirmwarehub.com/fw/grainpiano-1.5.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/GRAIN_PIANO",
-  "date": "2026-11-24",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "grainpiano-1.4.rfm1"
  },
  {
   "id": "tangram",
@@ -3931,7 +4004,8 @@
   "repo": "https://github.com/Mr-Roboto/fm1-tangram",
   "date": "2026-11-21",
   "chip": "new",
-  "license": "GPL-2.0-or-later"
+  "license": "GPL-2.0-or-later",
+  "rfm1": "tangram-1.0.rfm1"
  },
  {
   "id": "shifl",
@@ -3960,38 +4034,40 @@
  {
   "id": "araminta",
   "name": "Araminta",
-  "version": "4.8",
+  "version": "4.9",
   "author": "Wulgaren",
   "license": "GPL-3.0",
   "about": "Synthesizer firmware for the M-VAVE FM-1. A Felucca 1.5.1 fork with free take, punch-ins, DRUM-X, 13 engines, and a chainable effects list.",
-  "package": "https://thefirmwarehub.com/fw/araminta-4.8+2f19d266.fwsc",
+  "package": "https://thefirmwarehub.com/fw/araminta-4.9.fwsc",
   "repo": "https://github.com/Wulgaren/Araminta",
-  "date": "2026-11-20",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {
   "id": "sixmachines",
   "name": "SIX MACHINES",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "author": "swtdr34mz",
   "license": "MPL-2.0",
   "about": "A performance drum machine in the spirit of the Elektron boxes and the LXR-02: six synthesized machines with an FM drum and cymbals, four macro knobs each that rest on sweetspots, p-locks, conditions, retrigs, a master with compressor, reverb and delay, and live pads, mutes and FX, MIDI clock and…",
-  "package": "https://thefirmwarehub.com/fw/sixmachines-0.1.6.fwsc",
+  "package": "https://thefirmwarehub.com/fw/sixmachines-0.1.7.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/SIX_MACHINES",
-  "date": "2026-11-23",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "sixmachines-0.1.6.rfm1"
  },
  {
   "id": "offworld",
   "name": "OFFWORLD",
-  "version": "0.4.3",
+  "version": "0.5.0",
   "author": "swtdr34mz",
   "license": "MPL-2.0",
   "about": "A drone synth in the spirit of 80s sci-fi film scores: colossal brass, endless reverb, rain on neon. Macro knobs on sweetspots, DRONE, EPIC, a low split the melody follows, GLIDE, key pressure, CUES, MEMORY, and eight night-city scenes on the screen that light up with your notes.",
-  "package": "https://thefirmwarehub.com/fw/offworld-0.4.3.fwsc",
+  "package": "https://thefirmwarehub.com/fw/offworld-0.5.0.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/OFFWORLD",
-  "date": "2026-11-24",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "offworld-0.4.3.rfm1"
  },
  {
   "id": "rhinotiger",
@@ -4003,7 +4079,8 @@
   "package": "https://thefirmwarehub.com/fw/rhinotiger-1.1.fwsc",
   "repo": "https://github.com/hacha/rhinotiger",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rhinotiger-1.1.rfm1"
  },
  {
   "id": "abyss",
@@ -4020,14 +4097,15 @@
  {
   "id": "strangersynth",
   "name": "STRANGER SYNTH",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "author": "swtdr34mz",
   "license": "MPL-2.0",
   "about": "A performance synth in the spirit of the 80s analogue film scores: walls of detuned saws, arps on either hand following MIDI clock, chords from one finger, a sidechain, a heartbeat as the groove, eight tape and VHS performance effects, LINK to a second FM-1 with SIX MACHINES. A small town at night…",
-  "package": "https://thefirmwarehub.com/fw/strangersynth-0.8.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/strangersynth-0.9.0.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/STRANGER_SYNTH",
-  "date": "2026-11-24",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "strangersynth-0.8.0.rfm1"
  },
  {
   "id": "flat20",
@@ -4039,7 +4117,8 @@
   "package": "https://thefirmwarehub.com/fw/flat20-0.3.2.fwsc",
   "repo": "https://github.com/thenewwazoo/FLAT-20",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "flat20-0.3.2.rfm1"
  },
  {
   "id": "mb1",
@@ -4051,7 +4130,8 @@
   "package": "https://thefirmwarehub.com/fw/mb1-0.25.1.fwsc",
   "repo": "https://github.com/leonardolopezchavira/minibrute-fm1",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mb1-0.25.1.rfm1"
  },
  {
   "id": "bourdon",
@@ -4068,14 +4148,15 @@
  {
   "id": "collapse",
   "name": "COLLAPSE",
-  "version": "0.3.2",
+  "version": "0.5.0",
   "author": "swtdr34mz",
   "license": "MPL-2.0",
   "about": "A physics drum machine inspired by Anukari: six instruments that are masses on springs (drum heads, snare wires, a cymbal plate, a bouncing ball, a resonator, a string), shaking each other, bouncing and drifting off the grid. MASS and CHAOS, per-instrument FM/GRAIN/FILTER, PITCH as time dilation…",
-  "package": "https://thefirmwarehub.com/fw/collapse-0.3.2.fwsc",
+  "package": "https://thefirmwarehub.com/fw/collapse-0.5.0.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/COLLAPSE",
-  "date": "2026-11-23",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "collapse-0.3.2.rfm1"
  },
  {
   "id": "mumble",
@@ -4087,19 +4168,21 @@
   "package": "https://thefirmwarehub.com/fw/mumble-0.1.1.fwsc",
   "repo": "https://github.com/kdziamura/fm1-mumble",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mumble-0.1.1.rfm1"
  },
  {
   "id": "mvaneyard",
   "name": "mvane yard",
-  "version": "0.15",
+  "version": "0.17",
   "author": "Enkerli",
   "license": "GPL-3.0",
   "about": "Chords from any of 4096 scales, qualities latched on the black keys as on Coral Flower; always recording, so a phrase becomes a recording after the fact, to loop, overdub and move to any scale; an arpeggiator; expressive sounds, its own light synth and Clipper's, with MPE in and out.",
-  "package": "https://thefirmwarehub.com/fw/mvaneyard-0.15.fwsc",
+  "package": "https://thefirmwarehub.com/fw/mvaneyard-0.17.fwsc",
   "repo": "https://github.com/Enkerli/mvane-yard",
-  "date": "2026-11-23",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "mvaneyard-0.15.rfm1"
  },
  {
   "id": "mightyarcade",
@@ -4111,32 +4194,34 @@
   "package": "https://thefirmwarehub.com/fw/mightyarcade-1.0.fwsc",
   "repo": "https://github.com/NickCulbertson/FM1-Mighty-Arcade",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mightyarcade-1.0.rfm1"
  },
  {
   "id": "a22",
   "name": "A22",
-  "version": "0.6.0",
+  "version": "0.7.1",
   "author": "A22",
   "license": "MIT",
   "about": "An FM workstation: fourteen engines (FM, electric piano, analog, wavetable, drums, 8-bit chip and more) with eight algorithms each, eight effects, a four-track tape with knob automation, a mixer, sequencers and colour vector graphics. Derived from h1 by Jake Handy.",
-  "package": "https://thefirmwarehub.com/fw/a22-0.6.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/a22-0.7.1.fwsc",
   "repo": "https://github.com/abektes/a22",
-  "date": "2026-11-25",
+  "date": "2026-11-26",
   "chip": "new",
   "rfm1": "a22-0.1.0.rfm1"
  },
  {
   "id": "prophet67",
   "name": "PROPHET-67",
-  "version": "1.4",
+  "version": "1.4.2",
   "author": "swtdr34mz",
   "license": "MPL-2.0",
-  "about": "A 7-voice analogue-style polysynth in the manner of the Sequential Prophet-6: two oscillators with continuously variable shape, hard sync and a sub-octave, a high-pass into a self-oscillating 4-pole low-pass, the classic POLY MOD, VINTAGE voice character (SELECT), VOICE SPREAD (ALGORITHM)…",
-  "package": "https://thefirmwarehub.com/fw/prophet67-1.4.fwsc",
+  "about": "A 7-voice analogue-style polysynth in the spirit of the classic American analogue polys: two oscillators with continuously variable shape, hard sync and a sub-octave, a high-pass into a self-oscillating 4-pole low-pass, the classic POLY MOD, VINTAGE voice character (SELECT), VOICE SPREAD…",
+  "package": "https://thefirmwarehub.com/fw/prophet67-1.4.2.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/PROPHET-67",
-  "date": "2026-11-24",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "prophet67-1.4.rfm1"
  },
  {
   "id": "rdpno",
@@ -4208,7 +4293,8 @@
   "package": "https://thefirmwarehub.com/fw/gwaan1-0.4.3.fwsc",
   "repo": "https://github.com/fedlic/fm1-gwaan1",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "gwaan1-0.4.3.rfm1"
  },
  {
   "id": "nanofreak",
@@ -4244,7 +4330,8 @@
   "package": "https://thefirmwarehub.com/fw/pvox-1.1-7869-fm1.fwsc",
   "repo": "https://github.com/HanzVolt/P-Vox",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "pvox-1.1-7869-fm1.rfm1"
  },
  {
   "id": "boopbox",
@@ -4271,6 +4358,18 @@
   "chip": "new"
  },
  {
+  "id": "ravefm2",
+  "name": "RAVE FM 2",
+  "version": "2.0",
+  "author": "Maxime",
+  "license": "GPL-3.0",
+  "about": "Early hardcore groovebox: 6 tracks (kick, break, 909, bass, lead, stab), 108 hardcore kicks, sliced breaks, rave leads and hoovers, 4 patterns, song mode and live FX on the keys: risers, drops, rolls, filters, mutes, tape stop.",
+  "package": "https://thefirmwarehub.com/fw/ravefm2-2.0.fwsc",
+  "repo": "https://github.com/MorrisKraken/ravefm2",
+  "date": "2026-11-21",
+  "chip": "new"
+ },
+ {
   "id": "gabberkix",
   "name": "GABBERKIX",
   "version": "1.1.0",
@@ -4280,7 +4379,8 @@
   "package": "https://thefirmwarehub.com/fw/gabberkix-1.1.0.fwsc",
   "repo": "https://github.com/ejtb76/gabberkix",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "gabberkix-1.1.0.rfm1"
  },
  {
   "id": "obscuraline",
@@ -4292,7 +4392,8 @@
   "package": "https://thefirmwarehub.com/fw/obscuraline-1.0.fwsc",
   "repo": "https://github.com/MammothCheese/obscuraline",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "obscuraline-1.0.rfm1"
  },
  {
   "id": "fmy262",
@@ -4304,7 +4405,8 @@
   "package": "https://thefirmwarehub.com/fw/fmy262-0.8.3.fwsc",
   "repo": "https://github.com/jpark-spec/fmy262",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmy262-0.8.3.rfm1"
  },
  {
   "id": "zodiac",
@@ -4316,55 +4418,60 @@
   "package": "https://thefirmwarehub.com/fw/zodiac-1.0.0.fwsc",
   "repo": "https://github.com/stephencummins/fm1-zodiac",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "zodiac-1.0.0.rfm1"
  },
  {
   "id": "rand",
   "name": "RAND",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "swtdr34mz",
   "license": "MPL-2.0",
   "about": "A raw percussion synth after the EDGE and DFAM: a Moog-style ladder filter, two VCOs with FM and sync, eight steps with a pitch and a velocity knob each, a clock that speeds up until the rhythm becomes a tone, and a patchbay on the keys with delay, reverb and crush.",
-  "package": "https://thefirmwarehub.com/fw/rand-1.0.1.fwsc",
+  "package": "https://thefirmwarehub.com/fw/rand-1.1.0.fwsc",
   "repo": "https://github.com/swtdr34mz-afk/RAND",
-  "date": "2026-11-25",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "rand-1.0.1.rfm1"
  },
  {
   "id": "fm1again",
   "name": "FM-1 Again",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "author": "PolarPatch",
   "license": "GPL-3.0",
   "about": "Warm, rhythmic electronic music on the FM-1. Eight garage and house grooves with chords pumping under the kick; electric piano, sung syllables or your own chopped sample on the keys; pads for stutters and tape stops; ARP builds and drops. A black and white poster screen.",
-  "package": "https://thefirmwarehub.com/fw/fm1again-1.0.4.fwsc",
+  "package": "https://thefirmwarehub.com/fw/fm1again-1.0.6.fwsc",
   "repo": "https://github.com/PolarPatch/FM-1-Again",
-  "date": "2026-11-25",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "fm1again-1.0.4.rfm1"
  },
  {
   "id": "stack",
   "name": "STACK",
-  "version": "4.01-beta",
+  "version": "4.13-beta",
   "author": "Maker Hip (Hippie Maker)",
   "license": "MPL-2.0",
-  "about": "Clock Anything. STACK is Maker Hip's own firmware for the FM-1: eight tracks, each one sound from 69 built-in sounds or a sample sent from the Burger Studio app, with DJ-style effects, ENV, LFO, EDIT and ARP per track, a 16-step sequencer, a looper on track 8, SAVE, and MIDI clock in or out over…",
-  "package": "https://thefirmwarehub.com/fw/stack-4.01-beta.fwsc",
+  "about": "Clock Anything. STACK is Maker Hip's own firmware for the FM-1: eight tracks, each one sound from 69 built-in sounds or a sample sent from the Burger Studio app, with DJ-style effects, a 3-band EQ, ENV, LFO, EDIT and ARP per track, a 16-step sequencer, a one-button looper on REC (up to 8 s, it…",
+  "package": "https://thefirmwarehub.com/fw/stack-4.13-beta.fwsc",
   "repo": "https://github.com/perawoga2-coder/stack",
-  "date": "2026-11-25",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "stack-4.01-beta.rfm1"
  },
  {
   "id": "afterimages",
   "name": "After Images",
-  "version": "3.1",
+  "version": "3.5",
   "author": "TheGrizard",
   "license": "MPL-2.0",
   "about": "Turns the FM-1 into an endless ambient machine. Press REC and it composes a new piece in key: four layers, eleven generative sequencers and twenty-five sound engines, with shimmer, echo and tape, three visuals, MIDI clock and USB audio. Play along on the keys.",
-  "package": "https://thefirmwarehub.com/fw/afterimages-3.1.fwsc",
+  "package": "https://thefirmwarehub.com/fw/afterimages-3.5.fwsc",
   "repo": "https://github.com/TheGrizard/After-Images",
-  "date": "2026-11-25",
-  "chip": "new"
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "afterimages-3.1.rfm1"
  },
  {
   "id": "telegram101",
@@ -4388,6 +4495,91 @@
   "package": "https://thefirmwarehub.com/fw/freitakt-1.0.1.fwsc",
   "repo": "https://github.com/StripedBear/freitakt",
   "date": "2026-11-25",
+  "chip": "new"
+ },
+ {
+  "id": "monsun",
+  "name": "MONSUN",
+  "version": "0.2.3",
+  "author": "swtdr34mz",
+  "license": "MPL-2.0",
+  "about": "A mono synth after the Dreadbox Typhon: a WAVE knob that fades through oscillator combinations up to FM, a 24 dB ladder filter, three modulators with several destinations each, distortion, chorus/ensemble/flanger, delay and reverbs, a 32-step sequencer and STORM for width.",
+  "package": "https://thefirmwarehub.com/fw/monsun-0.2.3.fwsc",
+  "repo": "https://github.com/swtdr34mz-afk/MONSUN",
+  "date": "2026-11-26",
+  "chip": "new"
+ },
+ {
+  "id": "fm1hero",
+  "name": "FM1-Hero",
+  "version": "0.1.4",
+  "author": "mlwilki",
+  "license": "GPL-3.0",
+  "about": "Falling-note MIDI piano trainer, rhythm game, and 6-voice 2-op FM synthesizer. Features Wait-for-Me melody practice, rhythm scoring with combos, separate Left and Right Hand modes, A-B section looping, key LED guidance, live recording, 16 built-in songs, and custom MIDI upload.",
+  "package": "https://thefirmwarehub.com/fw/fm1hero-0.1.4.fwsc",
+  "repo": "https://github.com/mlwilki/FM1-Hero",
+  "date": "2026-11-26",
+  "chip": "new"
+ },
+ {
+  "id": "ba55",
+  "name": "BA-55",
+  "version": "0.3.0",
+  "author": "swtdr34mz",
+  "license": "MPL-2.0",
+  "about": "A bassline after the Erica Synths DB-01, with only what the DB-01 has: one VCO with sub and noise, BBD detune, overdrive, a Polivoks-style LP/BP filter, a drone-capable VCA, an LFO with 10 shapes, and its 64-step sequencer with accent, slide, mod track, pitch envelope and probability per step…",
+  "package": "https://thefirmwarehub.com/fw/ba55-0.3.0.fwsc",
+  "repo": "https://github.com/swtdr34mz-afk/BA-55",
+  "date": "2026-11-26",
+  "chip": "new"
+ },
+ {
+  "id": "modularone",
+  "name": "Modular One",
+  "version": "0.4.3-beta",
+  "author": "Alexis Arakis (Bungle Society)",
+  "license": "GPL-3.0",
+  "about": "Modular One turns the FM-1 into a small film-scoring instrument: the sounds of the Modular Town plugin, a Game Boy green screen with a town that lives by day and night, a tape recorder with a sketchbook that keeps what you play, and a MIDI player. Simple and musical, made by a composer.",
+  "package": "https://thefirmwarehub.com/fw/modularone-0.4.3-beta.fwsc",
+  "repo": "https://github.com/bunglesociety/modular-one",
+  "date": "2026-11-26",
+  "chip": "new"
+ },
+ {
+  "id": "modularkoi",
+  "name": "Modular Koi",
+  "version": "0.1.3-beta",
+  "author": "Alexis Arakis (Bungle Society)",
+  "license": "GPL-3.0",
+  "about": "Modular Koi turns the FM-1 into a steel tongue drum played with your thumbs, held like a handheld console. Every note falls like a drop into a pond where koi swim; rain answers your phrases and night falls. A tape recorder keeps your sketches. Calm, made by a composer.",
+  "package": "https://thefirmwarehub.com/fw/modularkoi-0.1.3-beta.fwsc",
+  "repo": "https://github.com/bunglesociety/modular-koi",
+  "date": "2026-11-26",
+  "chip": "new",
+  "rfm1": "modularkoi-0.1.rfm1"
+ },
+ {
+  "id": "modularcompagnonfm1",
+  "name": "Modular Compagnon FM-1",
+  "version": "0.9.3-beta",
+  "author": "Alexis Arakis (Bungle Society)",
+  "license": "GPL-3.0",
+  "about": "Modular Compagnon on the FM-1: sixteen sounds from the Modular Town plugin, an arpeggiator that follows your DAW, a gliding echo, a tape that keeps your sketches, and a little companion living in the screen: a black cat, a fox, a robot or a goldfish. One control, one job.",
+  "package": "https://thefirmwarehub.com/fw/modularcompagnonfm1-0.9.3-beta.fwsc",
+  "repo": "https://github.com/bunglesociety/modular-compagnon-fm1",
+  "date": "2026-11-26",
+  "chip": "new"
+ },
+ {
+  "id": "modularlandscape",
+  "name": "Modular Landscape",
+  "version": "0.4.2",
+  "author": "Alexis Arakis (Bungle Society)",
+  "license": "GPL-3.0",
+  "about": "Modular Landscape turns the FM-1 into a bowed folk guitar, recorded by the composer for this instrument, with effects made for film music: sustain, breath, an octave below, a drone, distance, a mute, an echo. One sound, no menus. The screen shows the stereo image of what you play.",
+  "package": "https://thefirmwarehub.com/fw/modularlandscape-1-v0.4.2.fwsc",
+  "repo": "https://github.com/bunglesociety/modular-landscape",
+  "date": "2026-11-26",
   "chip": "new"
  },
  {

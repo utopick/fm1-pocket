@@ -168,6 +168,10 @@ try:
         assert fid, "no firmware on the list has " + os.path.basename(rfm1)
         js("const b = Uint8Array.from(atob(arguments[1]), c => c.charCodeAt(0)); kvPut('rfm1:' + arguments[0], { file: arguments[2], bytes: b })", fid, base64.b64encode(open(rfm1, "rb").read()).decode(), os.path.basename(rfm1))
         assert "fwc" in js("return document.querySelector('#fwList').innerHTML") and js("return document.querySelectorAll('#fwList em.fast').length") > 50, "no FAST tags on the cards"
+        n = js("return document.querySelectorAll('#fwList .fwc').length")  # the filter: with, without, every one
+        got = []
+        for _ in range(3): js("document.querySelector('#fastOnly').click()"); got.append(js("return [document.querySelectorAll('#fwList .fwc').length, document.querySelectorAll('#fwList .fwc em.fast').length]"))
+        assert 0 <= got[0][0] - got[0][1] <= 2 and got[0][1] > 50 and got[1][1] == 0 and got[0][0] + got[1][0] <= n + 2 and got[2][0] == n, "the fast-build filter: %s of %d" % (got, n)
         js("use(arguments[0])", fid)
         for _ in range(40):
             time.sleep(0.5)
