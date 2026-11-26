@@ -9,7 +9,7 @@ Sources (both read as they are, nothing is scraped):
   2. the Firmware Hub's catalog.json (https://thefirmwarehub.com/catalog.json), which has firmwares the first one lacks
 A hub entry becomes {id, name, version, author, license, about, package, repo, date, chip}; "chip" is the hub's reading of the
 package: "new" saves on FM-1s with the newer flash chip (0xB36014), "any" does not check the chip, "old" knows only the first FM-1s.
-Each firmware that RemoteFM1FW's release (https://github.com/Quixotic7/RemoteFM1FW) has as an .rfm1 also gets "rfm1",
+Each firmware that RemoteFM1FW's release (or, failing that, TP/fm1-rfm1/out, our own converter's builds) (https://github.com/Quixotic7/RemoteFM1FW) has as an .rfm1 also gets "rfm1",
 that file's name: the firmware's own code built for a computer as WebAssembly, which the page runs instead of emulating the chip.
 The hub's package and version replace fm1-emu's pinned ones, because the hub removes old files. Then it runs the mirror's
 own script (TP/fm1-firmwares/update.py, next to this repo), which downloads the new packages there and commits; the page
@@ -31,6 +31,7 @@ EXTRA = [{"id": "shrub", "name": "SHRUB", "version": "1.39", "author": "Steve Du
           "about": "A stripped-down version of Serum: two wavetable oscillators, Serum's filters, envelopes and LFOs, a 16-slot modulation matrix, an effects rack, an arpeggiator and a motion sequencer. Its guide and editor are at shrub.audio.",
           "package": "https://shrub.audio/editor/firmware/SHRUB.fwsc", "date": "2026-11-26", "extra": True}]
 RFM1 = "https://api.github.com/repos/Quixotic7/RemoteFM1FW/releases/latest"
+OWN_RFM1 = os.path.join(here, "..", "..", "fm1-rfm1", "out")  # our own builds (TP/fm1-rfm1's convert.py), for firmwares the release lacks
 LICENCE = {"emb": "GPL-3.0", "tangram": "GPL-2.0-or-later", "fm1chimeravocal": "MIT + MPL-2.0 + BSD (CMUdict)", "vesper": "GPL-3.0 + SDK exception"}
 
 
@@ -60,6 +61,13 @@ def rfm1s(out):
         g = m and next((by[k] for k in (m[1], norm(m[1]), "fm1" + norm(m[1]), norm(m[1]) + "fm1") if k in by), None)  # chimeravocal: fm1chimeravocal
         if g and re.fullmatch(r"[\w.-]{1,80}\.rfm1", n): g["rfm1"] = n
     print("rfm1: %d of the release's %d builds match a firmware on the list" % (sum("rfm1" in g for g in out), len(names)))
+    own = sorted(os.listdir(OWN_RFM1)) if os.path.isdir(OWN_RFM1) else []
+    ids, n = {g["id"]: g for g in out}, 0
+    for name in own:  # <id>-<version>.rfm1; the release's build wins where both exist
+        m = re.match(r"(.+?)-(\d[\w.-]*)\.rfm1$", name)
+        g = m and ids.get(m[1])
+        if g and "rfm1" not in g and re.fullmatch(r"[\w.-]{1,80}\.rfm1", name): g["rfm1"] = name; n += 1
+    if own: print("rfm1: %d more from our own builds (%s)" % (n, os.path.normpath(OWN_RFM1)))
 
 
 def main():
