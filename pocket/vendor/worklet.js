@@ -357,3 +357,109 @@ class Fm1Reader extends AudioWorkletProcessor {
   }
 }
 registerProcessor("fm1-reader", Fm1Reader);
+
+// A fast build, an .rfm1: the firmware's own code compiled to WebAssembly for a computer (vendor/rfm1.js, which build.py puts
+// before this file). There is no chip to emulate, so it runs at full speed. It takes the same messages as Fm1 and sends the
+// same ones back: each quantum pulls 128 frames, and the device's clock (one millisecond at a time) runs as far as they need.
+// Saves are the whole flash image, sent when the firmware's dirty counter moves (at most once a second) and when asked.
+// An AudioWorkletGlobalScope may have no TextDecoder, and rfm1.js's fallback decodes a whole text in one call, which overflows the
+// stack on a long licence (the M-VAVE SDK builds': dx747, vesper). This one decodes UTF-8 in pieces.
+if (typeof TextDecoder === "undefined") globalThis.TextDecoder = class {
+  decode(b) {
+    let s = "";
+    for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+    try { return decodeURIComponent(escape(s)); } catch { return s; }
+  }
+};
+const R_LABEL = [12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // the page's button ids (OCT- OCT+ FX ... REC) to rfm1's labels (FX ... REC OCT- OCT+)
+const R_ROLE = [0, 1, 3, 4, 5, 6, 2]; // the page's encoders (the matrix's: SELECT ALGORITHM KNOB1-4 PRESETS) to rfm1's roles (SELECT ALGORITHM PRESETS KNOB1-4)
+class Rfm1Proc extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    Object.assign(this, { core: null, token: 0, st: 0, data: [] });
+    this.port.onmessage = (e) => this.message(e.data);
+  }
+
+  async message(m) {
+    const core = this.core;
+    if (m.type === "boot") {
+      const token = ++this.token;
+      this.core = null;
+      try {
+        const c = await Rfm1.Core.create(Rfm1.parse(new Uint8Array(m.rfm1)));
+        if (token !== this.token) return;
+        c.boot(m.flash ? new Uint8Array(m.flash) : null);
+        c.onhalt = (code, err) => this.port.postMessage({ type: "error", seq: this.seq, fatal: true, message: "the firmware stopped (" + (err && err.message ? err.message : "exit " + (code & 0xff)) + ")" });
+        Object.assign(this, { core: c, seq: m.seq, paused: false, lcdW: -1, saved: c.flashDirty(), savedAt: now(), busy: 0, worst: 0, quanta: 0, frames: 0, ms0: 0 });
+        this.port.postMessage({ type: "booted", seq: m.seq, rfm1: c.info, board: 0, threaded: false, base: null, flash: null });
+      } catch (err) {
+        if (token === this.token) this.port.postMessage({ type: "error", seq: m.seq, rfm1: true, message: "boot: " + (err && err.message ? err.message : err) });
+      }
+    } else if (m.type === "cancel-boot") (++this.token, (this.core = null));
+    else if (m.type === "snapshot") {
+      if (!core || m.seq !== this.seq) return this.port.postMessage({ type: "snapshot", seq: m.seq, request: m.request, unavailable: true });
+      this.save(m.request);
+      if (m.pause) this.paused = true;
+    } else if (!core) return;
+    else if (m.type === "resume") this.paused = false;
+    else if (m.type === "key") m.id < 14 ? core.button(R_LABEL[m.id], m.down) : core.key(m.id - 14, m.down, 100);
+    else if (m.type === "enc") core.turn(R_ROLE[m.enc], m.clicks);
+    else if (m.type === "pot") core.master(m.value);
+    else if (m.type === "midi") {
+      // bytes into whole messages (running status kept; system and SysEx messages dropped: rfm1_midi_in takes channel messages here)
+      for (const b of m.bytes) {
+        if (b >= 0xf8) continue;
+        if (b & 0x80) ((this.st = b < 0xf0 ? b : 0), (this.data = []));
+        else if (this.st && this.data.push(b) === ((this.st & 0xe0) === 0xc0 ? 1 : 2)) (core.midi(this.st, this.data[0], this.data[1] || 0), (this.data = []));
+      }
+    }
+  }
+
+  save(request) {
+    const flash = this.core.flashImage(true);
+    this.saved = this.core.flashDirty();
+    this.savedAt = now();
+    if (flash) this.port.postMessage({ type: "snapshot", seq: this.seq, request, flash }, [flash.buffer]);
+    else this.port.postMessage({ type: "snapshot", seq: this.seq, request, unavailable: true });
+  }
+
+  process(_inputs, outputs) {
+    const core = this.core, out = outputs[0];
+    if (!core || this.paused || core.halted) return true;
+    const n = out[0].length, t0 = now();
+    if (!this.buf || this.buf.length !== 2 * n) this.buf = new Float32Array(2 * n);
+    const b = core.pull(n, this.buf);
+    for (let i = 0; i < n; i++) (out[0][i] = b[2 * i]), out[1] && (out[1][i] = b[2 * i + 1]);
+    const took = now() - t0;
+    this.busy += took;
+    this.worst = Math.max(this.worst, took);
+    this.quanta++;
+    this.frames += n;
+    if (this.frames >= sampleRate / 30) this.report();
+    return true;
+  }
+
+  report() {
+    const core = this.core, w = core.lcdWrites();
+    let lcd = null;
+    if (w !== this.lcdW) { // RGB565, high byte first, into the page's 16-bit pixels
+      this.lcdW = w;
+      const s = core.lcdBytes();
+      lcd = new Uint16Array(57600);
+      for (let i = 0; i < 57600; i++) lcd[i] = (s[2 * i] << 8) | s[2 * i + 1];
+    }
+    // the lights: rfm1 gives 0..255; the page reads 0.08 as fully lit (the emulator's LEDs are driven about 1 tick in 11)
+    const l = core.leds(), leds = new Float32Array(41);
+    l.buttons.forEach((v, label) => (leds[label < 12 ? label + 2 : label - 12] = (v / 255) * 0.08));
+    l.keys.forEach((v, k) => (leds[14 + k] = (v / 255) * 0.08));
+    leds[12] = Math.max(leds[12], (l.playGreen / 255) * 0.08);
+    if (core.flashDirty() !== this.saved && now() - this.savedAt >= 1000) this.save(undefined);
+    const transfer = [leds.buffer];
+    if (lcd) transfer.push(lcd.buffer);
+    this.port.postMessage({ type: "frame", seq: this.seq, lcd, leds, ms: core.ms, short: 0, held: 0, halted: core.halted, pads: null, playing: true,
+      jit: { regions: 0, failed: 0, error: "", bytes: 0, tableSlots: 0, compileMs: 0, compileMaxMs: 0 },
+      busy: this.busy, worst: this.worst, emulated: core.ms - this.ms0, idle: 0, starved: 0, core1: -1, started: 1, quanta: this.quanta, frames: this.frames / this.quanta, rfm1: true }, transfer);
+    Object.assign(this, { busy: 0, worst: 0, quanta: 0, frames: 0, ms0: core.ms });
+  }
+}
+registerProcessor("rfm1", Rfm1Proc);

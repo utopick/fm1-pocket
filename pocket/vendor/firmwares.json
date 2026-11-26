@@ -32,7 +32,8 @@
   "installer": "https://hugelton.github.io/Felucca/webapp/installer/",
   "hub": "felucca",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "felucca-1.8.2.rfm1"
  },
  {
   "id": "felucca-salt",
@@ -92,7 +93,8 @@
   "minMhz": 80,
   "minMhzPackage": "a949a6a2a1ced8b3",
   "date": "2026-11-06",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "amb-1.3.2.rfm1"
  },
  {
   "id": "amenity",
@@ -105,7 +107,8 @@
   "package": "https://thefirmwarehub.com/fw/amenity-2.1.1.fwsc",
   "hub": "amenity",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "amenity-2.1.1.rfm1"
  },
  {
   "id": "april",
@@ -129,7 +132,8 @@
   "package": "https://thefirmwarehub.com/fw/arctic-2.1.6.fwsc",
   "hub": "arctic",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "arcticscream-2.1.4.rfm1"
  },
  {
   "id": "arcturus",
@@ -295,7 +299,8 @@
   "package": "https://thefirmwarehub.com/fw/berlinan-0.5.1.fwsc",
   "hub": "berlinan",
   "date": "2026-10-27",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "berlinan-0.5.1.rfm1"
  },
  {
   "id": "bigorna",
@@ -377,7 +382,8 @@
   "package": "https://thefirmwarehub.com/fw/bytemania-1.3.3.fwsc",
   "hub": "bytemania",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "bytemania-1.3.2.rfm1"
  },
  {
   "id": "caravel",
@@ -390,7 +396,8 @@
   "package": "https://thefirmwarehub.com/fw/caravel-1.2.0.fwsc",
   "hub": "caravel",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "caravel-1.1.0.rfm1"
  },
  {
   "id": "carnac",
@@ -405,7 +412,8 @@
   "minMhz": 160,
   "minMhzPackage": "6d81a8d1186fecc8",
   "date": "2026-10-29",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "carnacos-0.9.6.rfm1"
  },
  {
   "id": "chipbox",
@@ -418,7 +426,8 @@
   "package": "https://thefirmwarehub.com/fw/chipbox-1.7.0-signatureshowcase.fwsc",
   "hub": "chipbox",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "chipbox-1.5.5.rfm1"
  },
  {
   "id": "choppah",
@@ -446,7 +455,8 @@
   "installer": "https://quixotic7.github.io/ChoralRootFM1/",
   "hub": "choralroot",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "choralroot-0.46.rfm1"
  },
  {
   "id": "chord",
@@ -487,7 +497,8 @@
   "package": "https://thefirmwarehub.com/fw/clipper-1.3.1.fwsc",
   "hub": "clipper",
   "date": "2026-11-04",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "clipper-1.3.1.rfm1"
  },
  {
   "id": "coqui",
@@ -517,7 +528,8 @@
   "minMhz": 80,
   "minMhzPackage": "d87d6327e0f98000",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "coralflower-0.7.1.rfm1"
  },
  {
   "id": "cord",
@@ -559,7 +571,8 @@
   "installer": "https://charlesvestal.github.io/fm1-ctl/install/",
   "hub": "ctl",
   "date": "2026-11-06",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ctl-1.0.3.rfm1"
  },
  {
   "id": "cultbox",
@@ -572,7 +585,8 @@
   "package": "https://thefirmwarehub.com/fw/cultbox-1.2.fwsc",
   "hub": "cultbox",
   "date": "2026-11-05",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "cultbox-1.2.rfm1"
  },
  {
   "id": "cutador",
@@ -682,7 +696,8 @@
   "package": "https://thefirmwarehub.com/fw/drift-0.9.6.fwsc",
   "hub": "drift",
   "date": "2026-11-02",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "drift-0.9.6.rfm1"
  },
  {
   "id": "drumlab",
@@ -695,7 +710,8 @@
   "package": "https://thefirmwarehub.com/fw/drumlab-1.0.0-graduationday.fwsc",
   "hub": "drumlab",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "drumlab-0.1.3-beta.rfm1"
  },
  {
   "id": "dub",
@@ -710,7 +726,8 @@
   "minMhz": 100,
   "minMhzPackage": "19cc9649583192d0",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "dub-1.4.3.rfm1"
  },
  {
   "id": "duell",
@@ -723,7 +740,8 @@
   "package": "https://thefirmwarehub.com/fw/duell-1.3.7.fwsc",
   "hub": "duell",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "duell-1.3.6.rfm1"
  },
  {
   "id": "dungeontracker",
@@ -736,7 +754,8 @@
   "package": "https://thefirmwarehub.com/fw/dungeontracker-1.5.fwsc",
   "hub": "dungeontracker",
   "date": "2026-11-04",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "dungeontracker-1.5.rfm1"
  },
  {
   "id": "dx747",
@@ -749,7 +768,8 @@
   "package": "https://thefirmwarehub.com/fw/dx747-0.1.fwsc",
   "hub": "dx747",
   "date": "2026-11-06",
-  "chip": "any"
+  "chip": "any",
+  "rfm1": "dx747-0.1.rfm1"
  },
  {
   "id": "echofield",
@@ -764,7 +784,8 @@
   "minMhz": 80,
   "minMhzPackage": "f349acd34d4e56bf",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "echofield-0.2.15.rfm1"
  },
  {
   "id": "elixir",
@@ -818,7 +839,8 @@
   "package": "https://thefirmwarehub.com/fw/etch-1.88.fwsc",
   "hub": "etch",
   "date": "2026-10-30",
-  "chip": "any"
+  "chip": "any",
+  "rfm1": "etch-1.88.rfm1"
  },
  {
   "id": "fart",
@@ -860,7 +882,8 @@
   "minMhz": 80,
   "minMhzPackage": "c77036f22fb85a09",
   "date": "2026-11-09",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fimba-0.7.0.rfm1"
  },
  {
   "id": "fizz",
@@ -873,7 +896,8 @@
   "package": "https://thefirmwarehub.com/fw/fizz-0.13.0.fwsc",
   "hub": "fizz",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fizz-0.13.0.rfm1"
  },
  {
   "id": "flyfish",
@@ -967,7 +991,8 @@
   "minMhz": 120,
   "minMhzPackage": "86de2ecc0fbba397",
   "date": "2026-11-08",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "trax-0.9.5.rfm1"
  },
  {
   "id": "fmdj",
@@ -993,7 +1018,8 @@
   "package": "https://thefirmwarehub.com/fw/fmel-1.3.fwsc",
   "hub": "fmel",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmel1-1.3.rfm1"
  },
  {
   "id": "fmfam",
@@ -1019,7 +1045,8 @@
   "package": "https://thefirmwarehub.com/fw/fmini-2.6.0.fwsc",
   "hub": "fmini",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmini-2.6.0.rfm1"
  },
  {
   "id": "fomajam",
@@ -1046,7 +1073,8 @@
   "installer": "https://charlesvestal.github.io/fm1-fomni/",
   "hub": "fomni",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fomni-0.5.rfm1"
  },
  {
   "id": "frasil",
@@ -1061,7 +1089,8 @@
   "minMhz": 80,
   "minMhzPackage": "493fed404326783c",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "frasil-3.4.1.rfm1"
  },
  {
   "id": "frodhes",
@@ -1130,7 +1159,8 @@
   "minMhz": 100,
   "minMhzPackage": "92630ae278d4a0b4",
   "date": "2026-10-24",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "ghoulbox-2.4.rfm1"
  },
  {
   "id": "golana",
@@ -1143,7 +1173,8 @@
   "package": "https://thefirmwarehub.com/fw/golana-1.3.fwsc",
   "hub": "golana",
   "date": "2026-10-26",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "golana-1.3.rfm1"
  },
  {
   "id": "golanadz",
@@ -1169,7 +1200,8 @@
   "package": "https://thefirmwarehub.com/fw/grimm-2.0.2.fwsc",
   "hub": "grimm",
   "date": "2026-11-03",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "grimm-2.0.2.rfm1"
  },
  {
   "id": "guitchordi",
@@ -1182,7 +1214,8 @@
   "package": "https://thefirmwarehub.com/fw/guitchordi-0.1.0-beta.1.fwsc",
   "hub": "guitchordi",
   "date": "2026-10-26",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "guitchordi-0.1.0-beta.1.rfm1"
  },
  {
   "id": "guru600",
@@ -1208,7 +1241,8 @@
   "package": "https://thefirmwarehub.com/fw/hawkchua-2.1.7.fwsc",
   "hub": "hawkchua",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hawkchua-2.1.7.rfm1"
  },
  {
   "id": "hera",
@@ -1237,7 +1271,8 @@
   "installer": "https://deadactive.github.io/hortator/webapp/installer/",
   "hub": "hortator",
   "date": "2026-11-03",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hortator-1.0.1.rfm1"
  },
  {
   "id": "hortator-bt",
@@ -1278,7 +1313,8 @@
   "minMhz": 120,
   "minMhzPackage": "7b858f2acb7c9913",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hyp1-1.5.54.rfm1"
  },
  {
   "id": "j6",
@@ -1348,7 +1384,8 @@
   "package": "https://thefirmwarehub.com/fw/jiant-V10.8.48.fwsc",
   "hub": "jiant",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "jiant-10.26.rfm1"
  },
  {
   "id": "karma",
@@ -1361,7 +1398,8 @@
   "package": "https://thefirmwarehub.com/fw/karma-3.1.6.fwsc",
   "hub": "karma",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "karma-3.1.5.rfm1"
  },
  {
   "id": "kawa",
@@ -1441,7 +1479,8 @@
   "package": "https://thefirmwarehub.com/fw/krisjangle-0.15.fwsc",
   "hub": "krisjangle",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "kris_jangle-0.15.rfm1"
  },
  {
   "id": "kwasub",
@@ -1456,7 +1495,8 @@
   "minMhz": 240,
   "minMhzPackage": "226cfda1f63e487d",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "kwasub-1.1.03.rfm1"
  },
  {
   "id": "loafbreaker",
@@ -1469,7 +1509,8 @@
   "package": "https://thefirmwarehub.com/fw/loafbreaker-0.9.80.fwsc",
   "hub": "loafbreaker",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "loafbreaker-0.9.73.rfm1"
  },
  {
   "id": "loom",
@@ -1482,7 +1523,8 @@
   "package": "https://thefirmwarehub.com/fw/loom-0.18.2.fwsc",
   "hub": "loom",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "loom-0.18.2.rfm1"
  },
  {
   "id": "loomfm1",
@@ -1570,7 +1612,8 @@
   "minMhz": 100,
   "minMhzPackage": "5d52951efcc1d44c",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "matryoshka-1.24.1.rfm1"
  },
  {
   "id": "mc1",
@@ -1600,7 +1643,8 @@
   "minMhz": 80,
   "minMhzPackage": "8555dc54670a9e39",
   "date": "2026-11-02",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "melodee-1.6.1.rfm1"
  },
  {
   "id": "midimon",
@@ -1626,7 +1670,8 @@
   "package": "https://thefirmwarehub.com/fw/mightyarp-1.5.fwsc",
   "hub": "mightyarp",
   "date": "2026-11-16",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mightyarp-1.5.rfm1"
  },
  {
   "id": "mikufm",
@@ -1667,7 +1712,8 @@
   "package": "https://thefirmwarehub.com/fw/minitone-1.0.5.fwsc",
   "hub": "minitone",
   "date": "2026-10-26",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "minitone-1.0.5.rfm1"
  },
  {
   "id": "mnm1",
@@ -1680,7 +1726,8 @@
   "package": "https://thefirmwarehub.com/fw/mnm1-1.0.1.fwsc",
   "hub": "mnm1",
   "date": "2026-10-27",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "mnm1-1.0.1.rfm1"
  },
  {
   "id": "modelar",
@@ -1693,7 +1740,8 @@
   "package": "https://thefirmwarehub.com/fw/modelar-0.3.fwsc",
   "hub": "modelar",
   "date": "2026-10-22",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "modelar-0.3.rfm1"
  },
  {
   "id": "monk",
@@ -1719,7 +1767,8 @@
   "package": "https://thefirmwarehub.com/fw/mono2k-1.13.fwsc",
   "hub": "mono2k",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mono2k-1.13.rfm1"
  },
  {
   "id": "monohull",
@@ -1749,7 +1798,8 @@
   "minMhz": 80,
   "minMhzPackage": "25a3ec0014647460",
   "date": "2026-11-21",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "mope1-0.5.0.rfm1"
  },
  {
   "id": "morpheus",
@@ -1777,7 +1827,8 @@
   "package": "https://thefirmwarehub.com/fw/mpyre-1.0.3.fwsc",
   "hub": "mpyre",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mpyre-1.0.3.rfm1"
  },
  {
   "id": "mutable",
@@ -1792,7 +1843,8 @@
   "minMhz": 160,
   "minMhzPackage": "a3f0ff7a23dd377d",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mutabledreams-2.3.rfm1"
  },
  {
   "id": "mvance",
@@ -1805,7 +1857,8 @@
   "package": "https://thefirmwarehub.com/fw/mvance-2.8.1.fwsc",
   "hub": "mvance",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mvance-2.7.1.rfm1"
  },
  {
   "id": "mycelium",
@@ -1833,7 +1886,8 @@
   "minMhz": 120,
   "minMhzPackage": "46693845a35291da",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "nachtfahrt-1.0.2.rfm1"
  },
  {
   "id": "nauclerus",
@@ -1861,7 +1915,8 @@
   "minMhz": 100,
   "minMhzPackage": "1fd94b0352e587c2",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "niagaradrift-0.3.1.rfm1"
  },
  {
   "id": "nmsfm",
@@ -1904,7 +1959,8 @@
   "minMhz": 100,
   "minMhzPackage": "3e13b127c8cb1094",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "obervave-3.5.2.rfm1"
  },
  {
   "id": "ombak",
@@ -1946,7 +2002,8 @@
   "installer": "https://dspaudio.github.io/orbit/",
   "hub": "orbit",
   "date": "2026-11-04",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "orbit-1.0.0.rfm1"
  },
  {
   "id": "paperlagoon",
@@ -1974,7 +2031,8 @@
   "package": "https://thefirmwarehub.com/fw/patchwerk-1.0.3.fwsc",
   "hub": "patchwerk",
   "date": "2026-11-08",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "patchwerk-1.0.3.rfm1"
  },
  {
   "id": "penumbra",
@@ -1989,7 +2047,8 @@
   "minMhz": 80,
   "minMhzPackage": "314fa0d32c3d0236",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "penumbra-1.9.rfm1"
  },
  {
   "id": "perf1",
@@ -2004,7 +2063,8 @@
   "minMhz": 100,
   "minMhzPackage": "f006cc6dd54eb867",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "perf1-0.17.0.rfm1"
  },
  {
   "id": "pigeon",
@@ -2017,7 +2077,8 @@
   "package": "https://thefirmwarehub.com/fw/pigeon-0.5.0-beta.1.fwsc",
   "hub": "pigeon",
   "date": "2026-10-21",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "pigeon-0.4.1.rfm1"
  },
  {
   "id": "piterfly",
@@ -2112,7 +2173,8 @@
   "minMhz": 80,
   "minMhzPackage": "322701e7dd9d9a52",
   "date": "2026-11-08",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "purplemonkey-0.12.rfm1"
  },
  {
   "id": "quartet",
@@ -2155,7 +2217,8 @@
   "minMhz": 80,
   "minMhzPackage": "22156c96381ff78f",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rainbow-1.1.5-rb.rfm1"
  },
  {
   "id": "rambeaver",
@@ -2181,7 +2244,8 @@
   "package": "https://thefirmwarehub.com/fw/ravel-1.46.0.fwsc",
   "hub": "ravel",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ravel-1.45.0.rfm1"
  },
  {
   "id": "remotefm1",
@@ -2194,7 +2258,8 @@
   "package": "https://thefirmwarehub.com/fw/remotefm1-0.4.0.fwsc",
   "hub": "remotefm1",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "remotefm1-0.4.0.rfm1"
  },
  {
   "id": "rhythmer",
@@ -2207,7 +2272,8 @@
   "package": "https://thefirmwarehub.com/fw/rhythmer-0.1.1-beta3.fwsc",
   "hub": "rhythmer",
   "date": "2026-11-07",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rhythmer-0.1.0-beta.2.rfm1"
  },
  {
   "id": "rupture",
@@ -2222,7 +2288,8 @@
   "minMhz": 80,
   "minMhzPackage": "4255049edb3003c1",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rupture-2.0.14.rfm1"
  },
  {
   "id": "s1vave",
@@ -2237,7 +2304,8 @@
   "minMhz": 100,
   "minMhzPackage": "2139328149f91b87",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "s1vave-2.0.1.rfm1"
  },
  {
   "id": "sardine",
@@ -2308,7 +2376,8 @@
   "package": "https://thefirmwarehub.com/fw/fm1sid-0.3.fwsc",
   "hub": "fm1sid",
   "date": "2026-10-25",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "sid-0.3.rfm1"
  },
  {
   "id": "sid1",
@@ -2323,7 +2392,8 @@
   "minMhz": 80,
   "minMhzPackage": "22b9e3d7f517da61",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sid1-1.0.1.rfm1"
  },
  {
   "id": "sidj",
@@ -2336,7 +2406,8 @@
   "package": "https://thefirmwarehub.com/fw/sidj-1.5.1.fwsc",
   "hub": "sidj",
   "date": "2026-11-07",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sidj-1.5.1.rfm1"
  },
  {
   "id": "sidou",
@@ -2349,7 +2420,8 @@
   "package": "https://thefirmwarehub.com/fw/sidou-2.0.0.fwsc",
   "hub": "sidou",
   "date": "2026-11-18",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sidou-2.0.0.rfm1"
  },
  {
   "id": "sill",
@@ -2378,7 +2450,8 @@
   "installer": "https://illuminus5.github.io/skiff/webapp/installer/",
   "hub": "skiff",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "skiff-2.7.rfm1"
  },
  {
   "id": "sloop",
@@ -2392,7 +2465,8 @@
   "installer": "https://isod89.github.io/sloop-fm1/webapp/installer/",
   "hub": "sloop",
   "date": "2026-11-04",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sloop-2.8.5.rfm1"
  },
  {
   "id": "sloop-alg",
@@ -2468,7 +2542,8 @@
   "package": "https://thefirmwarehub.com/fw/smileyface-1.3.0-tutorialtime.fwsc",
   "hub": "smileyface",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "smileyface-1.1.5.rfm1"
  },
  {
   "id": "spampy",
@@ -2494,7 +2569,8 @@
   "package": "https://thefirmwarehub.com/fw/spellbox-0.3.fwsc",
   "hub": "spellbox",
   "date": "2026-10-28",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "spellbox-0.3.rfm1"
  },
  {
   "id": "splitmilk",
@@ -2548,7 +2624,8 @@
   "package": "https://thefirmwarehub.com/fw/tessera-3.7.5.fwsc",
   "hub": "tessera",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tessera-3.7.5.rfm1"
  },
  {
   "id": "tonitor",
@@ -2561,7 +2638,8 @@
   "package": "https://thefirmwarehub.com/fw/tonitor-2026.11.10.fwsc",
   "hub": "tonitor",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tonitor-0.55.rfm1"
  },
  {
   "id": "tribe",
@@ -2635,7 +2713,8 @@
   "minMhz": 120,
   "minMhzPackage": "4c9ff3c9ca0b874d",
   "date": "2026-11-13",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "vector37-0.3.2.rfm1"
  },
  {
   "id": "veffbox",
@@ -2665,7 +2744,8 @@
   "minMhz": 100,
   "minMhzPackage": "c6f40b9a832f069f",
   "date": "2026-11-09",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "vesper-2.0.2.rfm1"
  },
  {
   "id": "wanderer",
@@ -2723,7 +2803,8 @@
   "installer": "https://charlesvestal.github.io/fm1-x0x/install/",
   "hub": "x0x",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "x0x-1.3.rfm1"
  },
  {
   "id": "x0xrmx",
@@ -2779,7 +2860,8 @@
   "minMhz": 80,
   "minMhzPackage": "e3c51c045b1a763b",
   "date": "2026-10-21",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "zen1-1.2.rfm1"
  },
  {
   "id": "zp12",
@@ -2864,7 +2946,8 @@
   "package": "https://thefirmwarehub.com/fw/hadal1-1.0.1.fwsc",
   "repo": "https://github.com/sparky480v/hadal-1",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hadal1-1.0.1.rfm1"
  },
  {
   "id": "agtdeck",
@@ -2996,7 +3079,8 @@
   "package": "https://thefirmwarehub.com/fw/golf-1.0.fwsc",
   "repo": "https://github.com/barnierg76/golf-fm1",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "golf-1.0.rfm1"
  },
  {
   "id": "tekstuur",
@@ -3008,7 +3092,8 @@
   "package": "https://thefirmwarehub.com/fw/tekstuur-2.0.fwsc",
   "repo": "https://github.com/barnierg76/tekstuur-fm1",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tekstuur-2.0.rfm1"
  },
  {
   "id": "kurzhaar",
@@ -3068,7 +3153,8 @@
   "package": "https://thefirmwarehub.com/fw/mvsynth2-1.5.2.fwsc",
   "repo": "https://github.com/bk40-home/M-Vsynth2",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mvsynth2-1.5.2.rfm1"
  },
  {
   "id": "trapstationos",
@@ -3080,7 +3166,8 @@
   "package": "https://thefirmwarehub.com/fw/trapstationos-1.1.0.2.fwsc",
   "repo": "https://github.com/sog-maker/trapstation-os",
   "date": "2026-11-16",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "trapstationos-1.1.0.2.rfm1"
  },
  {
   "id": "astra",
@@ -3104,7 +3191,8 @@
   "package": "https://thefirmwarehub.com/fw/glitch-2.0.2.fwsc",
   "repo": "https://github.com/saulofilho/glitch",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "glitch-2.0.2.rfm1"
  },
  {
   "id": "quartz",
@@ -3116,7 +3204,8 @@
   "package": "https://thefirmwarehub.com/fw/quartz-0.10.fwsc",
   "repo": "https://github.com/F0nski/quartz",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "quartz-0.10.rfm1"
  },
  {
   "id": "fmav1",
@@ -3128,7 +3217,8 @@
   "package": "https://thefirmwarehub.com/fw/fmav1-0.6.4.fwsc",
   "repo": "https://github.com/wootr0p/fmav1",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmav1-0.6.4.rfm1"
  },
  {
   "id": "juicy",
@@ -3152,7 +3242,8 @@
   "package": "https://thefirmwarehub.com/fw/fmlarynx-0.4.2.fwsc",
   "repo": "https://github.com/ejtb76/FMLarynx",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmlarynx-0.4.2.rfm1"
  },
  {
   "id": "fernbedienung",
@@ -3188,7 +3279,8 @@
   "repo": "https://github.com/shan-sherif/fm-1-chimera-vocal",
   "date": "2026-11-25",
   "chip": "new",
-  "license": "MIT + MPL-2.0 + BSD (CMUdict)"
+  "license": "MIT + MPL-2.0 + BSD (CMUdict)",
+  "rfm1": "chimeravocal-0.9.0.rfm1"
  },
  {
   "id": "orgigs",
@@ -3200,7 +3292,8 @@
   "package": "https://thefirmwarehub.com/fw/orgigs-1.5.fwsc",
   "repo": "https://github.com/orgelbobo/orgigs",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "orgigs-1.1.rfm1"
  },
  {
   "id": "dabke",
@@ -3212,7 +3305,8 @@
   "package": "https://thefirmwarehub.com/fw/dabke-0.22-beta.fwsc",
   "repo": "https://github.com/wissamsader/dabke",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "dabke-0.18.rfm1"
  },
  {
   "id": "obssynthfm1",
@@ -3224,7 +3318,8 @@
   "package": "https://thefirmwarehub.com/fw/obssynthfm1-0.2.0.fwsc",
   "repo": "https://github.com/orianbsilva/obssynth-fm1",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "obssynth-0.2.0.rfm1"
  },
  {
   "id": "evilgenius",
@@ -3236,7 +3331,8 @@
   "package": "https://thefirmwarehub.com/fw/evilgenius-0.1.4.fwsc",
   "repo": "https://github.com/Quixotic7/evilgenius",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "evilgenius-0.1.4.rfm1"
  },
  {
   "id": "nccnovationcircuitcompan",
@@ -3272,7 +3368,8 @@
   "package": "https://thefirmwarehub.com/fw/conductor-1.0.fwsc",
   "repo": "https://github.com/MammothCheese/conductor",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "conductor-1.0.rfm1"
  },
  {
   "id": "aetherfm1",
@@ -3296,7 +3393,8 @@
   "package": "https://thefirmwarehub.com/fw/quantumgammawave-2.5.2.fwsc",
   "repo": "https://github.com/Guillel51/Quantum-GammaWave",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "quantumgammawave-4.1.0.rfm1"
  },
  {
   "id": "yehnah",
@@ -3308,7 +3406,8 @@
   "package": "https://thefirmwarehub.com/fw/yehnah-0.1.0.fwsc",
   "repo": "https://github.com/Mello-D/yehnah",
   "date": "2026-11-16",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "yehnah-0.2.0.rfm1"
  },
  {
   "id": "cursedos",
@@ -3332,7 +3431,8 @@
   "package": "https://thefirmwarehub.com/fw/stallion-1.1.fwsc",
   "repo": "https://github.com/EberonLtd/stallion-fm1",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "stallion-1.1.rfm1"
  },
  {
   "id": "vnl1",
@@ -3368,7 +3468,8 @@
   "package": "https://thefirmwarehub.com/fw/ruido-0.7.3.fwsc",
   "repo": "https://github.com/miguelhd/ruido",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ruido-0.7.2.rfm1"
  },
  {
   "id": "fmkick",
@@ -3380,7 +3481,8 @@
   "package": "https://thefirmwarehub.com/fw/fmkick-0.5.1.fwsc",
   "repo": "https://github.com/davidamomusic/fm-kick",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmkick-0.5.1.rfm1"
  },
  {
   "id": "ambpond",
@@ -3404,7 +3506,8 @@
   "package": "https://thefirmwarehub.com/fw/morse-0.8.fwsc",
   "repo": "https://github.com/daviddwlee84/fm1-morse",
   "date": "2026-11-18",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "morse-0.8.rfm1"
  },
  {
   "id": "darkfunkdurcalsynt",
@@ -3440,7 +3543,8 @@
   "package": "https://thefirmwarehub.com/fw/samsara-1.0.0.fwsc",
   "repo": "https://github.com/tomorrowsman/fm1-samsara",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "samsara-1.0.0.rfm1"
  },
  {
   "id": "fm1tonic",
@@ -3488,7 +3592,8 @@
   "package": "https://thefirmwarehub.com/fw/sy1-1.0.0.fwsc",
   "repo": "https://github.com/fenderberg/fm1-sy1",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sy1-1.0.0.rfm1"
  },
  {
   "id": "dayvx",
@@ -3536,7 +3641,8 @@
   "package": "https://thefirmwarehub.com/fw/h1-0.3.2.fwsc",
   "repo": "https://github.com/jakehandy/h1",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "h1-0.3.0.rfm1"
  },
  {
   "id": "fm1zx",
@@ -3644,7 +3750,8 @@
   "package": "https://thefirmwarehub.com/fw/pingos1-1.0.1.fwsc",
   "repo": "https://github.com/PINGAUDIO/PING-OS-1",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "pingos1-1.0.1.rfm1"
  },
  {
   "id": "metronome",
@@ -4016,7 +4123,8 @@
   "package": "https://thefirmwarehub.com/fw/a22-0.6.0.fwsc",
   "repo": "https://github.com/abektes/a22",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "a22-0.1.0.rfm1"
  },
  {
   "id": "prophet67",

@@ -13,10 +13,12 @@ read = lambda p, mode="r": open(os.path.join(here, p), mode, **({} if "b" in mod
 b64 = lambda p: base64.b64encode(read(p, "rb")).decode()
 sha = lambda p: hashlib.sha256(read(p, "rb")).hexdigest()
 page = read("src/app.html")
-parts = {"/*@WORKLET@*/": read("vendor/worklet.js"), "/*@CORE1WORKER@*/": read("vendor/core1-worker.js"), "/*@EMUWORKER@*/": read("vendor/emu-worker.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
+parts = {"/*@WORKLET@*/": read("vendor/rfm1.js") + read("vendor/worklet.js"),  # rfm1.js: Jake Handy's loader of the fast builds (MIT), for worklet.js's Rfm1Proc
+         "/*@CORE1WORKER@*/": read("vendor/core1-worker.js"), "/*@EMUWORKER@*/": read("vendor/emu-worker.js"), "/*@FIRMWARES@*/": read("vendor/firmwares.json"),
          "/*@FX@*/": read("vendor/fx.js"),  # the FX and PEDALS screens' sound: PLAY.Pocket's pedals, amps, cabs and live FX, adapted (tests/fx.py)
          "/*@MIDIDEVICE@*/": read("vendor/midi-device.js"),  # the Pocket apps' MIDI device panel, the same file as theirs
          "/*@LICENSE_EMU@*/": read("vendor/LICENSE-fm1-emu").replace("&", "&amp;").replace("<", "&lt;"),
+         "/*@LICENSE_SIM@*/": read("vendor/LICENSE-fm1-browser-simulator").replace("&", "&amp;").replace("<", "&lt;"),
          "/*@LICENSE_MBOOT@*/": read("vendor/mboot/LICENSE-m-bootloader").replace("&", "&amp;").replace("<", "&lt;"),
          "/*@TETHER@*/": read("vendor/tether.js"),  # the Tether firmware's protocol: a real FM-1 as the panel of the emulator (tests/tether.test.js)
          "/*@REALFM1@*/": read("vendor/real-fm1.js"),  # USB MIDI protocol for a real FM-1 (tested by tests/real-fm1.test.js)

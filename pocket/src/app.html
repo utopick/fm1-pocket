@@ -293,6 +293,7 @@
       #menu .fwc .t em.new { color: #7fdcc0; }
       #menu .fwc .t em.any { color: #ffce84; }
       #menu .fwc .t em.old { color: #ff8a9a; }
+      #menu .fwc .t em.fast { color: #9cc8ff; }
       #find #chipOnly { flex: none; }
       #find #chipOnly.on { background: var(--lit); color: #14091f; }
       #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
@@ -846,6 +847,7 @@
             <button data-sub="real" title="A real FM-1 on USB: play together, back up, install firmwares"><i>OPTIONS</i>REAL FM-1</button>
             <button data-sub="inst" title="Install the app on this device"><i>OPTIONS</i>INSTALL THE APP</button>
             <button id="clock" title="Choose how fast the emulated FM-1 runs, in MHz. The real FM-1 runs at 240 MHz and this app starts at 100 (the Android app at 240). Lower it if the sound breaks up, raise it if this device has power to spare. The firmware starts again."><i></i>CPU CLOCK</button>
+            <button id="fast" title="Fast builds: a firmware that has one (FAST on its card) runs its own code, made for computers, instead of an emulated chip, so it plays smoothly on slow devices too. It can behave a little differently from the real FM-1 and keeps its own saves. Turn it off to use the emulator for every firmware. The firmware starts again."><i></i>FAST BUILDS</button>
           </div>
         </section>
         <section data-tab="man">
@@ -903,6 +905,7 @@
     </div>
     <pre id="licEmu" hidden>/*@LICENSE_EMU@*/</pre>
     <pre id="licMboot" hidden>/*@LICENSE_MBOOT@*/</pre>
+    <pre id="licSim" hidden>/*@LICENSE_SIM@*/</pre>
     <div id="job" hidden>
       <div class="box" role="alertdialog" aria-modal="true" aria-labelledby="jobTitle" aria-describedby="jobText">
         <h3 id="jobTitle"></h3>
@@ -1045,7 +1048,7 @@
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true, rfm1: typeof f.rfm1 === "string" && /^[\w.-]{1,80}\.rfm1$/.test(f.rfm1) ? f.rfm1 : "" });
         }
         return out;
       }
@@ -1056,8 +1059,11 @@
       const withOwn = (list) => [TETHER, ...list.filter((f) => f.id !== TETHER.id)];
       // EXTRAS: the firmwares this page adds by hand (update-firmwares.py's EXTRA, such as SHRUB): neither live list has them, so
       // they are put back whenever a kept or fresh list replaces the built-in one
-      const EXTRAS = vetCatalog(JSON.parse($("#fwlist").textContent)).filter((f) => f.extra),
-        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))];
+      // and the fast builds (.rfm1) the built-in list names, which the live lists don't know about either
+      const BUILT = vetCatalog(JSON.parse($("#fwlist").textContent)),
+        EXTRAS = BUILT.filter((f) => f.extra),
+        RFM1S = new Map(BUILT.filter((f) => f.rfm1).map((f) => [f.id, f.rfm1])),
+        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))].map((f) => (f.rfm1 || !RFM1S.has(f.id) ? f : { ...f, rfm1: RFM1S.get(f.id) }));
       let FIRMWARES = withOwn(vetCatalog(JSON.parse($("#fwlist").textContent))),
         kept = new Set(); // the ids of the packages kept on this device
 
@@ -1160,7 +1166,8 @@
       // Every pointer on its own, so several fingers play a chord or hold a key while one turns a knob.
       // ======================================================================
       let node = null; // the emulator in the audio thread (null = off)
-      const send = (m) => node && node.port.postMessage(m);
+      let rnode = null; // the fast builds' processor (worklet.js's Rfm1Proc), made the first time one runs after power on
+      const send = (m) => node && (run && run.rfm1 && rnode ? rnode : node).port.postMessage(m);
       const down = new Uint8Array(64),
         holds = new Uint8Array(64),
         clicks = new Int32Array(8);
@@ -1470,6 +1477,8 @@
         $("#clock i").textContent = mhz + " MHz";
         if (!f) return toast("Choose a firmware first");
         try {
+          if (fresh) await kvDel("rsave:" + f.id);
+          if (await bootFast(f, mine)) return;
           const bytes = await packageOf(f),
             hash = hex(await crypto.subtle.digest("SHA-256", bytes));
           if (fresh) await kvDel("save:" + hash);
@@ -1487,6 +1496,7 @@
           }
           status("booting " + f.name + "…");
           stopCore1();
+          rnode && rnode.port.postMessage({ type: "cancel-boot" }); // a fast build that was running stops
           const one = ONE_THREAD.has(f.id), mt = window.FM1Native || one ? null : await threadedCore();
           if (mine !== seq || !node) return;
           node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, threads: one ? 1 : undefined, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
@@ -1497,6 +1507,50 @@
           toast(f.name + ": " + e.message, 4000);
         }
       }
+      // FAST BUILDS: a firmware with an .rfm1 (its own code built as WebAssembly, RemoteFM1FW's release, mirrored in fm1-firmwares next to its
+      // .fwsc) runs that in worklet.js's Rfm1Proc instead of the emulator: on the page's AudioContext, or in the Android app on the WebView's
+      // own one (nac), with the native core stopped meanwhile. Its saves are its whole flash image, under its id, so they survive a new build.
+      // Not with a DX7 bank, the ?worker=1 trial or a build that failed to start this visit (noFast): those use the emulator.
+      let fast = stored("fm1.fast") !== "0";
+      const noFast = new Set();
+      async function rfm1Of(f) {
+        const got = await kvGet("rfm1:" + f.id),
+          have = got && got.bytes instanceof Uint8Array && got.bytes.length <= 40 << 20 ? got : null;
+        if (have && (have.file === f.rfm1 || !navigator.onLine)) return have.bytes;
+        try {
+          const r = await fetch("https://utopick.github.io/fm1-firmwares/" + f.id + "/" + f.rfm1);
+          if (!r.ok) throw Error("status " + r.status);
+          const bytes = new Uint8Array(await r.arrayBuffer());
+          if (bytes.length > 40 << 20 || bytes[0] !== 0 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) throw Error("not an .rfm1");
+          kvPut("rfm1:" + f.id, { file: f.rfm1, bytes }).catch(() => {});
+          return bytes;
+        } catch (e) {
+          if (have) return have.bytes; // an older build kept is better than none
+          throw e;
+        }
+      }
+      async function bootFast(f, mine) {
+        const ctx = window.FM1Native ? nac : ac;
+        if (!fast || !f.rfm1 || noFast.has(f.id) || emu || bank || !ctx) return false;
+        status("downloading the fast build of " + f.name + "…");
+        const bytes = await rfm1Of(f).catch(() => null),
+          flash = bytes && (await kvGet("rsave:" + f.id));
+        if (!bytes || mine !== seq || !node) return !!bytes;
+        if (!rnode) {
+          rnode = new AudioWorkletNode(ctx, "rfm1", { numberOfInputs: 0, outputChannelCount: [2] });
+          rnode.port.onmessage = onWorklet;
+          if (window.FM1Native) rnode.connect(fxe.in); // the app's chain passes the sound straight through while nothing is on
+          else (rnode.connect(fxOn ? fxe.in : ac.destination), ac._meter && rnode.connect(ac._meter));
+        }
+        allUp();
+        stopCore1();
+        node.port.postMessage({ type: "cancel-boot" }); // the emulator (in the app: the native core) stops while the fast build plays
+        run = { f, hash: "", base: null, saved: new Map(flash instanceof Uint8Array ? [[0, flash]] : []), rfm1: true };
+        status("booting " + f.name + " (fast build)…");
+        rnode.port.postMessage({ type: "boot", seq: mine, rfm1: bytes.slice().buffer, flash: flash instanceof Uint8Array ? flash.slice().buffer : null });
+        return true;
+      }
+      const fastFace = () => ($("#fast i").textContent = fast ? "ON" : "OFF");
       // saves: when the firmware writes its flash the worklet sends the whole chip; the sectors that differ from the
       // package's own are kept under the package's hash, so each exact firmware version has its own save
       function keepFlash(flash) {
@@ -1554,7 +1608,7 @@
           return sure("The sound of " + name + " drops out although this device has time to spare, because its audio buffer is too small. Slide to restart with a larger one, and the keys will answer a little later. What it has not saved is lost.", () => ((latency = "playback"), powerOff(), turnOn(), toast("Larger audio buffer")));
         }
         perf.asked = true;
-        const c = lowerClock(load, idle, mhz);
+        const c = run.rfm1 ? null : lowerClock(load, idle, mhz); // a fast build has no clock to lower
         if (!c) return toast("This device cannot run " + name + " in real time, so the sound breaks up", 5000);
         sure("This device cannot keep up with " + name + " at " + mhz + " MHz, so the sound breaks up. Slide to restart it at " + c + " MHz. What it has not saved is lost.", () => ((mhz = c), (perf.asked = false), boot(), toast(name + " at " + c + " MHz")));
       }
@@ -1569,11 +1623,12 @@
           thr.mode = m.threaded ? "threads" : "single";
           Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
           send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
-          status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
+          status(run.f.name + (m.rfm1 ? " · fast build " + m.rfm1.version : "") + (run.saved.size ? " · saves loaded" : ""));
           toast(m.board === 1 ? run.f.name + " is made for the SMK-37, another device, so not all its controls are here" : run.f.name + " is on", m.board === 1 ? 5000 : undefined);
           const r = run; // a picture of its screen for its card, once it has drawn it
           setTimeout(() => run === r && kvPut("shot:" + r.f.id, $("#lcd").toDataURL("image/png")).catch(() => {}), 8000);
-        } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
+        } else if (m.type === "snapshot" && m.flash) run && run.rfm1 ? kvPut("rsave:" + run.f.id, m.flash).catch(() => toast("No room on this device to keep what the firmware saved", 3000)) : keepFlash(m.flash);
+        else if (m.type === "error" && m.rfm1 && run) (noFast.add(run.f.id), toast("The fast build of " + run.f.name + " did not start, so it runs on the emulator", 4000), console.warn(m.message), boot());
         else if (m.type === "error") (window.FM1Native?.page?.(), status(m.message), toast(m.message, 4000));
       }
       // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
@@ -1706,6 +1761,7 @@
         fxOn = false;
         node.connect(ac.destination);
         node.connect(meter);
+        ac._meter = meter;
         ac._peak = setInterval(() => (meter.getFloatTimeDomainData(buf), (peak = Math.max(peak * 0.9, ...buf.map(Math.abs)))), 100);
         node.port.onmessage = onWorklet;
         fxSync();
@@ -1722,7 +1778,7 @@
         clearInterval(nat);
         stopCore1();
         emu?.terminate();
-        ac = nat = node = run = emu = fxe = null;
+        ac = nat = node = run = emu = fxe = rnode = null;
         fxOn = false;
         allUp();
         dark();
@@ -1798,15 +1854,15 @@
           if (f === local || f === backup || !navigator.onLine) own();
           else img.src = HUB_IMG + f.id + ".webp";
           t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), notr(el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. It is kept on this device and nothing is uploaded." : f === local ? "It is kept on this device and nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")), f !== backup && f !== local));
-          if (f.chip) { // the chip tag sits to the right of the title, where there is room
-            const b = t.querySelector("b"), tag = el("em", "chip " + f.chip, CHIP_TAG[f.chip][0]);
-            tag.title = CHIP_TAG[f.chip][1];
-            b.replaceChildren(el("span", "n", b.textContent), tag);
+          const tags = [f.chip && [f.chip, ...CHIP_TAG[f.chip]], fast && f.rfm1 && ["fast", "FAST", "It has a fast build (" + f.rfm1 + "): its own code made for computers, so it runs without emulating the chip and plays smoothly on slow devices too. FAST BUILDS in OPTIONS turns them off"]].filter(Boolean);
+          if (tags.length) { // the tags sit to the right of the title, where there is room
+            const b = t.querySelector("b");
+            b.replaceChildren(el("span", "n", b.textContent), ...tags.map(([c, text, title]) => Object.assign(el("em", "chip " + c, text), { title })));
           }
           t.title = f.about || f.name;
           // one button: DOWNLOAD until the package is kept on this device, then USE
           go.title = have ? "Run " + f.name + " on the FM-1" : "Download " + f.name + " and keep it on this device, so it runs offline";
-          go.onclick = () => (have ? use(f.id) : ((go.disabled = true), (go.textContent = "DOWNLOADING…"), toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), listFace(), toast(f.name + " is kept on this device")), (e) => (listFace(), toast(f.name + ": " + e.message, 4000)))));
+          go.onclick = () => (have ? use(f.id) : ((go.disabled = true), (go.textContent = "DOWNLOADING…"), toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), fast && f.rfm1 && rfm1Of(f).catch(() => {}), listFace(), toast(f.name + " is kept on this device")), (e) => (listFace(), toast(f.name + ": " + e.message, 4000)))));
           inst.dataset.own = f === backup ? "1" : "0"; // the card of the unit's own backup never installs
           inst.hidden = f === backup || !realReady(); // only when every check of REAL FM-1 is in place
           inst.title = "Install " + f.name + " on the real FM-1 through the protector's MIDI mode. It asks you first.";
@@ -1825,9 +1881,10 @@
                   running = node && run && run.f.id === f.id;
                 if (!all && running) return boot(true), toast("Saves erased, so it starts fresh");
                 await kvDel("save:" + hash);
+                await kvDel("rsave:" + f.id);
                 if (all && f !== backup) {
                   if (f === local) (await kvDel("pkg:local"), (local = null));
-                  else for (const k of ["pkg:", "man:", "date:"]) (await kvDel(k + f.id), kept.delete(f.id), delete f.bytes, delete fwDate[f.id]);
+                  else for (const k of ["pkg:", "man:", "date:", "rfm1:"]) (await kvDel(k + f.id), kept.delete(f.id), delete f.bytes, delete fwDate[f.id]);
                   listFace();
                 }
                 toast(all && f !== backup ? "Saves and firmware erased" + (running ? ". It keeps running until you switch it off" : "") : "Saves of " + f.name + " erased");
@@ -1869,6 +1926,15 @@
       // CPU CLOCK: the clock chosen, kept on this device. Its face shows the clock the machine runs at (keepUp may have lowered it)
       const clockFace = () => ($("#clock i").textContent = mhz + " MHz");
       clockFace();
+      fastFace();
+      $("#fast").onclick = () => {
+        store("fm1.fast", (fast = !fast) ? "1" : "0");
+        fastFace();
+        listFace();
+        const f = run && node ? run.f : null;
+        if (f && (f.rfm1 || run.rfm1)) boot();
+        toast(fast ? "Fast builds on: a firmware with one runs it" : "Fast builds off: every firmware runs on the emulator");
+      };
       $("#clock").onclick = () => {
         const name = run && node ? run.f.name : "";
         sure(
@@ -2979,6 +3045,7 @@
           "## The menu (the FM1. button)",
           "**FIRMWARE** has a card for each firmware. **USE** runs it, and **DOWNLOAD** keeps it on this device so it runs with no connection (it is then marked ●). **OPEN FIRMWARE FILE** runs your own .fwsc file, and **LOAD DX7 BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware. The list updates itself when the app opens with a connection, and **UPDATE FIRMWARES** does it again at once, which helps when a download fails because its link has changed. **Tether**, our own firmware, is built into the app and comes first. It makes no sound of its own, because it is the firmware that makes a real FM-1 the panel of this one.",
           "If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock. **CPU CLOCK**, in OPTIONS, lets you choose it yourself: the real FM-1 runs at 240 MHz and the app starts at 100 (the Android app at 240), so lower it if the sound breaks up and raise it if this device has power to spare. Your choice is kept on this device.",
+          "Over a hundred firmwares also have a fast build, and their cards say **FAST**. A fast build is the firmware's own code made to run on a computer, built by Quixotic7 for RemoteFM1, so the app runs it directly instead of emulating the FM-1's chip, and it plays smoothly even on a slow phone. It can behave a little differently from the real FM-1, and it may be an older or newer version than the package, because it is built separately. It keeps its own saves, apart from the emulator's. **FAST BUILDS**, in OPTIONS, turns them off so that every firmware runs on the emulator, and if a fast build fails to start the app uses the emulator by itself.",
           "**ERASE**, on a card, forgets what that firmware saved, and **CLEAR DATA** deletes the downloaded firmwares. Both ask you to slide to confirm. What a firmware saves (patches, songs, settings) is kept on this device, separately for each exact version of it.",
           "**LOOK** is where you choose the keys (the FM-1's own or a piano), the skin (the colours the FM-1 is sold in, then ours) and the screen filter (LCD, CRT or clean). **OPTIONS** has MIDI, a real FM-1 on USB, and installing the app. The **ENGLISH / ESPAÑOL** button at the top left of the menu switches the language of the app and its manuals.",
           "## A real FM-1 on USB",
@@ -3015,6 +3082,7 @@
           "## El menú (el botón FM1.)",
           "**FIRMWARE** tiene una tarjeta por firmware. **USAR** lo ejecuta, y **DESCARGAR** lo guarda en este dispositivo para usarlo sin conexión (entonces sale marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc, y **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE. La lista se actualiza sola cuando la app se abre con conexión, y **ACTUALIZAR FIRMWARES** lo hace otra vez en el momento, lo que ayuda cuando una descarga falla porque su enlace ha cambiado. **Tether**, nuestro propio firmware, viene dentro de la app y sale primero. No suena por sí mismo, porque es el firmware que convierte un FM-1 real en el panel de este.",
           "Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento. **RELOJ CPU**, en OPCIONES, te deja elegirlo: el FM-1 real va a 240 MHz y la app empieza a 100 (la app de Android a 240), así que bájalo si el sonido se corta y súbelo si este dispositivo tiene potencia de sobra. Tu elección se guarda en este dispositivo.",
+          "Más de cien firmwares tienen además una versión rápida, y su tarjeta dice **FAST**. Una versión rápida es el propio código del firmware hecho para funcionar en un ordenador, compilado por Quixotic7 para RemoteFM1, así que la app lo ejecuta directamente en vez de emular el chip del FM-1, y suena fluido incluso en un móvil lento. Puede comportarse un poco distinto del FM-1 real, y puede ser una versión más antigua o más nueva que el paquete, porque se compila aparte. Guarda sus propios datos, separados de los del emulador. **VERSIONES RÁPIDAS**, en OPCIONES, las apaga para que todos los firmwares usen el emulador, y si una versión rápida no arranca, la app usa el emulador por sí sola.",
           "**BORRAR**, en una tarjeta, borra lo que ha guardado ese firmware, y **BORRAR DATOS** borra los firmwares descargados. Los dos piden deslizar para confirmar. Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, por separado para cada versión exacta.",
           "En **ASPECTO** eliges las teclas (las del FM-1 o un piano), los colores (los del FM-1 a la venta y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpia). **OPCIONES** tiene el MIDI, un FM-1 real por USB e instalar la app. El botón **ENGLISH / ESPAÑOL**, arriba a la izquierda del menú, cambia el idioma de la app y de sus manuales.",
           "## Un FM-1 real por USB",
@@ -3203,6 +3271,10 @@
         "LOAD DX7 BANK": "CARGAR BANCO DX7",
         "Choose how fast the emulated FM-1 runs, in MHz. The real FM-1 runs at 240 MHz and this app starts at 100 (the Android app at 240). Lower it if the sound breaks up, raise it if this device has power to spare. The firmware starts again.": "Elige a qué velocidad funciona el FM-1 emulado, en MHz. El FM-1 real va a 240 MHz y esta app empieza a 100 (la app de Android a 240). Bájalo si el sonido se corta, súbelo si este dispositivo tiene potencia de sobra. El firmware vuelve a arrancar.",
         "CPU CLOCK": "RELOJ CPU",
+        "Fast builds: a firmware that has one (FAST on its card) runs its own code, made for computers, instead of an emulated chip, so it plays smoothly on slow devices too. It can behave a little differently from the real FM-1 and keeps its own saves. Turn it off to use the emulator for every firmware. The firmware starts again.": "Versiones rápidas: un firmware que tiene una (FAST en su tarjeta) ejecuta su propio código, hecho para ordenadores, en vez de un chip emulado, así que suena fluido también en dispositivos lentos. Puede comportarse un poco distinto del FM-1 real y guarda sus propios datos. Apágalo para usar el emulador con todos los firmwares. El firmware vuelve a arrancar.",
+        "FAST BUILDS": "VERSIONES RÁPIDAS",
+        "Fast builds on: a firmware with one runs it": "Versiones rápidas encendidas: un firmware que tenga una la usa",
+        "Fast builds off: every firmware runs on the emulator": "Versiones rápidas apagadas: todos los firmwares usan el emulador",
         "Delete every downloaded firmware from this device. What they saved stays, and it asks you first.": "Borra de este dispositivo todos los firmwares descargados. Lo que guardaron se queda, y te pregunta antes.",
         DOWNLOADS: "DESCARGAS",
         "CLEAR DATA": "BORRAR DATOS",
@@ -3768,6 +3840,9 @@
           el("h3", "", "m-bootloader, the protector (bundled packages and the way the unit is talked to)"),
           el("p", "", "By jvitkauskas, MIT. The two packages in this page (the RAM helper for BACKUP and the protector installer) are its v2.4 release files, unchanged (their SHA-256 is checked before they are sent). Its specification is the source of the USB MIDI messages, the package format and the flash layout used here."),
           el("pre", "", $("#licMboot").textContent),
+          el("h3", "", "FM-1 Browser Simulator, the loader of the fast builds"),
+          el("p", "", "By Jake Handy, MIT, https://github.com/jakehandy/fm1-browser-simulator. Its rfm1.js is in this page unchanged and runs the fast builds (.rfm1). The format is RemoteFM1's (Quixotic7, https://github.com/Quixotic7/RemoteFM1IOS), and the builds come from RemoteFM1FW's release, made with Quixotic7's FM1VST. Each one carries its firmware's licence and the exact source it was built from."),
+          el("pre", "", $("#licSim").textContent),
           el("h3", "", "M-Flasher"),
           el("p", "", "By Julius Vitkauskas (jvitkauskas), MIT, https://github.com/jvitkauskas/m-flasher. Nothing of its code is in this page. The flash map follows its 16 x 16 map of 4 KiB sectors, its region names and colours (boot, firmware, settings, pairings, sounds, MAC, free) and its stock FM-1 layout. It is also the tool to use for the protector on the newer flash chip, and to put a backup back."),
           el("h3", "", "M-Unbricker"),
@@ -3811,8 +3886,7 @@
           const act = fxe.sync(rack, live);
           if (act !== fxOn) {
             fxOn = act;
-            if (act) (node.connect(fxe.in), node.disconnect(ac.destination));
-            else (node.connect(ac.destination), node.disconnect(fxe.in));
+            for (const n of [node, rnode]) if (n) act ? (n.connect(fxe.in), n.disconnect(ac.destination)) : (n.connect(ac.destination), n.disconnect(fxe.in));
           }
         }
         const n = FXE.FX.filter((p) => rack.u[p.id].on).length + live.size;

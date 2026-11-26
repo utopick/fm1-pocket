@@ -293,6 +293,7 @@
       #menu .fwc .t em.new { color: #7fdcc0; }
       #menu .fwc .t em.any { color: #ffce84; }
       #menu .fwc .t em.old { color: #ff8a9a; }
+      #menu .fwc .t em.fast { color: #9cc8ff; }
       #find #chipOnly { flex: none; }
       #find #chipOnly.on { background: var(--lit); color: #14091f; }
       #menu .fwc .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none; }
@@ -846,6 +847,7 @@
             <button data-sub="real" title="A real FM-1 on USB: play together, back up, install firmwares"><i>OPTIONS</i>REAL FM-1</button>
             <button data-sub="inst" title="Install the app on this device"><i>OPTIONS</i>INSTALL THE APP</button>
             <button id="clock" title="Choose how fast the emulated FM-1 runs, in MHz. The real FM-1 runs at 240 MHz and this app starts at 100 (the Android app at 240). Lower it if the sound breaks up, raise it if this device has power to spare. The firmware starts again."><i></i>CPU CLOCK</button>
+            <button id="fast" title="Fast builds: a firmware that has one (FAST on its card) runs its own code, made for computers, instead of an emulated chip, so it plays smoothly on slow devices too. It can behave a little differently from the real FM-1 and keeps its own saves. Turn it off to use the emulator for every firmware. The firmware starts again."><i></i>FAST BUILDS</button>
           </div>
         </section>
         <section data-tab="man">
@@ -926,6 +928,28 @@ SOFTWARE.
     <pre id="licMboot" hidden>MIT License
 
 Copyright (c) 2026 Julius Vitkauskas
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+</pre>
+    <pre id="licSim" hidden>MIT License
+
+Copyright (c) 2026 Jake Handy
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -2991,7 +3015,420 @@ window.FXE = (() => {
 })();
 
     </script>
-    <script type="text/plain" id="worklet">// The emulator in the audio thread: each 128-frame quantum runs the machine until its I2S
+    <script type="text/plain" id="worklet">// vendor/rfm1.js: src/rfm1.js of Jake Handy's FM-1 Browser Simulator (https://github.com/jakehandy/fm1-browser-simulator, commit 47d66a8a533c),
+// MIT licence (vendor/LICENSE-fm1-browser-simulator), unchanged. It runs .rfm1 firmwares; worklet.js's Rfm1Proc drives it.
+/* rfm1.js: a host for .rfm1 firmware files, with no DOM in it (the page and the tests share it).
+ *
+ * An .rfm1 is an FM-1 firmware built for a host app instead of the device: a WebAssembly module behind
+ * the fm1core ABI (version 6), with its manifest in a custom section. The format is RemoteFM1IOS's
+ * docs/RFM1-FORMAT.md; this file is written from that description. See docs/FIRMWARE-INTERFACE.md for
+ * how this simulator drives a module and for the optional "sim1" extension.
+ *
+ *   const fw = Rfm1.parse(bytes);            // manifest, credits, licences, skin; throws if not an .rfm1
+ *   const core = await Rfm1.Core.create(fw); // instantiated, checked, not yet powered on
+ *   core.boot(savedFlashOrNull);
+ *   core.runMs(n);  core.pull(frames) -> Float32Array stereo   // the device clock and its sound
+ *   core.lcdBytes() / core.leds() / core.key() / core.button() / core.turn() / core.master()
+ */
+(function (root) {
+  "use strict";
+
+  var FS = 44100, BLOCK = 128, NKEY = 27, NB = 14, NE = 7, NCOL = 11, NLINE = 4, W = 240, H = 240;
+  var ABI = 6, ABI_MIN = 5, FLASH_STAGED = "fm1core:staged";
+  var LABELS = ["FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC", "OCT-", "OCT+"];
+  var ROLES = ["SELECT", "ALGORITHM", "PRESETS", "KNOB 1", "KNOB 2", "KNOB 3", "KNOB 4"];
+  var REQUIRED = ["memory", "rfm1_version", "rfm1_get", "rfm1_layout", "rfm1_alloc", "rfm1_options", "rfm1_init",
+    "rfm1_tick", "rfm1_frame", "rfm1_idle", "rfm1_audio", "rfm1_flash_stage", "rfm1_flash", "rfm1_flash_dirty"];
+
+  /* the offsets a wasm32 build of fm1core.h gives (rfm1_layout indexes 0..33); checked, not assumed */
+  var LAYOUT = [115384, 0, 4, 8, 12, 16, 44, 48, 75, 102, 146, 148, 115348, 115352, 115366, 115373, 115380,
+    192, 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 92, 96, 100, 104, 108, 188];
+  var P = { keys: 1, buttons: 2, keys_tap: 3, buttons_tap: 4, enc: 5, master: 6, key_vel: 7, key_lean: 8, led: 9,
+    led_play_green: 10, lcd: 11, lcd_writes: 12, btn_id: 13, enc_id: 14, enc_dir: 15, ready: 16 };
+  var C = { abi_version: 18, id: 19, name: 20, version: 21, source_url: 22, family: 23, license: 24, gated: 25,
+    flash_size: 26, button_names: 27, params: 28, nparams: 29, panel: 30, keymap: 31, options: 32, credits: 33 };
+
+  function utf8(bytes) {
+    if (typeof TextDecoder !== "undefined") return new TextDecoder("utf-8").decode(bytes);
+    return decodeURIComponent(escape(String.fromCharCode.apply(null, bytes)));
+  }
+
+  /* ---- the file: wasm sections, the manifest and the other custom sections ---- */
+  function leb(b, i) {
+    var v = 0, s = 0, c;
+    do { c = b[i++]; v += (c & 0x7f) * Math.pow(2, s); s += 7; } while (c & 0x80);
+    return [v, i];
+  }
+  function sections(b) {
+    if (b.length < 8 || b[0] !== 0 || b[1] !== 0x61 || b[2] !== 0x73 || b[3] !== 0x6d || b[4] !== 1)
+      throw new Error("This is not a WebAssembly module, so it is not an .rfm1 file.");
+    var i = 8, out = { custom: {}, memory: null }, r, id, size, end, n, k, f;
+    while (i < b.length) {
+      id = b[i++];
+      r = leb(b, i); size = r[0]; i = r[1]; end = i + size;
+      if (id === 0) {
+        r = leb(b, i); n = r[0]; k = r[1];
+        out.custom[utf8(b.subarray(k, k + n))] = b.subarray(k + n, end);
+      } else if (id === 5) {
+        r = leb(b, i); k = r[1];
+        f = b[k++];
+        r = leb(b, k); out.memory = { min: r[0] }; k = r[1];
+        if (f & 1) out.memory.max = leb(b, k)[0];
+      }
+      i = end;
+    }
+    return out;
+  }
+  function parse(bytes) {
+    var b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes), s = sections(b), m, j, licenses = [], skin = null;
+    if (!s.custom.rfm1) throw new Error("This WebAssembly module has no rfm1 manifest, so it is not an .rfm1 file.");
+    try { m = JSON.parse(utf8(s.custom.rfm1)); } catch (e) { throw new Error("The file's rfm1 manifest is not valid JSON."); }
+    ["rfm1", "abi", "id", "name", "version", "license", "source_url"].forEach(function (k) {
+      if (m[k] === undefined || m[k] === null || m[k] === "") throw new Error("The manifest has no " + k + ".");
+    });
+    if (m.rfm1 !== 1) throw new Error("This file is .rfm1 version " + m.rfm1 + "; this simulator reads version 1.");
+    for (j = 0; s.custom["rfm1.license." + j]; j++) {
+      var t = utf8(s.custom["rfm1.license." + j]), nl = t.indexOf("\n");
+      licenses.push({ name: nl < 0 ? t : t.slice(0, nl), text: nl < 0 ? "" : t.slice(nl + 1) });
+    }
+    if (s.custom["rfm1.skin"]) {
+      try { skin = JSON.parse(utf8(s.custom["rfm1.skin"])); } catch (e) { skin = null; }
+    }
+    return {
+      bytes: b,
+      manifest: m,
+      credits: s.custom["rfm1.credits"] ? utf8(s.custom["rfm1.credits"]) : "",
+      licenses: licenses,
+      skin: skin,
+      skinImage: s.custom["rfm1.skin.background"] || null,
+      memory: s.memory
+    };
+  }
+
+  /* SHA-256 of the file, for telling two builds with the same id apart */
+  function sha256(bytes) {
+    var c = root.crypto && root.crypto.subtle;
+    if (!c) return Promise.resolve("");
+    return c.digest("SHA-256", bytes).then(function (h) {
+      return Array.prototype.map.call(new Uint8Array(h), function (x) { return ("0" + x.toString(16)).slice(-2); }).join("");
+    });
+  }
+
+  /* ---- WASI: the only imports a module may have. stdout and stderr go to log; the rest do nothing ---- */
+  function Halt(code) { this.code = code; }
+  function wasi(core) {
+    var mem = function () { return core.mem; };
+    var known = {
+      fd_write: function (fd, iovs, n, nwritten) {
+        var dv = new DataView(mem().buffer), total = 0, text = "", i, p, l;
+        for (i = 0; i < n; i++) {
+          p = dv.getUint32(iovs + i * 8, true); l = dv.getUint32(iovs + i * 8 + 4, true);
+          if (fd === 1 || fd === 2) text += utf8(new Uint8Array(mem().buffer, p, l));
+          total += l;
+        }
+        dv.setUint32(nwritten, total, true);
+        if (fd !== 1 && fd !== 2) return 8;
+        core._log(text);
+        return 0;
+      },
+      fd_read: function () { return 8; },
+      fd_close: function () { return 8; },
+      fd_seek: function () { return 8; },
+      fd_fdstat_get: function () { return 8; },
+      clock_time_get: function (id, prec, out) {
+        var ns = BigInt(Math.floor((root.performance ? root.performance.now() : Date.now()) * 1e6));
+        new DataView(mem().buffer).setBigUint64(out, ns, true);
+        return 0;
+      },
+      proc_exit: function (code) { throw new Halt(code); }
+    };
+    return function (name) {
+      return known[name] || function () { return 52; };   /* ENOSYS: not in the format */
+    };
+  }
+
+  /* ---- a running firmware ---- */
+  function Core(fw, instance) {
+    this.fw = fw;
+    this.x = instance.exports;
+    this.mem = this.x.memory;
+    this.logLines = [];
+    this.halted = 0;
+    this.ms = 0;
+    this.blocks = 0;
+    this.ring = new Float32Array(16384 * 2);
+    this.rw = 0;
+    this.rr = 0;
+    this.lastWrites = -1;
+    this.sim1 = typeof this.x.rfm1_sim1_version === "function" ? this.x.rfm1_sim1_version() : 0;
+  }
+  Core.create = function (fw) {
+    var core = { mem: null, _log: function () {} }, imports = { wasi_snapshot_preview1: {} };
+    return WebAssembly.compile(fw.bytes).then(function (mod) {
+      var bad = [], exp = {}, lookup = wasi(core);
+      WebAssembly.Module.imports(mod).forEach(function (im) {
+        if (im.module !== "wasi_snapshot_preview1") bad.push(im.module + "." + im.name);
+        else imports.wasi_snapshot_preview1[im.name] = lookup(im.name);
+      });
+      if (bad.length) throw new Error("The module imports " + bad.join(", ") + ", which the .rfm1 format does not allow.");
+      WebAssembly.Module.exports(mod).forEach(function (e) { exp[e.name] = 1; });
+      var missing = REQUIRED.filter(function (n) { return !exp[n]; });
+      if (missing.length) throw new Error("The module is missing " + missing.join(", ") + ".");
+      return WebAssembly.instantiate(mod, imports);
+    }).then(function (inst) {
+      var c = new Core(fw, inst);
+      core.mem = c.mem;
+      core._log = function (t) { c._log(t); };
+      c._wasiShim = core;
+      c._check();
+      return c;
+    });
+  };
+
+  Core.prototype._log = function (t) {
+    var lines = t.split("\n"), self = this;
+    lines.forEach(function (l) { if (l) self.logLines.push(l); });
+    if (this.logLines.length > 200) this.logLines.splice(0, this.logLines.length - 200);
+    if (this.onlog) this.onlog(t);
+  };
+  Core.prototype._call = function (name) {
+    var f = this.x[name];
+    if (typeof f !== "function" || this.halted) return 0;
+    try {
+      return f.apply(null, Array.prototype.slice.call(arguments, 1));
+    } catch (e) {
+      if (e instanceof Halt) this.halted = 0x100 | (e.code & 0xff);
+      else { this.halted = 0x1ff; this.error = e; }
+      if (this.onhalt) this.onhalt(this.halted, e);
+      return 0;
+    }
+  };
+  Core.prototype.dv = function () {
+    if (!this._dv || this._dv.buffer !== this.mem.buffer) this._dv = new DataView(this.mem.buffer);
+    return this._dv;
+  };
+  Core.prototype.u8 = function () {
+    if (!this._u8 || this._u8.buffer !== this.mem.buffer) this._u8 = new Uint8Array(this.mem.buffer);
+    return this._u8;
+  };
+  Core.prototype.cstr = function (p, max) {
+    if (!p) return "";
+    var m = this.u8(), e = p, lim = p + (max || 4096);
+    while (e < lim && e < m.length && m[e]) e++;
+    return utf8(m.subarray(p, e));
+  };
+  Core.prototype._check = function () {
+    var x = this.x, i, v, self = this, dv;
+    if (typeof x._initialize === "function") x._initialize();
+    if (x.rfm1_version() !== 1) throw new Error("The module says it is .rfm1 version " + x.rfm1_version() + "; this simulator reads version 1.");
+    this.d = x.rfm1_get(ABI) || x.rfm1_get(ABI_MIN);
+    if (!this.d) throw new Error("The module does not speak fm1core ABI 6 (or 5).");
+    for (i = 0; i < LAYOUT.length; i++) {
+      v = x.rfm1_layout(i);
+      if (i === 17 && v === 188 && this.dv().getUint32(this.d, true) === 5) continue;   /* ABI 5: no credits */
+      if (i === 33 && this.dv().getUint32(this.d, true) === 5) continue;
+      if (v !== LAYOUT[i]) throw new Error("The module's fm1core layout differs from ABI 6 at entry " + i + " (" + v + ", expected " + LAYOUT[i] + ").");
+    }
+    dv = this.dv();
+    var ptr = function (k) { return dv.getUint32(self.d + LAYOUT[C[k]], true); };
+    this.abi = dv.getUint32(this.d, true);
+    this.panel = ptr("panel");
+    this.keymapPtr = ptr("keymap");
+    this.flashSize = ptr("flash_size");
+    this.info = {
+      id: this.cstr(ptr("id")), name: this.cstr(ptr("name")), version: this.cstr(ptr("version")),
+      source_url: this.cstr(ptr("source_url")), family: this.cstr(ptr("family")), license: this.cstr(ptr("license")),
+      credits: this.abi >= 6 ? this.cstr(ptr("credits"), 65536) : ""
+    };
+    this.buttonNames = [];
+    for (i = 0; i < NB; i++) this.buttonNames.push(this.cstr(dv.getUint32(this.d + LAYOUT[C.button_names] + 4 * i, true)) || LABELS[i]);
+    if (!this.panel) throw new Error("The module has no panel.");
+  };
+  Core.prototype.p = function (k) { return this.panel + LAYOUT[P[k]]; };
+
+  /* power on, from a saved flash image or a fresh one */
+  Core.prototype.boot = function (flash) {
+    var x = this.x, dv = this.dv(), n, ptr, path;
+    if (flash && flash.length) {
+      n = Math.min(flash.length, this.flashSize || flash.length);
+      ptr = x.rfm1_alloc(n);
+      if (ptr) { this.u8().set(flash.subarray(0, n), ptr); x.rfm1_flash_stage(ptr, n); }
+      else x.rfm1_flash_stage(0, 0);
+    } else x.rfm1_flash_stage(0, 0);
+    path = x.rfm1_alloc(FLASH_STAGED.length + 1);
+    this.u8().set(Array.prototype.map.call(FLASH_STAGED, function (c) { return c.charCodeAt(0); }).concat([0]), path);
+    this._call("rfm1_options", path, 0, 0, 1);
+    if (typeof x.rfm1_boot_options === "function") this._call("rfm1_boot_options", -1, 0, -1);
+    dv.setUint8(this.p("ready"), 2);
+    this._call("rfm1_init", 0);
+    this._readMap();
+    this.ms = 0;
+    this.blocks = 0;
+    this.rw = this.rr = 0;
+  };
+  /* where each labelled button, each encoder role and each key sits on the matrix, and its light */
+  Core.prototype._readMap = function () {
+    var dv = this.dv(), u = this.u8(), i, r, c, id, km = this.keymapPtr, pos = {};
+    this.btnId = []; this.encId = []; this.encDir = [];
+    for (i = 0; i < NB; i++) this.btnId.push(u[this.p("btn_id") + i]);
+    for (i = 0; i < NE; i++) { this.encId.push(u[this.p("enc_id") + i]); this.encDir.push(dv.getInt8(this.p("enc_dir") + i) || 1); }
+    if (km) for (r = 1; r <= NLINE; r++) for (c = 0; c < NCOL; c++) {
+      id = dv.getInt8(km + r * NCOL + c);
+      if (id >= 0) pos[id] = c * NLINE + (r - 1);
+    }
+    this.btnLed = this.btnId.map(function (b) { return pos[b] === undefined ? -1 : pos[b]; });
+    this.keyLed = [];
+    for (i = 0; i < NKEY; i++) this.keyLed.push(pos[14 + i] === undefined ? -1 : pos[14 + i]);
+  };
+
+  /* ---- the clock: one device millisecond at a time, as the ABI wants ---- */
+  Core.prototype.runMs = function (n) {
+    var x = this.x, due, out, f, i, k, w;
+    for (k = 0; k < n && !this.halted; k++) {
+      this._call("rfm1_tick", this.ms);
+      if (this.ms % 15 === 0) this._call("rfm1_frame"); else this._call("rfm1_idle");
+      due = Math.floor((this.ms + 1) * FS / (1000 * BLOCK));
+      while (this.blocks < due && !this.halted) {
+        if (!this.abuf) this.abuf = x.rfm1_alloc(BLOCK * 4) || 0;
+        if (!this.abuf) { this.halted = 0x1fe; break; }
+        this._call("rfm1_audio", this.abuf, BLOCK);
+        out = new Int16Array(this.mem.buffer, this.abuf, BLOCK * 2);
+        for (i = 0; i < BLOCK * 2; i++) {
+          w = (this.rw++ % (this.ring.length)) | 0;
+          this.ring[w] = out[i] / 32768;
+        }
+        if (this.rw - this.rr > this.ring.length) this.rr = this.rw - this.ring.length;
+        this.blocks++;
+      }
+      this.ms++;
+    }
+  };
+  Core.prototype.buffered = function () { return (this.rw - this.rr) >> 1; };
+  /* n stereo frames at 44.1 kHz, running the device as long as it takes (at most ~250 ms of it) */
+  Core.prototype.pull = function (n, into) {
+    var out = into || new Float32Array(n * 2), guard = 0, i, len = this.ring.length;
+    while (this.buffered() < n && !this.halted && guard++ < 250) this.runMs(1);
+    for (i = 0; i < n * 2; i++) out[i] = this.rw > this.rr ? this.ring[(this.rr++) % len] : 0;
+    return out;
+  };
+  Core.prototype.drop = function () { this.rr = this.rw; };
+
+  /* ---- the panel ---- */
+  Core.prototype.key = function (k, down, vel) {
+    var dv = this.dv(), m = dv.getUint32(this.p("keys"), true);
+    if (down) {
+      dv.setUint8(this.p("key_vel") + k, vel ? Math.max(1, Math.min(127, vel | 0)) : 0);
+      m |= 1 << k;
+    } else m &= ~(1 << k);
+    dv.setUint32(this.p("keys"), m >>> 0, true);
+  };
+  Core.prototype.pressure = function (k, pct) { this.dv().setUint8(this.p("key_lean") + k, Math.max(0, Math.min(100, pct | 0))); };
+  Core.prototype.button = function (label, down) {
+    var dv = this.dv(), bit = this.btnId[label], m = dv.getUint32(this.p("buttons"), true);
+    if (bit === undefined) return;
+    m = down ? m | (1 << bit) : m & ~(1 << bit);
+    dv.setUint32(this.p("buttons"), m >>> 0, true);
+  };
+  Core.prototype.tapButton = function (label) {
+    var dv = this.dv(), bit = this.btnId[label];
+    dv.setUint32(this.p("buttons_tap"), (dv.getUint32(this.p("buttons_tap"), true) | (1 << bit)) >>> 0, true);
+  };
+  Core.prototype.turn = function (role, detents) {
+    var dv = this.dv(), e = this.encId[role], a = this.p("enc") + 4 * e;
+    if (e === undefined || !detents) return;
+    dv.setInt32(a, dv.getInt32(a, true) + detents * this.encDir[role], true);
+  };
+  Core.prototype.master = function (v) {
+    if (v === undefined) return this.dv().getInt32(this.p("master"), true);
+    this.dv().setInt32(this.p("master"), Math.max(0, Math.min(1023, v | 0)), true);
+  };
+  Core.prototype.lcdWrites = function () { return this.dv().getUint32(this.p("lcd_writes"), true); };
+  /* the screen: 240 x 240 RGB565, high byte first */
+  Core.prototype.lcdBytes = function () { return new Uint8Array(this.mem.buffer, this.p("lcd"), W * H * 2); };
+  /* the lights as brightness 0..255: { buttons: [14 by label], keys: [27], playGreen } */
+  Core.prototype.leds = function () {
+    var u = this.u8(), base = this.p("led"), self = this;
+    return {
+      buttons: this.btnLed.map(function (q) { return q < 0 ? 0 : u[base + q]; }),
+      keys: this.keyLed.map(function (q) { return q < 0 ? 0 : u[base + q]; }),
+      playGreen: u[self.p("led_play_green")]
+    };
+  };
+  /* MIDI in as a USB-MIDI packet (cable 0): 1 taken, 0 no room */
+  Core.prototype.midi = function (status, d1, d2) {
+    if (typeof this.x.rfm1_midi_in !== "function") return 0;
+    var pkt = ((status >> 4) & 0xf) | (status << 8) | (d1 << 16) | (d2 << 24);
+    return this._call("rfm1_midi_in", pkt >>> 0);
+  };
+  Core.prototype.uiInfo = function () {
+    if (typeof this.x.rfm1_ui_info !== "function") return "";
+    if (!this.infoBuf) this.infoBuf = this.x.rfm1_alloc(128);
+    if (!this.infoBuf) return "";
+    this.u8()[this.infoBuf] = 0;
+    this._call("rfm1_ui_info", this.infoBuf, 128);
+    return this.cstr(this.infoBuf, 128);
+  };
+  Core.prototype.stats = function () {
+    if (typeof this.x.rfm1_stats !== "function") return null;
+    if (!this.statBuf) this.statBuf = this.x.rfm1_alloc(8);
+    if (!this.statBuf) return null;
+    this._call("rfm1_stats", this.statBuf, this.statBuf + 4);
+    return { shed: this.dv().getUint32(this.statBuf, true), cpu: this.dv().getUint32(this.statBuf + 4, true) };
+  };
+
+  /* ---- the flash image: the host keeps it (here, the page's storage) ---- */
+  Core.prototype.flashDirty = function () { return typeof this.x.rfm1_flash_dirty === "function" ? this.x.rfm1_flash_dirty() >>> 0 : 0; };
+  Core.prototype.flashImage = function (sync) {
+    if (sync && typeof this.x.rfm1_flash_sync === "function") this._call("rfm1_flash_sync");
+    var p = this.x.rfm1_flash();
+    if (!p || !this.flashSize) return null;
+    return new Uint8Array(this.mem.buffer, p, this.flashSize).slice();
+  };
+  Core.prototype.shutdown = function () { if (typeof this.x.rfm1_shutdown === "function") this._call("rfm1_shutdown"); };
+
+  /* ---- live labels (FM1VST's DYNAMIC-LABELS, optional): what every control does right now. 49 slots:
+   * 0..7 the knob roles and MASTER, 8..21 the buttons, 22..37 the white keys, 38..48 the black keys.
+   * A string is the label ("" = no job here), null = not given. Returns null while there are none. ---- */
+  Core.prototype.labels = function () {
+    if (typeof this.x.rfm1_labels_epoch !== "function" || typeof this.x.rfm1_label !== "function") return null;
+    var ep = this._call("rfm1_labels_epoch") >>> 0, i, p, list;
+    if (!ep) return null;
+    if (ep === this._lblEpoch && this._lbl) return this._lbl;
+    list = [];
+    for (i = 0; i < 49; i++) {
+      p = this._call("rfm1_label", i) >>> 0;
+      list.push(p && p < this.mem.buffer.byteLength ? this.cstr(p, 16) : null);
+    }
+    this._lblEpoch = ep;
+    this._lbl = list;
+    return list;
+  };
+
+  /* ---- sim1, the optional extension: controls as values, and an accent colour ---- */
+  Core.prototype.ctl = function (role) {
+    if (!this.sim1 || typeof this.x.rfm1_sim1_ctl !== "function") return null;
+    if (!this.ctlBuf) this.ctlBuf = this.x.rfm1_alloc(76);
+    if (!this.ctlBuf) return null;
+    var abs = this._call("rfm1_sim1_ctl", role, this.ctlBuf), dv = this.dv(), b = this.ctlBuf;
+    return {
+      absolute: !!abs, value: dv.getInt32(b, true), lo: dv.getInt32(b + 4, true), hi: dv.getInt32(b + 8, true),
+      name: this.cstr(b + 12, 32), text: this.cstr(b + 44, 32)
+    };
+  };
+  Core.prototype.ctlSet = function (role, v) { if (this.sim1) this._call("rfm1_sim1_ctl_set", role, v | 0); };
+  Core.prototype.accent = function () {
+    if (!this.sim1 || typeof this.x.rfm1_sim1_accent !== "function") return -1;
+    return this._call("rfm1_sim1_accent");
+  };
+  Core.prototype.linkBytes = function () {
+    return this.sim1 && typeof this.x.rfm1_sim1_link_bytes === "function" ? this._call("rfm1_sim1_link_bytes") : -1;
+  };
+
+  var api = { parse: parse, sha256: sha256, Core: Core, LABELS: LABELS, ROLES: ROLES, FS: FS, W: W, H: H, NKEY: NKEY };
+  if (typeof module !== "undefined" && module.exports) module.exports = api;
+  root.Rfm1 = api;
+})(typeof globalThis !== "undefined" ? globalThis : this);
+// The emulator in the audio thread: each 128-frame quantum runs the machine until its I2S
 // DMA has produced 128 frames, so the audio device paces the emulation; and also, for an even
 // amount of work per quantum, its share of emulated time while the queue holds less than one
 // DMA half buffer beyond them (fm1_ahead: half the firmwares hand out 256 or 512 frames at
@@ -3350,6 +3787,112 @@ class Fm1Reader extends AudioWorkletProcessor {
   }
 }
 registerProcessor("fm1-reader", Fm1Reader);
+
+// A fast build, an .rfm1: the firmware's own code compiled to WebAssembly for a computer (vendor/rfm1.js, which build.py puts
+// before this file). There is no chip to emulate, so it runs at full speed. It takes the same messages as Fm1 and sends the
+// same ones back: each quantum pulls 128 frames, and the device's clock (one millisecond at a time) runs as far as they need.
+// Saves are the whole flash image, sent when the firmware's dirty counter moves (at most once a second) and when asked.
+// An AudioWorkletGlobalScope may have no TextDecoder, and rfm1.js's fallback decodes a whole text in one call, which overflows the
+// stack on a long licence (the M-VAVE SDK builds': dx747, vesper). This one decodes UTF-8 in pieces.
+if (typeof TextDecoder === "undefined") globalThis.TextDecoder = class {
+  decode(b) {
+    let s = "";
+    for (let i = 0; i < b.length; i += 8192) s += String.fromCharCode.apply(null, b.subarray(i, i + 8192));
+    try { return decodeURIComponent(escape(s)); } catch { return s; }
+  }
+};
+const R_LABEL = [12, 13, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // the page's button ids (OCT- OCT+ FX ... REC) to rfm1's labels (FX ... REC OCT- OCT+)
+const R_ROLE = [0, 1, 3, 4, 5, 6, 2]; // the page's encoders (the matrix's: SELECT ALGORITHM KNOB1-4 PRESETS) to rfm1's roles (SELECT ALGORITHM PRESETS KNOB1-4)
+class Rfm1Proc extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    Object.assign(this, { core: null, token: 0, st: 0, data: [] });
+    this.port.onmessage = (e) => this.message(e.data);
+  }
+
+  async message(m) {
+    const core = this.core;
+    if (m.type === "boot") {
+      const token = ++this.token;
+      this.core = null;
+      try {
+        const c = await Rfm1.Core.create(Rfm1.parse(new Uint8Array(m.rfm1)));
+        if (token !== this.token) return;
+        c.boot(m.flash ? new Uint8Array(m.flash) : null);
+        c.onhalt = (code, err) => this.port.postMessage({ type: "error", seq: this.seq, fatal: true, message: "the firmware stopped (" + (err && err.message ? err.message : "exit " + (code & 0xff)) + ")" });
+        Object.assign(this, { core: c, seq: m.seq, paused: false, lcdW: -1, saved: c.flashDirty(), savedAt: now(), busy: 0, worst: 0, quanta: 0, frames: 0, ms0: 0 });
+        this.port.postMessage({ type: "booted", seq: m.seq, rfm1: c.info, board: 0, threaded: false, base: null, flash: null });
+      } catch (err) {
+        if (token === this.token) this.port.postMessage({ type: "error", seq: m.seq, rfm1: true, message: "boot: " + (err && err.message ? err.message : err) });
+      }
+    } else if (m.type === "cancel-boot") (++this.token, (this.core = null));
+    else if (m.type === "snapshot") {
+      if (!core || m.seq !== this.seq) return this.port.postMessage({ type: "snapshot", seq: m.seq, request: m.request, unavailable: true });
+      this.save(m.request);
+      if (m.pause) this.paused = true;
+    } else if (!core) return;
+    else if (m.type === "resume") this.paused = false;
+    else if (m.type === "key") m.id < 14 ? core.button(R_LABEL[m.id], m.down) : core.key(m.id - 14, m.down, 100);
+    else if (m.type === "enc") core.turn(R_ROLE[m.enc], m.clicks);
+    else if (m.type === "pot") core.master(m.value);
+    else if (m.type === "midi") {
+      // bytes into whole messages (running status kept; system and SysEx messages dropped: rfm1_midi_in takes channel messages here)
+      for (const b of m.bytes) {
+        if (b >= 0xf8) continue;
+        if (b & 0x80) ((this.st = b < 0xf0 ? b : 0), (this.data = []));
+        else if (this.st && this.data.push(b) === ((this.st & 0xe0) === 0xc0 ? 1 : 2)) (core.midi(this.st, this.data[0], this.data[1] || 0), (this.data = []));
+      }
+    }
+  }
+
+  save(request) {
+    const flash = this.core.flashImage(true);
+    this.saved = this.core.flashDirty();
+    this.savedAt = now();
+    if (flash) this.port.postMessage({ type: "snapshot", seq: this.seq, request, flash }, [flash.buffer]);
+    else this.port.postMessage({ type: "snapshot", seq: this.seq, request, unavailable: true });
+  }
+
+  process(_inputs, outputs) {
+    const core = this.core, out = outputs[0];
+    if (!core || this.paused || core.halted) return true;
+    const n = out[0].length, t0 = now();
+    if (!this.buf || this.buf.length !== 2 * n) this.buf = new Float32Array(2 * n);
+    const b = core.pull(n, this.buf);
+    for (let i = 0; i < n; i++) (out[0][i] = b[2 * i]), out[1] && (out[1][i] = b[2 * i + 1]);
+    const took = now() - t0;
+    this.busy += took;
+    this.worst = Math.max(this.worst, took);
+    this.quanta++;
+    this.frames += n;
+    if (this.frames >= sampleRate / 30) this.report();
+    return true;
+  }
+
+  report() {
+    const core = this.core, w = core.lcdWrites();
+    let lcd = null;
+    if (w !== this.lcdW) { // RGB565, high byte first, into the page's 16-bit pixels
+      this.lcdW = w;
+      const s = core.lcdBytes();
+      lcd = new Uint16Array(57600);
+      for (let i = 0; i < 57600; i++) lcd[i] = (s[2 * i] << 8) | s[2 * i + 1];
+    }
+    // the lights: rfm1 gives 0..255; the page reads 0.08 as fully lit (the emulator's LEDs are driven about 1 tick in 11)
+    const l = core.leds(), leds = new Float32Array(41);
+    l.buttons.forEach((v, label) => (leds[label < 12 ? label + 2 : label - 12] = (v / 255) * 0.08));
+    l.keys.forEach((v, k) => (leds[14 + k] = (v / 255) * 0.08));
+    leds[12] = Math.max(leds[12], (l.playGreen / 255) * 0.08);
+    if (core.flashDirty() !== this.saved && now() - this.savedAt >= 1000) this.save(undefined);
+    const transfer = [leds.buffer];
+    if (lcd) transfer.push(lcd.buffer);
+    this.port.postMessage({ type: "frame", seq: this.seq, lcd, leds, ms: core.ms, short: 0, held: 0, halted: core.halted, pads: null, playing: true,
+      jit: { regions: 0, failed: 0, error: "", bytes: 0, tableSlots: 0, compileMs: 0, compileMaxMs: 0 },
+      busy: this.busy, worst: this.worst, emulated: core.ms - this.ms0, idle: 0, starved: 0, core1: -1, started: 1, quanta: this.quanta, frames: this.frames / this.quanta, rfm1: true }, transfer);
+    Object.assign(this, { busy: 0, worst: 0, quanta: 0, frames: 0, ms0: core.ms });
+  }
+}
+registerProcessor("rfm1", Rfm1Proc);
 </script>
     <script type="text/plain" id="core1worker">// Core 1's thread (threaded build only, see web/build-threads.sh): a second instance of the emulator module on the
 // audio thread's shared memory. The audio thread's instance has set up this one's stack and thread-local block
@@ -3461,7 +4004,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://hugelton.github.io/Felucca/webapp/installer/",
   "hub": "felucca",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "felucca-1.8.2.rfm1"
  },
  {
   "id": "felucca-salt",
@@ -3521,7 +4065,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "a949a6a2a1ced8b3",
   "date": "2026-11-06",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "amb-1.3.2.rfm1"
  },
  {
   "id": "amenity",
@@ -3534,7 +4079,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/amenity-2.1.1.fwsc",
   "hub": "amenity",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "amenity-2.1.1.rfm1"
  },
  {
   "id": "april",
@@ -3558,7 +4104,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/arctic-2.1.6.fwsc",
   "hub": "arctic",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "arcticscream-2.1.4.rfm1"
  },
  {
   "id": "arcturus",
@@ -3724,7 +4271,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/berlinan-0.5.1.fwsc",
   "hub": "berlinan",
   "date": "2026-10-27",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "berlinan-0.5.1.rfm1"
  },
  {
   "id": "bigorna",
@@ -3806,7 +4354,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/bytemania-1.3.3.fwsc",
   "hub": "bytemania",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "bytemania-1.3.2.rfm1"
  },
  {
   "id": "caravel",
@@ -3819,7 +4368,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/caravel-1.2.0.fwsc",
   "hub": "caravel",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "caravel-1.1.0.rfm1"
  },
  {
   "id": "carnac",
@@ -3834,7 +4384,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 160,
   "minMhzPackage": "6d81a8d1186fecc8",
   "date": "2026-10-29",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "carnacos-0.9.6.rfm1"
  },
  {
   "id": "chipbox",
@@ -3847,7 +4398,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/chipbox-1.7.0-signatureshowcase.fwsc",
   "hub": "chipbox",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "chipbox-1.5.5.rfm1"
  },
  {
   "id": "choppah",
@@ -3875,7 +4427,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://quixotic7.github.io/ChoralRootFM1/",
   "hub": "choralroot",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "choralroot-0.46.rfm1"
  },
  {
   "id": "chord",
@@ -3916,7 +4469,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/clipper-1.3.1.fwsc",
   "hub": "clipper",
   "date": "2026-11-04",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "clipper-1.3.1.rfm1"
  },
  {
   "id": "coqui",
@@ -3946,7 +4500,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "d87d6327e0f98000",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "coralflower-0.7.1.rfm1"
  },
  {
   "id": "cord",
@@ -3988,7 +4543,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://charlesvestal.github.io/fm1-ctl/install/",
   "hub": "ctl",
   "date": "2026-11-06",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ctl-1.0.3.rfm1"
  },
  {
   "id": "cultbox",
@@ -4001,7 +4557,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/cultbox-1.2.fwsc",
   "hub": "cultbox",
   "date": "2026-11-05",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "cultbox-1.2.rfm1"
  },
  {
   "id": "cutador",
@@ -4111,7 +4668,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/drift-0.9.6.fwsc",
   "hub": "drift",
   "date": "2026-11-02",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "drift-0.9.6.rfm1"
  },
  {
   "id": "drumlab",
@@ -4124,7 +4682,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/drumlab-1.0.0-graduationday.fwsc",
   "hub": "drumlab",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "drumlab-0.1.3-beta.rfm1"
  },
  {
   "id": "dub",
@@ -4139,7 +4698,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "19cc9649583192d0",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "dub-1.4.3.rfm1"
  },
  {
   "id": "duell",
@@ -4152,7 +4712,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/duell-1.3.7.fwsc",
   "hub": "duell",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "duell-1.3.6.rfm1"
  },
  {
   "id": "dungeontracker",
@@ -4165,7 +4726,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/dungeontracker-1.5.fwsc",
   "hub": "dungeontracker",
   "date": "2026-11-04",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "dungeontracker-1.5.rfm1"
  },
  {
   "id": "dx747",
@@ -4178,7 +4740,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/dx747-0.1.fwsc",
   "hub": "dx747",
   "date": "2026-11-06",
-  "chip": "any"
+  "chip": "any",
+  "rfm1": "dx747-0.1.rfm1"
  },
  {
   "id": "echofield",
@@ -4193,7 +4756,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "f349acd34d4e56bf",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "echofield-0.2.15.rfm1"
  },
  {
   "id": "elixir",
@@ -4247,7 +4811,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/etch-1.88.fwsc",
   "hub": "etch",
   "date": "2026-10-30",
-  "chip": "any"
+  "chip": "any",
+  "rfm1": "etch-1.88.rfm1"
  },
  {
   "id": "fart",
@@ -4289,7 +4854,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "c77036f22fb85a09",
   "date": "2026-11-09",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fimba-0.7.0.rfm1"
  },
  {
   "id": "fizz",
@@ -4302,7 +4868,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fizz-0.13.0.fwsc",
   "hub": "fizz",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fizz-0.13.0.rfm1"
  },
  {
   "id": "flyfish",
@@ -4396,7 +4963,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 120,
   "minMhzPackage": "86de2ecc0fbba397",
   "date": "2026-11-08",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "trax-0.9.5.rfm1"
  },
  {
   "id": "fmdj",
@@ -4422,7 +4990,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fmel-1.3.fwsc",
   "hub": "fmel",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmel1-1.3.rfm1"
  },
  {
   "id": "fmfam",
@@ -4448,7 +5017,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fmini-2.6.0.fwsc",
   "hub": "fmini",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmini-2.6.0.rfm1"
  },
  {
   "id": "fomajam",
@@ -4475,7 +5045,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://charlesvestal.github.io/fm1-fomni/",
   "hub": "fomni",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fomni-0.5.rfm1"
  },
  {
   "id": "frasil",
@@ -4490,7 +5061,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "493fed404326783c",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "frasil-3.4.1.rfm1"
  },
  {
   "id": "frodhes",
@@ -4559,7 +5131,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "92630ae278d4a0b4",
   "date": "2026-10-24",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "ghoulbox-2.4.rfm1"
  },
  {
   "id": "golana",
@@ -4572,7 +5145,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/golana-1.3.fwsc",
   "hub": "golana",
   "date": "2026-10-26",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "golana-1.3.rfm1"
  },
  {
   "id": "golanadz",
@@ -4598,7 +5172,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/grimm-2.0.2.fwsc",
   "hub": "grimm",
   "date": "2026-11-03",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "grimm-2.0.2.rfm1"
  },
  {
   "id": "guitchordi",
@@ -4611,7 +5186,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/guitchordi-0.1.0-beta.1.fwsc",
   "hub": "guitchordi",
   "date": "2026-10-26",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "guitchordi-0.1.0-beta.1.rfm1"
  },
  {
   "id": "guru600",
@@ -4637,7 +5213,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/hawkchua-2.1.7.fwsc",
   "hub": "hawkchua",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hawkchua-2.1.7.rfm1"
  },
  {
   "id": "hera",
@@ -4666,7 +5243,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://deadactive.github.io/hortator/webapp/installer/",
   "hub": "hortator",
   "date": "2026-11-03",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hortator-1.0.1.rfm1"
  },
  {
   "id": "hortator-bt",
@@ -4707,7 +5285,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 120,
   "minMhzPackage": "7b858f2acb7c9913",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hyp1-1.5.54.rfm1"
  },
  {
   "id": "j6",
@@ -4777,7 +5356,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/jiant-V10.8.48.fwsc",
   "hub": "jiant",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "jiant-10.26.rfm1"
  },
  {
   "id": "karma",
@@ -4790,7 +5370,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/karma-3.1.6.fwsc",
   "hub": "karma",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "karma-3.1.5.rfm1"
  },
  {
   "id": "kawa",
@@ -4870,7 +5451,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/krisjangle-0.15.fwsc",
   "hub": "krisjangle",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "kris_jangle-0.15.rfm1"
  },
  {
   "id": "kwasub",
@@ -4885,7 +5467,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 240,
   "minMhzPackage": "226cfda1f63e487d",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "kwasub-1.1.03.rfm1"
  },
  {
   "id": "loafbreaker",
@@ -4898,7 +5481,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/loafbreaker-0.9.80.fwsc",
   "hub": "loafbreaker",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "loafbreaker-0.9.73.rfm1"
  },
  {
   "id": "loom",
@@ -4911,7 +5495,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/loom-0.18.2.fwsc",
   "hub": "loom",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "loom-0.18.2.rfm1"
  },
  {
   "id": "loomfm1",
@@ -4999,7 +5584,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "5d52951efcc1d44c",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "matryoshka-1.24.1.rfm1"
  },
  {
   "id": "mc1",
@@ -5029,7 +5615,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "8555dc54670a9e39",
   "date": "2026-11-02",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "melodee-1.6.1.rfm1"
  },
  {
   "id": "midimon",
@@ -5055,7 +5642,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/mightyarp-1.5.fwsc",
   "hub": "mightyarp",
   "date": "2026-11-16",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mightyarp-1.5.rfm1"
  },
  {
   "id": "mikufm",
@@ -5096,7 +5684,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/minitone-1.0.5.fwsc",
   "hub": "minitone",
   "date": "2026-10-26",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "minitone-1.0.5.rfm1"
  },
  {
   "id": "mnm1",
@@ -5109,7 +5698,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/mnm1-1.0.1.fwsc",
   "hub": "mnm1",
   "date": "2026-10-27",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "mnm1-1.0.1.rfm1"
  },
  {
   "id": "modelar",
@@ -5122,7 +5712,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/modelar-0.3.fwsc",
   "hub": "modelar",
   "date": "2026-10-22",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "modelar-0.3.rfm1"
  },
  {
   "id": "monk",
@@ -5148,7 +5739,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/mono2k-1.13.fwsc",
   "hub": "mono2k",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mono2k-1.13.rfm1"
  },
  {
   "id": "monohull",
@@ -5178,7 +5770,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "25a3ec0014647460",
   "date": "2026-11-21",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "mope1-0.5.0.rfm1"
  },
  {
   "id": "morpheus",
@@ -5206,7 +5799,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/mpyre-1.0.3.fwsc",
   "hub": "mpyre",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mpyre-1.0.3.rfm1"
  },
  {
   "id": "mutable",
@@ -5221,7 +5815,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 160,
   "minMhzPackage": "a3f0ff7a23dd377d",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mutabledreams-2.3.rfm1"
  },
  {
   "id": "mvance",
@@ -5234,7 +5829,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/mvance-2.8.1.fwsc",
   "hub": "mvance",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mvance-2.7.1.rfm1"
  },
  {
   "id": "mycelium",
@@ -5262,7 +5858,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 120,
   "minMhzPackage": "46693845a35291da",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "nachtfahrt-1.0.2.rfm1"
  },
  {
   "id": "nauclerus",
@@ -5290,7 +5887,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "1fd94b0352e587c2",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "niagaradrift-0.3.1.rfm1"
  },
  {
   "id": "nmsfm",
@@ -5333,7 +5931,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "3e13b127c8cb1094",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "obervave-3.5.2.rfm1"
  },
  {
   "id": "ombak",
@@ -5375,7 +5974,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://dspaudio.github.io/orbit/",
   "hub": "orbit",
   "date": "2026-11-04",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "orbit-1.0.0.rfm1"
  },
  {
   "id": "paperlagoon",
@@ -5403,7 +6003,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/patchwerk-1.0.3.fwsc",
   "hub": "patchwerk",
   "date": "2026-11-08",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "patchwerk-1.0.3.rfm1"
  },
  {
   "id": "penumbra",
@@ -5418,7 +6019,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "314fa0d32c3d0236",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "penumbra-1.9.rfm1"
  },
  {
   "id": "perf1",
@@ -5433,7 +6035,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "f006cc6dd54eb867",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "perf1-0.17.0.rfm1"
  },
  {
   "id": "pigeon",
@@ -5446,7 +6049,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/pigeon-0.5.0-beta.1.fwsc",
   "hub": "pigeon",
   "date": "2026-10-21",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "pigeon-0.4.1.rfm1"
  },
  {
   "id": "piterfly",
@@ -5541,7 +6145,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "322701e7dd9d9a52",
   "date": "2026-11-08",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "purplemonkey-0.12.rfm1"
  },
  {
   "id": "quartet",
@@ -5584,7 +6189,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "22156c96381ff78f",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rainbow-1.1.5-rb.rfm1"
  },
  {
   "id": "rambeaver",
@@ -5610,7 +6216,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/ravel-1.46.0.fwsc",
   "hub": "ravel",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ravel-1.45.0.rfm1"
  },
  {
   "id": "remotefm1",
@@ -5623,7 +6230,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/remotefm1-0.4.0.fwsc",
   "hub": "remotefm1",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "remotefm1-0.4.0.rfm1"
  },
  {
   "id": "rhythmer",
@@ -5636,7 +6244,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/rhythmer-0.1.1-beta3.fwsc",
   "hub": "rhythmer",
   "date": "2026-11-07",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rhythmer-0.1.0-beta.2.rfm1"
  },
  {
   "id": "rupture",
@@ -5651,7 +6260,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "4255049edb3003c1",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "rupture-2.0.14.rfm1"
  },
  {
   "id": "s1vave",
@@ -5666,7 +6276,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "2139328149f91b87",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "s1vave-2.0.1.rfm1"
  },
  {
   "id": "sardine",
@@ -5737,7 +6348,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fm1sid-0.3.fwsc",
   "hub": "fm1sid",
   "date": "2026-10-25",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "sid-0.3.rfm1"
  },
  {
   "id": "sid1",
@@ -5752,7 +6364,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "22b9e3d7f517da61",
   "date": "2026-11-13",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sid1-1.0.1.rfm1"
  },
  {
   "id": "sidj",
@@ -5765,7 +6378,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/sidj-1.5.1.fwsc",
   "hub": "sidj",
   "date": "2026-11-07",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sidj-1.5.1.rfm1"
  },
  {
   "id": "sidou",
@@ -5778,7 +6392,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/sidou-2.0.0.fwsc",
   "hub": "sidou",
   "date": "2026-11-18",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sidou-2.0.0.rfm1"
  },
  {
   "id": "sill",
@@ -5807,7 +6422,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://illuminus5.github.io/skiff/webapp/installer/",
   "hub": "skiff",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "skiff-2.7.rfm1"
  },
  {
   "id": "sloop",
@@ -5821,7 +6437,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://isod89.github.io/sloop-fm1/webapp/installer/",
   "hub": "sloop",
   "date": "2026-11-04",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sloop-2.8.5.rfm1"
  },
  {
   "id": "sloop-alg",
@@ -5897,7 +6514,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/smileyface-1.3.0-tutorialtime.fwsc",
   "hub": "smileyface",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "smileyface-1.1.5.rfm1"
  },
  {
   "id": "spampy",
@@ -5923,7 +6541,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/spellbox-0.3.fwsc",
   "hub": "spellbox",
   "date": "2026-10-28",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "spellbox-0.3.rfm1"
  },
  {
   "id": "splitmilk",
@@ -5977,7 +6596,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/tessera-3.7.5.fwsc",
   "hub": "tessera",
   "date": "2026-11-22",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tessera-3.7.5.rfm1"
  },
  {
   "id": "tonitor",
@@ -5990,7 +6610,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/tonitor-2026.11.10.fwsc",
   "hub": "tonitor",
   "date": "2026-11-10",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tonitor-0.55.rfm1"
  },
  {
   "id": "tribe",
@@ -6064,7 +6685,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 120,
   "minMhzPackage": "4c9ff3c9ca0b874d",
   "date": "2026-11-13",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "vector37-0.3.2.rfm1"
  },
  {
   "id": "veffbox",
@@ -6094,7 +6716,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 100,
   "minMhzPackage": "c6f40b9a832f069f",
   "date": "2026-11-09",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "vesper-2.0.2.rfm1"
  },
  {
   "id": "wanderer",
@@ -6152,7 +6775,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "installer": "https://charlesvestal.github.io/fm1-x0x/install/",
   "hub": "x0x",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "x0x-1.3.rfm1"
  },
  {
   "id": "x0xrmx",
@@ -6208,7 +6832,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "minMhz": 80,
   "minMhzPackage": "e3c51c045b1a763b",
   "date": "2026-10-21",
-  "chip": "old"
+  "chip": "old",
+  "rfm1": "zen1-1.2.rfm1"
  },
  {
   "id": "zp12",
@@ -6293,7 +6918,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/hadal1-1.0.1.fwsc",
   "repo": "https://github.com/sparky480v/hadal-1",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "hadal1-1.0.1.rfm1"
  },
  {
   "id": "agtdeck",
@@ -6425,7 +7051,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/golf-1.0.fwsc",
   "repo": "https://github.com/barnierg76/golf-fm1",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "golf-1.0.rfm1"
  },
  {
   "id": "tekstuur",
@@ -6437,7 +7064,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/tekstuur-2.0.fwsc",
   "repo": "https://github.com/barnierg76/tekstuur-fm1",
   "date": "2026-11-14",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "tekstuur-2.0.rfm1"
  },
  {
   "id": "kurzhaar",
@@ -6497,7 +7125,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/mvsynth2-1.5.2.fwsc",
   "repo": "https://github.com/bk40-home/M-Vsynth2",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "mvsynth2-1.5.2.rfm1"
  },
  {
   "id": "trapstationos",
@@ -6509,7 +7138,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/trapstationos-1.1.0.2.fwsc",
   "repo": "https://github.com/sog-maker/trapstation-os",
   "date": "2026-11-16",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "trapstationos-1.1.0.2.rfm1"
  },
  {
   "id": "astra",
@@ -6533,7 +7163,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/glitch-2.0.2.fwsc",
   "repo": "https://github.com/saulofilho/glitch",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "glitch-2.0.2.rfm1"
  },
  {
   "id": "quartz",
@@ -6545,7 +7176,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/quartz-0.10.fwsc",
   "repo": "https://github.com/F0nski/quartz",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "quartz-0.10.rfm1"
  },
  {
   "id": "fmav1",
@@ -6557,7 +7189,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fmav1-0.6.4.fwsc",
   "repo": "https://github.com/wootr0p/fmav1",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmav1-0.6.4.rfm1"
  },
  {
   "id": "juicy",
@@ -6581,7 +7214,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fmlarynx-0.4.2.fwsc",
   "repo": "https://github.com/ejtb76/FMLarynx",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmlarynx-0.4.2.rfm1"
  },
  {
   "id": "fernbedienung",
@@ -6617,7 +7251,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "repo": "https://github.com/shan-sherif/fm-1-chimera-vocal",
   "date": "2026-11-25",
   "chip": "new",
-  "license": "MIT + MPL-2.0 + BSD (CMUdict)"
+  "license": "MIT + MPL-2.0 + BSD (CMUdict)",
+  "rfm1": "chimeravocal-0.9.0.rfm1"
  },
  {
   "id": "orgigs",
@@ -6629,7 +7264,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/orgigs-1.5.fwsc",
   "repo": "https://github.com/orgelbobo/orgigs",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "orgigs-1.1.rfm1"
  },
  {
   "id": "dabke",
@@ -6641,7 +7277,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/dabke-0.22-beta.fwsc",
   "repo": "https://github.com/wissamsader/dabke",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "dabke-0.18.rfm1"
  },
  {
   "id": "obssynthfm1",
@@ -6653,7 +7290,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/obssynthfm1-0.2.0.fwsc",
   "repo": "https://github.com/orianbsilva/obssynth-fm1",
   "date": "2026-11-15",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "obssynth-0.2.0.rfm1"
  },
  {
   "id": "evilgenius",
@@ -6665,7 +7303,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/evilgenius-0.1.4.fwsc",
   "repo": "https://github.com/Quixotic7/evilgenius",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "evilgenius-0.1.4.rfm1"
  },
  {
   "id": "nccnovationcircuitcompan",
@@ -6701,7 +7340,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/conductor-1.0.fwsc",
   "repo": "https://github.com/MammothCheese/conductor",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "conductor-1.0.rfm1"
  },
  {
   "id": "aetherfm1",
@@ -6725,7 +7365,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/quantumgammawave-2.5.2.fwsc",
   "repo": "https://github.com/Guillel51/Quantum-GammaWave",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "quantumgammawave-4.1.0.rfm1"
  },
  {
   "id": "yehnah",
@@ -6737,7 +7378,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/yehnah-0.1.0.fwsc",
   "repo": "https://github.com/Mello-D/yehnah",
   "date": "2026-11-16",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "yehnah-0.2.0.rfm1"
  },
  {
   "id": "cursedos",
@@ -6761,7 +7403,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/stallion-1.1.fwsc",
   "repo": "https://github.com/EberonLtd/stallion-fm1",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "stallion-1.1.rfm1"
  },
  {
   "id": "vnl1",
@@ -6797,7 +7440,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/ruido-0.7.3.fwsc",
   "repo": "https://github.com/miguelhd/ruido",
   "date": "2026-11-23",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "ruido-0.7.2.rfm1"
  },
  {
   "id": "fmkick",
@@ -6809,7 +7453,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/fmkick-0.5.1.fwsc",
   "repo": "https://github.com/davidamomusic/fm-kick",
   "date": "2026-11-19",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "fmkick-0.5.1.rfm1"
  },
  {
   "id": "ambpond",
@@ -6833,7 +7478,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/morse-0.8.fwsc",
   "repo": "https://github.com/daviddwlee84/fm1-morse",
   "date": "2026-11-18",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "morse-0.8.rfm1"
  },
  {
   "id": "darkfunkdurcalsynt",
@@ -6869,7 +7515,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/samsara-1.0.0.fwsc",
   "repo": "https://github.com/tomorrowsman/fm1-samsara",
   "date": "2026-11-17",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "samsara-1.0.0.rfm1"
  },
  {
   "id": "fm1tonic",
@@ -6917,7 +7564,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/sy1-1.0.0.fwsc",
   "repo": "https://github.com/fenderberg/fm1-sy1",
   "date": "2026-11-21",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "sy1-1.0.0.rfm1"
  },
  {
   "id": "dayvx",
@@ -6965,7 +7613,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/h1-0.3.2.fwsc",
   "repo": "https://github.com/jakehandy/h1",
   "date": "2026-11-24",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "h1-0.3.0.rfm1"
  },
  {
   "id": "fm1zx",
@@ -7073,7 +7722,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/pingos1-1.0.1.fwsc",
   "repo": "https://github.com/PINGAUDIO/PING-OS-1",
   "date": "2026-11-20",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "pingos1-1.0.1.rfm1"
  },
  {
   "id": "metronome",
@@ -7445,7 +8095,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
   "package": "https://thefirmwarehub.com/fw/a22-0.6.0.fwsc",
   "repo": "https://github.com/abektes/a22",
   "date": "2026-11-25",
-  "chip": "new"
+  "chip": "new",
+  "rfm1": "a22-0.1.0.rfm1"
  },
  {
   "id": "prophet67",
@@ -7815,7 +8466,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true, rfm1: typeof f.rfm1 === "string" && /^[\w.-]{1,80}\.rfm1$/.test(f.rfm1) ? f.rfm1 : "" });
         }
         return out;
       }
@@ -7826,8 +8477,11 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       const withOwn = (list) => [TETHER, ...list.filter((f) => f.id !== TETHER.id)];
       // EXTRAS: the firmwares this page adds by hand (update-firmwares.py's EXTRA, such as SHRUB): neither live list has them, so
       // they are put back whenever a kept or fresh list replaces the built-in one
-      const EXTRAS = vetCatalog(JSON.parse($("#fwlist").textContent)).filter((f) => f.extra),
-        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))];
+      // and the fast builds (.rfm1) the built-in list names, which the live lists don't know about either
+      const BUILT = vetCatalog(JSON.parse($("#fwlist").textContent)),
+        EXTRAS = BUILT.filter((f) => f.extra),
+        RFM1S = new Map(BUILT.filter((f) => f.rfm1).map((f) => [f.id, f.rfm1])),
+        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))].map((f) => (f.rfm1 || !RFM1S.has(f.id) ? f : { ...f, rfm1: RFM1S.get(f.id) }));
       let FIRMWARES = withOwn(vetCatalog(JSON.parse($("#fwlist").textContent))),
         kept = new Set(); // the ids of the packages kept on this device
 
@@ -7930,7 +8584,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       // Every pointer on its own, so several fingers play a chord or hold a key while one turns a knob.
       // ======================================================================
       let node = null; // the emulator in the audio thread (null = off)
-      const send = (m) => node && node.port.postMessage(m);
+      let rnode = null; // the fast builds' processor (worklet.js's Rfm1Proc), made the first time one runs after power on
+      const send = (m) => node && (run && run.rfm1 && rnode ? rnode : node).port.postMessage(m);
       const down = new Uint8Array(64),
         holds = new Uint8Array(64),
         clicks = new Int32Array(8);
@@ -8240,6 +8895,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         $("#clock i").textContent = mhz + " MHz";
         if (!f) return toast("Choose a firmware first");
         try {
+          if (fresh) await kvDel("rsave:" + f.id);
+          if (await bootFast(f, mine)) return;
           const bytes = await packageOf(f),
             hash = hex(await crypto.subtle.digest("SHA-256", bytes));
           if (fresh) await kvDel("save:" + hash);
@@ -8257,6 +8914,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           }
           status("booting " + f.name + "…");
           stopCore1();
+          rnode && rnode.port.postMessage({ type: "cancel-boot" }); // a fast build that was running stops
           const one = ONE_THREAD.has(f.id), mt = window.FM1Native || one ? null : await threadedCore();
           if (mine !== seq || !node) return;
           node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, threads: one ? 1 : undefined, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
@@ -8267,6 +8925,50 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           toast(f.name + ": " + e.message, 4000);
         }
       }
+      // FAST BUILDS: a firmware with an .rfm1 (its own code built as WebAssembly, RemoteFM1FW's release, mirrored in fm1-firmwares next to its
+      // .fwsc) runs that in worklet.js's Rfm1Proc instead of the emulator: on the page's AudioContext, or in the Android app on the WebView's
+      // own one (nac), with the native core stopped meanwhile. Its saves are its whole flash image, under its id, so they survive a new build.
+      // Not with a DX7 bank, the ?worker=1 trial or a build that failed to start this visit (noFast): those use the emulator.
+      let fast = stored("fm1.fast") !== "0";
+      const noFast = new Set();
+      async function rfm1Of(f) {
+        const got = await kvGet("rfm1:" + f.id),
+          have = got && got.bytes instanceof Uint8Array && got.bytes.length <= 40 << 20 ? got : null;
+        if (have && (have.file === f.rfm1 || !navigator.onLine)) return have.bytes;
+        try {
+          const r = await fetch("https://utopick.github.io/fm1-firmwares/" + f.id + "/" + f.rfm1);
+          if (!r.ok) throw Error("status " + r.status);
+          const bytes = new Uint8Array(await r.arrayBuffer());
+          if (bytes.length > 40 << 20 || bytes[0] !== 0 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) throw Error("not an .rfm1");
+          kvPut("rfm1:" + f.id, { file: f.rfm1, bytes }).catch(() => {});
+          return bytes;
+        } catch (e) {
+          if (have) return have.bytes; // an older build kept is better than none
+          throw e;
+        }
+      }
+      async function bootFast(f, mine) {
+        const ctx = window.FM1Native ? nac : ac;
+        if (!fast || !f.rfm1 || noFast.has(f.id) || emu || bank || !ctx) return false;
+        status("downloading the fast build of " + f.name + "…");
+        const bytes = await rfm1Of(f).catch(() => null),
+          flash = bytes && (await kvGet("rsave:" + f.id));
+        if (!bytes || mine !== seq || !node) return !!bytes;
+        if (!rnode) {
+          rnode = new AudioWorkletNode(ctx, "rfm1", { numberOfInputs: 0, outputChannelCount: [2] });
+          rnode.port.onmessage = onWorklet;
+          if (window.FM1Native) rnode.connect(fxe.in); // the app's chain passes the sound straight through while nothing is on
+          else (rnode.connect(fxOn ? fxe.in : ac.destination), ac._meter && rnode.connect(ac._meter));
+        }
+        allUp();
+        stopCore1();
+        node.port.postMessage({ type: "cancel-boot" }); // the emulator (in the app: the native core) stops while the fast build plays
+        run = { f, hash: "", base: null, saved: new Map(flash instanceof Uint8Array ? [[0, flash]] : []), rfm1: true };
+        status("booting " + f.name + " (fast build)…");
+        rnode.port.postMessage({ type: "boot", seq: mine, rfm1: bytes.slice().buffer, flash: flash instanceof Uint8Array ? flash.slice().buffer : null });
+        return true;
+      }
+      const fastFace = () => ($("#fast i").textContent = fast ? "ON" : "OFF");
       // saves: when the firmware writes its flash the worklet sends the whole chip; the sectors that differ from the
       // package's own are kept under the package's hash, so each exact firmware version has its own save
       function keepFlash(flash) {
@@ -8324,7 +9026,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           return sure("The sound of " + name + " drops out although this device has time to spare, because its audio buffer is too small. Slide to restart with a larger one, and the keys will answer a little later. What it has not saved is lost.", () => ((latency = "playback"), powerOff(), turnOn(), toast("Larger audio buffer")));
         }
         perf.asked = true;
-        const c = lowerClock(load, idle, mhz);
+        const c = run.rfm1 ? null : lowerClock(load, idle, mhz); // a fast build has no clock to lower
         if (!c) return toast("This device cannot run " + name + " in real time, so the sound breaks up", 5000);
         sure("This device cannot keep up with " + name + " at " + mhz + " MHz, so the sound breaks up. Slide to restart it at " + c + " MHz. What it has not saved is lost.", () => ((mhz = c), (perf.asked = false), boot(), toast(name + " at " + c + " MHz")));
       }
@@ -8339,11 +9041,12 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           thr.mode = m.threaded ? "threads" : "single";
           Object.assign(perf, { busy: 0, span: 0, emu: 0, idle: 0, t: performance.now(), secs: 0, bad: 0 });
           send({ type: "pot", value: pot }); // each start puts the emulator's MASTER back at 900: give it where our knob is
-          status(run.f.name + (run.saved.size ? " · saves loaded" : ""));
+          status(run.f.name + (m.rfm1 ? " · fast build " + m.rfm1.version : "") + (run.saved.size ? " · saves loaded" : ""));
           toast(m.board === 1 ? run.f.name + " is made for the SMK-37, another device, so not all its controls are here" : run.f.name + " is on", m.board === 1 ? 5000 : undefined);
           const r = run; // a picture of its screen for its card, once it has drawn it
           setTimeout(() => run === r && kvPut("shot:" + r.f.id, $("#lcd").toDataURL("image/png")).catch(() => {}), 8000);
-        } else if (m.type === "snapshot" && m.flash) keepFlash(m.flash);
+        } else if (m.type === "snapshot" && m.flash) run && run.rfm1 ? kvPut("rsave:" + run.f.id, m.flash).catch(() => toast("No room on this device to keep what the firmware saved", 3000)) : keepFlash(m.flash);
+        else if (m.type === "error" && m.rfm1 && run) (noFast.add(run.f.id), toast("The fast build of " + run.f.name + " did not start, so it runs on the emulator", 4000), console.warn(m.message), boot());
         else if (m.type === "error") (window.FM1Native?.page?.(), status(m.message), toast(m.message, 4000));
       }
       // The Android app: the same messages as the worklet, through window.FM1Native (post, boot) and a poll of /native/poll, whose answer is a queue of
@@ -8476,6 +9179,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         fxOn = false;
         node.connect(ac.destination);
         node.connect(meter);
+        ac._meter = meter;
         ac._peak = setInterval(() => (meter.getFloatTimeDomainData(buf), (peak = Math.max(peak * 0.9, ...buf.map(Math.abs)))), 100);
         node.port.onmessage = onWorklet;
         fxSync();
@@ -8492,7 +9196,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         clearInterval(nat);
         stopCore1();
         emu?.terminate();
-        ac = nat = node = run = emu = fxe = null;
+        ac = nat = node = run = emu = fxe = rnode = null;
         fxOn = false;
         allUp();
         dark();
@@ -8568,15 +9272,15 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           if (f === local || f === backup || !navigator.onLine) own();
           else img.src = HUB_IMG + f.id + ".webp";
           t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), notr(el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. It is kept on this device and nothing is uploaded." : f === local ? "It is kept on this device and nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")), f !== backup && f !== local));
-          if (f.chip) { // the chip tag sits to the right of the title, where there is room
-            const b = t.querySelector("b"), tag = el("em", "chip " + f.chip, CHIP_TAG[f.chip][0]);
-            tag.title = CHIP_TAG[f.chip][1];
-            b.replaceChildren(el("span", "n", b.textContent), tag);
+          const tags = [f.chip && [f.chip, ...CHIP_TAG[f.chip]], fast && f.rfm1 && ["fast", "FAST", "It has a fast build (" + f.rfm1 + "): its own code made for computers, so it runs without emulating the chip and plays smoothly on slow devices too. FAST BUILDS in OPTIONS turns them off"]].filter(Boolean);
+          if (tags.length) { // the tags sit to the right of the title, where there is room
+            const b = t.querySelector("b");
+            b.replaceChildren(el("span", "n", b.textContent), ...tags.map(([c, text, title]) => Object.assign(el("em", "chip " + c, text), { title })));
           }
           t.title = f.about || f.name;
           // one button: DOWNLOAD until the package is kept on this device, then USE
           go.title = have ? "Run " + f.name + " on the FM-1" : "Download " + f.name + " and keep it on this device, so it runs offline";
-          go.onclick = () => (have ? use(f.id) : ((go.disabled = true), (go.textContent = "DOWNLOADING…"), toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), listFace(), toast(f.name + " is kept on this device")), (e) => (listFace(), toast(f.name + ": " + e.message, 4000)))));
+          go.onclick = () => (have ? use(f.id) : ((go.disabled = true), (go.textContent = "DOWNLOADING…"), toast("Downloading " + f.name + "…"), packageOf(f).then(() => (manualOf(f).catch(() => {}), fast && f.rfm1 && rfm1Of(f).catch(() => {}), listFace(), toast(f.name + " is kept on this device")), (e) => (listFace(), toast(f.name + ": " + e.message, 4000)))));
           inst.dataset.own = f === backup ? "1" : "0"; // the card of the unit's own backup never installs
           inst.hidden = f === backup || !realReady(); // only when every check of REAL FM-1 is in place
           inst.title = "Install " + f.name + " on the real FM-1 through the protector's MIDI mode. It asks you first.";
@@ -8595,9 +9299,10 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
                   running = node && run && run.f.id === f.id;
                 if (!all && running) return boot(true), toast("Saves erased, so it starts fresh");
                 await kvDel("save:" + hash);
+                await kvDel("rsave:" + f.id);
                 if (all && f !== backup) {
                   if (f === local) (await kvDel("pkg:local"), (local = null));
-                  else for (const k of ["pkg:", "man:", "date:"]) (await kvDel(k + f.id), kept.delete(f.id), delete f.bytes, delete fwDate[f.id]);
+                  else for (const k of ["pkg:", "man:", "date:", "rfm1:"]) (await kvDel(k + f.id), kept.delete(f.id), delete f.bytes, delete fwDate[f.id]);
                   listFace();
                 }
                 toast(all && f !== backup ? "Saves and firmware erased" + (running ? ". It keeps running until you switch it off" : "") : "Saves of " + f.name + " erased");
@@ -8639,6 +9344,15 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       // CPU CLOCK: the clock chosen, kept on this device. Its face shows the clock the machine runs at (keepUp may have lowered it)
       const clockFace = () => ($("#clock i").textContent = mhz + " MHz");
       clockFace();
+      fastFace();
+      $("#fast").onclick = () => {
+        store("fm1.fast", (fast = !fast) ? "1" : "0");
+        fastFace();
+        listFace();
+        const f = run && node ? run.f : null;
+        if (f && (f.rfm1 || run.rfm1)) boot();
+        toast(fast ? "Fast builds on: a firmware with one runs it" : "Fast builds off: every firmware runs on the emulator");
+      };
       $("#clock").onclick = () => {
         const name = run && node ? run.f.name : "";
         sure(
@@ -9749,6 +10463,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           "## The menu (the FM1. button)",
           "**FIRMWARE** has a card for each firmware. **USE** runs it, and **DOWNLOAD** keeps it on this device so it runs with no connection (it is then marked ●). **OPEN FIRMWARE FILE** runs your own .fwsc file, and **LOAD DX7 BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware. The list updates itself when the app opens with a connection, and **UPDATE FIRMWARES** does it again at once, which helps when a download fails because its link has changed. **Tether**, our own firmware, is built into the app and comes first. It makes no sound of its own, because it is the firmware that makes a real FM-1 the panel of this one.",
           "If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock. **CPU CLOCK**, in OPTIONS, lets you choose it yourself: the real FM-1 runs at 240 MHz and the app starts at 100 (the Android app at 240), so lower it if the sound breaks up and raise it if this device has power to spare. Your choice is kept on this device.",
+          "Over a hundred firmwares also have a fast build, and their cards say **FAST**. A fast build is the firmware's own code made to run on a computer, built by Quixotic7 for RemoteFM1, so the app runs it directly instead of emulating the FM-1's chip, and it plays smoothly even on a slow phone. It can behave a little differently from the real FM-1, and it may be an older or newer version than the package, because it is built separately. It keeps its own saves, apart from the emulator's. **FAST BUILDS**, in OPTIONS, turns them off so that every firmware runs on the emulator, and if a fast build fails to start the app uses the emulator by itself.",
           "**ERASE**, on a card, forgets what that firmware saved, and **CLEAR DATA** deletes the downloaded firmwares. Both ask you to slide to confirm. What a firmware saves (patches, songs, settings) is kept on this device, separately for each exact version of it.",
           "**LOOK** is where you choose the keys (the FM-1's own or a piano), the skin (the colours the FM-1 is sold in, then ours) and the screen filter (LCD, CRT or clean). **OPTIONS** has MIDI, a real FM-1 on USB, and installing the app. The **ENGLISH / ESPAÑOL** button at the top left of the menu switches the language of the app and its manuals.",
           "## A real FM-1 on USB",
@@ -9785,6 +10500,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           "## El menú (el botón FM1.)",
           "**FIRMWARE** tiene una tarjeta por firmware. **USAR** lo ejecuta, y **DESCARGAR** lo guarda en este dispositivo para usarlo sin conexión (entonces sale marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc, y **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE. La lista se actualiza sola cuando la app se abre con conexión, y **ACTUALIZAR FIRMWARES** lo hace otra vez en el momento, lo que ayuda cuando una descarga falla porque su enlace ha cambiado. **Tether**, nuestro propio firmware, viene dentro de la app y sale primero. No suena por sí mismo, porque es el firmware que convierte un FM-1 real en el panel de este.",
           "Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento. **RELOJ CPU**, en OPCIONES, te deja elegirlo: el FM-1 real va a 240 MHz y la app empieza a 100 (la app de Android a 240), así que bájalo si el sonido se corta y súbelo si este dispositivo tiene potencia de sobra. Tu elección se guarda en este dispositivo.",
+          "Más de cien firmwares tienen además una versión rápida, y su tarjeta dice **FAST**. Una versión rápida es el propio código del firmware hecho para funcionar en un ordenador, compilado por Quixotic7 para RemoteFM1, así que la app lo ejecuta directamente en vez de emular el chip del FM-1, y suena fluido incluso en un móvil lento. Puede comportarse un poco distinto del FM-1 real, y puede ser una versión más antigua o más nueva que el paquete, porque se compila aparte. Guarda sus propios datos, separados de los del emulador. **VERSIONES RÁPIDAS**, en OPCIONES, las apaga para que todos los firmwares usen el emulador, y si una versión rápida no arranca, la app usa el emulador por sí sola.",
           "**BORRAR**, en una tarjeta, borra lo que ha guardado ese firmware, y **BORRAR DATOS** borra los firmwares descargados. Los dos piden deslizar para confirmar. Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, por separado para cada versión exacta.",
           "En **ASPECTO** eliges las teclas (las del FM-1 o un piano), los colores (los del FM-1 a la venta y luego los nuestros) y el filtro de pantalla (LCD, CRT o limpia). **OPCIONES** tiene el MIDI, un FM-1 real por USB e instalar la app. El botón **ENGLISH / ESPAÑOL**, arriba a la izquierda del menú, cambia el idioma de la app y de sus manuales.",
           "## Un FM-1 real por USB",
@@ -9973,6 +10689,10 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         "LOAD DX7 BANK": "CARGAR BANCO DX7",
         "Choose how fast the emulated FM-1 runs, in MHz. The real FM-1 runs at 240 MHz and this app starts at 100 (the Android app at 240). Lower it if the sound breaks up, raise it if this device has power to spare. The firmware starts again.": "Elige a qué velocidad funciona el FM-1 emulado, en MHz. El FM-1 real va a 240 MHz y esta app empieza a 100 (la app de Android a 240). Bájalo si el sonido se corta, súbelo si este dispositivo tiene potencia de sobra. El firmware vuelve a arrancar.",
         "CPU CLOCK": "RELOJ CPU",
+        "Fast builds: a firmware that has one (FAST on its card) runs its own code, made for computers, instead of an emulated chip, so it plays smoothly on slow devices too. It can behave a little differently from the real FM-1 and keeps its own saves. Turn it off to use the emulator for every firmware. The firmware starts again.": "Versiones rápidas: un firmware que tiene una (FAST en su tarjeta) ejecuta su propio código, hecho para ordenadores, en vez de un chip emulado, así que suena fluido también en dispositivos lentos. Puede comportarse un poco distinto del FM-1 real y guarda sus propios datos. Apágalo para usar el emulador con todos los firmwares. El firmware vuelve a arrancar.",
+        "FAST BUILDS": "VERSIONES RÁPIDAS",
+        "Fast builds on: a firmware with one runs it": "Versiones rápidas encendidas: un firmware que tenga una la usa",
+        "Fast builds off: every firmware runs on the emulator": "Versiones rápidas apagadas: todos los firmwares usan el emulador",
         "Delete every downloaded firmware from this device. What they saved stays, and it asks you first.": "Borra de este dispositivo todos los firmwares descargados. Lo que guardaron se queda, y te pregunta antes.",
         DOWNLOADS: "DESCARGAS",
         "CLEAR DATA": "BORRAR DATOS",
@@ -10538,6 +11258,9 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           el("h3", "", "m-bootloader, the protector (bundled packages and the way the unit is talked to)"),
           el("p", "", "By jvitkauskas, MIT. The two packages in this page (the RAM helper for BACKUP and the protector installer) are its v2.4 release files, unchanged (their SHA-256 is checked before they are sent). Its specification is the source of the USB MIDI messages, the package format and the flash layout used here."),
           el("pre", "", $("#licMboot").textContent),
+          el("h3", "", "FM-1 Browser Simulator, the loader of the fast builds"),
+          el("p", "", "By Jake Handy, MIT, https://github.com/jakehandy/fm1-browser-simulator. Its rfm1.js is in this page unchanged and runs the fast builds (.rfm1). The format is RemoteFM1's (Quixotic7, https://github.com/Quixotic7/RemoteFM1IOS), and the builds come from RemoteFM1FW's release, made with Quixotic7's FM1VST. Each one carries its firmware's licence and the exact source it was built from."),
+          el("pre", "", $("#licSim").textContent),
           el("h3", "", "M-Flasher"),
           el("p", "", "By Julius Vitkauskas (jvitkauskas), MIT, https://github.com/jvitkauskas/m-flasher. Nothing of its code is in this page. The flash map follows its 16 x 16 map of 4 KiB sectors, its region names and colours (boot, firmware, settings, pairings, sounds, MAC, free) and its stock FM-1 layout. It is also the tool to use for the protector on the newer flash chip, and to put a backup back."),
           el("h3", "", "M-Unbricker"),
@@ -10581,8 +11304,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           const act = fxe.sync(rack, live);
           if (act !== fxOn) {
             fxOn = act;
-            if (act) (node.connect(fxe.in), node.disconnect(ac.destination));
-            else (node.connect(ac.destination), node.disconnect(fxe.in));
+            for (const n of [node, rnode]) if (n) act ? (n.connect(fxe.in), n.disconnect(ac.destination)) : (n.connect(ac.destination), n.disconnect(fxe.in));
           }
         }
         const n = FXE.FX.filter((p) => rack.u[p.id].on).length + live.size;

@@ -4,14 +4,17 @@
 
 The packages with an open licence are mirrored in the fm1-firmwares repo (update-firmwares.py), such as ../fm1-firmwares/386dx/<version>.fwsc.
 Pick one that makes a sound (386DX does): Tether is a MIDI controller and stays silent, so the sound check fails with it.
+A second argument, a fast build (.rfm1) of a firmware on the list, such as ../fm1-firmwares/nachtfahrt/nachtfahrt-1.0.2.rfm1, also
+checks FAST BUILDS: it boots instead of the emulator, sounds, saves, and the emulator takes over when it is switched off.
 SHOT=/some/folder saves a screenshot of each view there.
 """
-import functools, http.server, os, sys, threading, time
+import base64, functools, http.server, os, re, sys, threading, time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 fwsc = os.path.abspath(sys.argv[1])
+rfm1 = os.path.abspath(sys.argv[2]) if len(sys.argv) > 2 else None
 srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(type("Q", (http.server.SimpleHTTPRequestHandler,), {"log_message": lambda *a: None}), directory=ROOT))
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 o = webdriver.ChromeOptions()
@@ -43,7 +46,7 @@ try:
     d.get("http://127.0.0.1:%d/index.html" % srv.server_address[1]); time.sleep(1.5)
     bare = js("return [...document.querySelectorAll('button, select')].filter(b => !b.title).map(b => b.id || b.textContent)")
     assert bare == [], "controls without a title: %s" % bare
-    assert js("return FIRMWARES.length") > 20 and js("return vetCatalog([{id: 'x', name: '<b>', package: 'javascript:1'}, {id: 'ok', name: 'n', package: 'https://a.b/c', about: 7}])") == [{"id": "ok", "name": "n", "version": "", "author": "", "license": "", "about": "", "package": "https://a.b/c", "chip": "", "date": "", "repo": "", "extra": False}]
+    assert js("return FIRMWARES.length") > 20 and js("return vetCatalog([{id: 'x', name: '<b>', package: 'javascript:1'}, {id: 'ok', name: 'n', package: 'https://a.b/c', about: 7}])") == [{"id": "ok", "name": "n", "version": "", "author": "", "license": "", "about": "", "package": "https://a.b/c", "chip": "", "date": "", "repo": "", "extra": False, "rfm1": ""}]
     assert js("return FIRMWARES.some(f => f.id === 'shrub' && f.extra)"), "SHRUB (update-firmwares.py's EXTRA) is in the list"
 
     # vertical: the whole FM-1 rearranged, the keys in two rows
@@ -159,7 +162,28 @@ try:
     js("bank = b0; boot()"); time.sleep(4)
     took = q("#status"); assert js("return bank") is None and ("saves loaded" in took or "DX7 bank" in took), took
     js("boot()"); time.sleep(4); assert "saves loaded" in q("#status"), q("#status")
-    print("status: %s -> %s | screen colours: %d | peak: %.3f | bank: %s | errors: %s" % (status, q("#status"), lit, loud, took, js("return __errs")))
+    fast = "skipped (no .rfm1 given)"
+    if rfm1:  # FAST BUILDS: the build is put where a download keeps it (we are offline here), and runs instead of the emulator
+        fid = js("const f = FIRMWARES.find(f => f.rfm1 === arguments[0]); return f && f.id", os.path.basename(rfm1))
+        assert fid, "no firmware on the list has " + os.path.basename(rfm1)
+        js("const b = Uint8Array.from(atob(arguments[1]), c => c.charCodeAt(0)); kvPut('rfm1:' + arguments[0], { file: arguments[2], bytes: b })", fid, base64.b64encode(open(rfm1, "rb").read()).decode(), os.path.basename(rfm1))
+        assert "fwc" in js("return document.querySelector('#fwList').innerHTML") and js("return document.querySelectorAll('#fwList em.fast').length") > 50, "no FAST tags on the cards"
+        js("use(arguments[0])", fid)
+        for _ in range(40):
+            time.sleep(0.5)
+            if "fast build" in q("#status"): break
+        assert "fast build" in q("#status") and js("return run.rfm1"), q("#status")
+        time.sleep(2); js("peak = 0; setKey(26, true); turn(3, 2); setPot(1000)"); time.sleep(2); js("setKey(26, false)")
+        fpeak = js("return peak")
+        assert fpeak > 0.005, "no sound from the fast build"
+        js("flush()"); time.sleep(1)
+        assert js("return kvGet('rsave:' + arguments[0]).then(v => v instanceof Uint8Array && v.length)", fid), "the fast build's save was not kept"
+        fast = "%s %.3f" % (q("#status"), fpeak)
+        js("document.querySelector('#fast').click()"); time.sleep(3)  # off: the same firmware on the emulator (its package is not here offline: it says so)
+        assert q("#fast i") == "OFF" and "not kept on this device" in q("#status"), q("#status")  # the emulator was asked for it
+        js("document.querySelector('#fast').click()"); time.sleep(3)
+        assert q("#fast i") == "ON" and "fast build" in q("#status") and js("return run.rfm1"), q("#status")
+    print("status: %s -> %s | screen colours: %d | peak: %.3f | bank: %s | fast: %s | errors: %s" % (status, q("#status"), lit, loud, took, fast, js("return __errs")))
     assert js("return __errs") == [], "errors on the page"
     print("OK")
 finally:
