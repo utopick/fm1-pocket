@@ -22,6 +22,12 @@ OUT = os.path.join(here, "vendor", "firmwares.json")
 MIRROR = os.path.join(here, "..", "..", "fm1-firmwares", "update.py")
 # licences the lists leave out or only point at, read in each repository's LICENSE (2026-11-26)
 # shortcut: kept by hand; when the hub or fm1-emu list a licence for one of these, theirs wins and this entry can go
+# firmwares neither list has, downloaded from their makers' own sites (the mirror doesn't copy them: not open licences);
+# "extra" tells the page to keep them when it refreshes the list from those two
+# shortcut: kept by hand, versions included; when the hub lists one, its entry wins and this one is dropped
+EXTRA = [{"id": "shrub", "name": "SHRUB", "version": "1.39", "author": "Steve Duda (Xfer Records)", "license": "Free, all rights reserved (Xfer Inc.)",
+          "about": "A stripped-down version of Serum: two wavetable oscillators, Serum's filters, envelopes and LFOs, a 16-slot modulation matrix, an effects rack, an arpeggiator and a motion sequencer. Its guide and editor are at shrub.audio.",
+          "package": "https://shrub.audio/editor/firmware/SHRUB.fwsc", "date": "2026-11-26", "extra": True}]
 LICENCE = {"emb": "GPL-3.0", "tangram": "GPL-2.0-or-later", "fm1chimeravocal": "MIT + MPL-2.0 + BSD (CMUdict)", "vesper": "GPL-3.0 + SDK exception"}
 
 
@@ -55,13 +61,13 @@ def main():
     for i, h in hubs.items():
         if i not in mine and i not in skipped and not any(f.get("hub") == i for f in joakim["firmwares"]):
             out.append(from_hub(h)); added.append(i)
+    out += [e for e in EXTRA if not any(e["id"] in (g["id"], g.get("hub")) for g in out)]
     for g in out:
         if g["id"] in LICENCE and not re.match(r"^(GPL|LGPL|MPL|MIT|Apache|BSD)", g.get("license") or ""): g["license"] = LICENCE[g["id"]]
     before = json.load(open(OUT)) if os.path.exists(OUT) else []
     print("fm1-emu list: %d · hub catalogue: %d · built in before: %d · now: %d" % (len(joakim["firmwares"]), len(hubs), len(before), len(out)))
     print("added from the hub (%d): %s" % (len(added), ", ".join(added) or "none"))
     if skipped: print("held back by fm1-emu: " + ", ".join(sorted(skipped)))
-    if not any("shrub" in (f["id"] + f["name"]).lower() for f in out): print("note: no Shrub in either list yet (when the hub adds it, run this again)")
     if check: return
     with open(OUT, "w", encoding="utf-8") as fh: json.dump(out, fh, ensure_ascii=False, indent=1); fh.write("\n")
     subprocess.run([sys.executable, os.path.join(here, "build.py")], check=True)

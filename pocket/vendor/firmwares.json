@@ -921,14 +921,14 @@
  {
   "id": "fm1dock",
   "name": "fm1-dock",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "author": "joakimeriksson",
   "license": "GPL-3.0",
   "about": "One firmware, many synths: CS-1, Scintilla and OberVave as modules in flash, the sine built in; HOME opens the picker. Add FM-106, MONK-1, FiMba-1, GATOR, DUB-1, FM-1 SID, AMB-1 or FoMni from its page with one click; Bluetooth MIDI with both cores, a master EQ, MIDI options. Formerly harbor.",
   "repo": "https://github.com/joakimeriksson/fm1-dock",
-  "package": "https://thefirmwarehub.com/fw/fm1dock-0.9.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/fm1dock-1.0.0.fwsc",
   "hub": "fm1dock",
-  "date": "2026-11-15",
+  "date": "2026-11-25",
   "chip": "new"
  },
  {
@@ -1461,12 +1461,12 @@
  {
   "id": "loafbreaker",
   "name": "LOAF BREAKER",
-  "version": "0.9.79",
+  "version": "0.9.80",
   "author": "FLEXOR",
   "license": "MPL-2.0",
   "about": "A hardcore kick synthesizer powerhouse and a breakbeat chopper (gabber, terror, speedcore): a heavy kick with its own synth, DISTO and SCREAM distortion, effects and twenty memories, breaks sliced on the white keys, effects on the black keys, snare, hat, clap, songs with builds and drops, a…",
   "repo": "https://github.com/FLEXOR-R/loaf-breaker",
-  "package": "https://thefirmwarehub.com/fw/loafbreaker-0.9.79.fwsc",
+  "package": "https://thefirmwarehub.com/fw/loafbreaker-0.9.80.fwsc",
   "hub": "loafbreaker",
   "date": "2026-11-25",
   "chip": "new"
@@ -1994,16 +1994,16 @@
  {
   "id": "perf1",
   "name": "PERF-1",
-  "version": "0.17.0",
+  "version": "1.1.0",
   "author": "deamonSLINKY",
   "license": "GPL-3.0",
   "about": "A generative groovebox you perform on: ten genres of self-playing pieces, an auto-DJ with breakdowns, builds and drops, Euclidean drums, an acid line that answers itself, beat FX and DX7-style FM voices from your own .syx.",
   "repo": "https://github.com/deamonSLINKY/PERF-1",
-  "package": "https://thefirmwarehub.com/fw/perf1-0.17.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/perf1-1.1.0.fwsc",
   "hub": "perf1",
   "minMhz": 100,
   "minMhzPackage": "f006cc6dd54eb867",
-  "date": "2026-11-07",
+  "date": "2026-11-25",
   "chip": "new"
  },
  {
@@ -2272,14 +2272,14 @@
  {
   "id": "scintilla",
   "name": "Scintilla",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "author": "Joakim Eriksson",
   "license": "GPL-3.0",
   "about": "The 1981 Elka Synthex on the FM-1: all 80 factory sounds, Paul Wiffen's laser harp among them, checked sample by sample against the original. Two layers of 8 voices (single, split, double), poly, mono or unison, chorus and reverb, and the four knobs edit what is on the screen.",
   "repo": "https://github.com/joakimeriksson/scintilla-fm1",
-  "package": "https://thefirmwarehub.com/fw/scintilla-0.3.2.fwsc",
+  "package": "https://thefirmwarehub.com/fw/scintilla-0.3.3.fwsc",
   "hub": "scintilla",
-  "date": "2026-11-12",
+  "date": "2026-11-25",
   "chip": "new"
  },
  {
@@ -3253,13 +3253,13 @@
  {
   "id": "bluesbox",
   "name": "Blues Box",
-  "version": "2.2.3",
+  "version": "2.3.0",
   "author": "Brian Provost",
   "license": "GPL-3.0",
   "about": "Live 3-piece blues & funk backing band for the FM-1. Features 19 grooves, 25 lead voices with Easy Lead scale-lock, 5-level Band Heat escalation, style-matched intros/outros, Chocolate footswitch control, and an animated 8-bit stage with a chord-flashing Tweed amp.",
-  "package": "https://thefirmwarehub.com/fw/bluesbox-2.2.3.fwsc",
+  "package": "https://thefirmwarehub.com/fw/bluesbox-2.3.0.fwsc",
   "repo": "https://github.com/provostprovost/blues",
-  "date": "2026-11-21",
+  "date": "2026-11-25",
   "chip": "new"
  },
  {
@@ -3289,11 +3289,11 @@
  {
   "id": "quantumgammawave",
   "name": "Quantum GammaWave",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "author": "Guille Lauría",
   "license": "GPL-3.0",
   "about": "A six-track groovebox for the M-VAVE FM-1: nine engines and 273 sounds (analog, six-operator FM, wavetable, digital drums), a 64-step sequencer with probability and ratchets, song mode, scales and chords, a mod matrix and three FX buses, plus a browser emulator and a web editor.",
-  "package": "https://thefirmwarehub.com/fw/quantumgammawave-2.5.1.fwsc",
+  "package": "https://thefirmwarehub.com/fw/quantumgammawave-2.5.2.fwsc",
   "repo": "https://github.com/Guillel51/Quantum-GammaWave",
   "date": "2026-11-25",
   "chip": "new"
@@ -3565,13 +3565,13 @@
  {
   "id": "textura",
   "name": "Textura",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": "Leonardo Mirabal",
   "license": "GPL-3.0",
   "about": "A physical modelling synthesizer for the sounds of nature: rain, streams, fire, sand and stones, ice, wood, wind, thunder, insects and birds, each computed live, no samples. Four lanes play at once; the keys set how many and how active. Compressor, drive, filter, grain delay, reverb.",
-  "package": "https://thefirmwarehub.com/fw/textura-0.3.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/textura-0.3.1.fwsc",
   "repo": "https://github.com/leonardoMirabal/textura",
-  "date": "2026-11-23",
+  "date": "2026-11-25",
   "chip": "new"
  },
  {
@@ -4165,13 +4165,13 @@
  {
   "id": "gabberkix",
   "name": "GABBERKIX",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Presethead",
   "license": "GPL-3.0",
   "about": "A hardcore kick designer: a synthesized 909 through EQ, distortion and hard clippers, with a punch and a sub layer. Throw random gabber kicks, shape every stage, keep 16 presets, resample one into a new kick, play it on the beat or from the keys, and sync to MIDI clock.",
-  "package": "https://thefirmwarehub.com/fw/gabberkix-1.0.0.fwsc",
+  "package": "https://thefirmwarehub.com/fw/gabberkix-1.1.0.fwsc",
   "repo": "https://github.com/ejtb76/gabberkix",
-  "date": "2026-11-23",
+  "date": "2026-11-25",
   "chip": "new"
  },
  {
@@ -4249,11 +4249,11 @@
  {
   "id": "afterimages",
   "name": "After Images",
-  "version": "2.11",
+  "version": "3.1",
   "author": "TheGrizard",
   "license": "MPL-2.0",
   "about": "Turns the FM-1 into an endless ambient machine. Press REC and it composes a new piece in key: four layers, eleven generative sequencers and twenty-five sound engines, with shimmer, echo and tape, three visuals, MIDI clock and USB audio. Play along on the keys.",
-  "package": "https://thefirmwarehub.com/fw/afterimages-2.11.fwsc",
+  "package": "https://thefirmwarehub.com/fw/afterimages-3.1.fwsc",
   "repo": "https://github.com/TheGrizard/After-Images",
   "date": "2026-11-25",
   "chip": "new"
@@ -4281,5 +4281,16 @@
   "repo": "https://github.com/StripedBear/freitakt",
   "date": "2026-11-25",
   "chip": "new"
+ },
+ {
+  "id": "shrub",
+  "name": "SHRUB",
+  "version": "1.39",
+  "author": "Steve Duda (Xfer Records)",
+  "license": "Free, all rights reserved (Xfer Inc.)",
+  "about": "A stripped-down version of Serum: two wavetable oscillators, Serum's filters, envelopes and LFOs, a 16-slot modulation matrix, an effects rack, an arpeggiator and a motion sequencer. Its guide and editor are at shrub.audio.",
+  "package": "https://shrub.audio/editor/firmware/SHRUB.fwsc",
+  "date": "2026-11-26",
+  "extra": true
  }
 ]

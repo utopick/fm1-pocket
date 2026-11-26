@@ -1045,7 +1045,7 @@
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "" });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true });
         }
         return out;
       }
@@ -1054,6 +1054,10 @@
       // Tether, our own firmware (pocket/firmware), is built into the page: always on the list, first, and the one chosen at first
       const TETHER = { id: "tether", name: "Tether", version: "1.0", author: "utopick", license: "GPL-3.0", about: "Our own firmware. It makes a real FM-1 the panel of this one, and without the app it is a USB MIDI keyboard. It makes no sound of its own.", package: "", repo: "", chip: "", own: true };
       const withOwn = (list) => [TETHER, ...list.filter((f) => f.id !== TETHER.id)];
+      // EXTRAS: the firmwares this page adds by hand (update-firmwares.py's EXTRA, such as SHRUB): neither live list has them, so
+      // they are put back whenever a kept or fresh list replaces the built-in one
+      const EXTRAS = vetCatalog(JSON.parse($("#fwlist").textContent)).filter((f) => f.extra),
+        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))];
       let FIRMWARES = withOwn(vetCatalog(JSON.parse($("#fwlist").textContent))),
         kept = new Set(); // the ids of the packages kept on this device
 
@@ -1456,6 +1460,10 @@
         core1Timer = setTimeout(() => core1Failed("core 1's thread did not start"), 5000); // the audio waits for it
         core1.postMessage({ wasm: mtBytes, memory: mtMem, sp: m.sp, tls: m.tls, ptr: m.ptr });
       }
+      // firmwares that go wrong with core 1 on its own thread (the Android app's default, the browser's threaded core), so they
+      // boot on one: Demake reads OCT- as held at power-on there and stays on its USB rescue screen (seen on a Galaxy S21, 2026-11-26)
+      // shortcut: a list by hand; when the threaded core is fixed for them, empty it
+      const ONE_THREAD = new Set(["demake"]);
       async function boot(fresh) {
         const f = current(),
           mine = ++seq;
@@ -1479,9 +1487,9 @@
           }
           status("booting " + f.name + "…");
           stopCore1();
-          const mt = window.FM1Native ? null : await threadedCore();
+          const one = ONE_THREAD.has(f.id), mt = window.FM1Native || one ? null : await threadedCore();
           if (mine !== seq || !node) return;
-          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
+          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, threads: one ? 1 : undefined, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;
@@ -1944,7 +1952,7 @@
       // fm1-emu's own list, when there is a connection: new firmwares and versions appear without an update of this app
       async function refreshCatalog() {
         const keptList = vetCatalog(await kvGet("catalog"));
-        if (keptList.length) FIRMWARES = withOwn(keptList);
+        if (keptList.length) FIRMWARES = withOwn(withExtras(keptList));
         for (const k of await kvKeys()) if (String(k).startsWith("pkg:")) kept.add(String(k).slice(4));
         for (const id of kept) {
           const d = await kvGet("date:" + id);
@@ -1975,6 +1983,7 @@
             }
             fresh.push(...vetCatalog((hub.firmwares || []).filter((h) => h && typeof h.pkg === "string" && !have.has(h.id) && !fresh.some((f) => f.id === h.id)).map((h) => ({ id: h.id, name: h.name, version: h.version, author: h.author, license: h.lic, about: h.what, date: h.date, chip: h.chip, package: hubPkg(h.pkg), repo: h.site || "" }))));
           } catch {}
+          fresh.splice(0, fresh.length, ...withExtras(fresh));
           const run = current();
           FIRMWARES = withOwn(fresh.map((f) => (run && run.id === f.id && run.version === f.version ? run : f)));
           kvPut("catalog", fresh).catch(() => {});

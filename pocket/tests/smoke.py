@@ -43,7 +43,8 @@ try:
     d.get("http://127.0.0.1:%d/index.html" % srv.server_address[1]); time.sleep(1.5)
     bare = js("return [...document.querySelectorAll('button, select')].filter(b => !b.title).map(b => b.id || b.textContent)")
     assert bare == [], "controls without a title: %s" % bare
-    assert js("return FIRMWARES.length") > 20 and js("return vetCatalog([{id: 'x', name: '<b>', package: 'javascript:1'}, {id: 'ok', name: 'n', package: 'https://a.b/c', about: 7}])") == [{"id": "ok", "name": "n", "version": "", "author": "", "license": "", "about": "", "package": "https://a.b/c", "chip": "", "date": "", "repo": ""}]
+    assert js("return FIRMWARES.length") > 20 and js("return vetCatalog([{id: 'x', name: '<b>', package: 'javascript:1'}, {id: 'ok', name: 'n', package: 'https://a.b/c', about: 7}])") == [{"id": "ok", "name": "n", "version": "", "author": "", "license": "", "about": "", "package": "https://a.b/c", "chip": "", "date": "", "repo": "", "extra": False}]
+    assert js("return FIRMWARES.some(f => f.id === 'shrub' && f.extra)"), "SHRUB (update-firmwares.py's EXTRA) is in the list"
 
     # vertical: the whole FM-1 rearranged, the keys in two rows
     parts(1, 1, "vertical"); assert js("return document.querySelectorAll('#kb .krow').length") == 2
