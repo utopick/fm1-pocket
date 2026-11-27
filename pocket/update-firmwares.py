@@ -15,7 +15,7 @@ The hub's package and version replace fm1-emu's pinned ones, because the hub rem
 own script (TP/fm1-firmwares/update.py, next to this repo), which downloads the new packages there and commits; the page
 downloads from that mirror first. Push it afterwards with python3 ../fm1-firmwares/update.py --push. Standard library only.
 """
-import json, os, re, subprocess, sys, urllib.request
+import hashlib, json, os, re, subprocess, sys, urllib.request
 
 here = os.path.dirname(os.path.abspath(__file__))
 JOAKIM = "https://joakimeriksson.github.io/fm1-emu/firmwares.json"
@@ -55,7 +55,7 @@ def rfm1s(out):
     except Exception as e: return print("rfm1: the release list did not download (%s), so the old matches stay" % e)
     norm = lambda s: re.sub(r"[^a-z0-9]", "", s.lower())
     by = {**{norm(g["name"]): g for g in out}, **{g["id"]: g for g in out}}
-    for g in out: g.pop("rfm1", None)
+    for g in out: g.pop("rfm1", None), g.pop("rfm1sha", None)
     for n in names:
         m = re.match(r"(.+?)-(\d[\w.-]*)\.rfm1$", n)
         g = m and next((by[k] for k in (m[1], norm(m[1]), "fm1" + norm(m[1]), norm(m[1]) + "fm1") if k in by), None)  # chimeravocal: fm1chimeravocal
@@ -68,6 +68,9 @@ def rfm1s(out):
         g = m and ids.get(m[1])
         if g and "rfm1" not in g and re.fullmatch(r"[\w.-]{1,80}\.rfm1", name): g["rfm1"] = name; n += 1
     if own: print("rfm1: %d more from our own builds (%s)" % (n, os.path.normpath(OWN_RFM1)))
+    for g in out:  # the hash of each file (ours, else the mirror's copy): the page fetches again when it changes
+        f = next((p for p in (os.path.join(OWN_RFM1, g.get("rfm1", "")), os.path.join(os.path.dirname(MIRROR), g["id"], g.get("rfm1", ""))) if "rfm1" in g and os.path.isfile(p)), None)
+        if f: g["rfm1sha"] = hashlib.sha256(open(f, "rb").read()).hexdigest()[:16]
 
 
 def main():

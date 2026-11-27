@@ -1049,7 +1049,7 @@
           if (!f || typeof f !== "object" || !/^[\w.-]{1,40}$/.test(f.id) || f.id === "local" || f.id === "backup" || seen.has(f.id) || f.embedded) continue;
           if (typeof f.package !== "string" || !/^https:\/\/[^\s]{1,300}$/.test(f.package) || !str(f.name, 80)) continue;
           seen.add(f.id);
-          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true, rfm1: typeof f.rfm1 === "string" && /^[\w.-]{1,80}\.rfm1$/.test(f.rfm1) ? f.rfm1 : "" });
+          out.push({ id: f.id, name: str(f.name, 80), version: str(f.version, 40), author: str(f.author, 80), license: str(f.license, 40), date: /^\d{4}-\d{2}-\d{2}/.test(f.date) ? f.date.slice(0, 10) : "", about: str(f.about, 600), package: f.package, repo: typeof f.repo === "string" && /^https:\/\/github\.com\/[\w.\/-]{1,200}$/.test(f.repo) ? f.repo : "", chip: CHIPS.includes(f.chip) ? f.chip : "", extra: f.extra === true, rfm1: typeof f.rfm1 === "string" && /^[\w.-]{1,80}\.rfm1$/.test(f.rfm1) ? f.rfm1 : "", rfm1sha: typeof f.rfm1sha === "string" && /^[0-9a-f]{16}$/.test(f.rfm1sha) ? f.rfm1sha : "" });
         }
         return out;
       }
@@ -1063,8 +1063,8 @@
       // and the fast builds (.rfm1) the built-in list names, which the live lists don't know about either
       const BUILT = vetCatalog(JSON.parse($("#fwlist").textContent)),
         EXTRAS = BUILT.filter((f) => f.extra),
-        RFM1S = new Map(BUILT.filter((f) => f.rfm1).map((f) => [f.id, f.rfm1])),
-        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))].map((f) => (f.rfm1 || !RFM1S.has(f.id) ? f : { ...f, rfm1: RFM1S.get(f.id) }));
+        RFM1S = new Map(BUILT.filter((f) => f.rfm1).map((f) => [f.id, f])),
+        withExtras = (list) => [...list, ...EXTRAS.filter((e) => !list.some((f) => f.id === e.id))].map((f) => (f.rfm1 || !RFM1S.has(f.id) ? f : { ...f, rfm1: RFM1S.get(f.id).rfm1, rfm1sha: RFM1S.get(f.id).rfm1sha }));
       let FIRMWARES = withOwn(vetCatalog(JSON.parse($("#fwlist").textContent))),
         kept = new Set(); // the ids of the packages kept on this device
 
@@ -1517,13 +1517,14 @@
       async function rfm1Of(f) {
         const got = await kvGet("rfm1:" + f.id),
           have = got && got.bytes instanceof Uint8Array && got.bytes.length <= 40 << 20 ? got : null;
-        if (have && (have.file === f.rfm1 || !navigator.onLine)) return have.bytes;
+        // (a build fixed under the same name has a new hash: the kept copy goes, and the hash in the address skips the browser's cache)
+        if (have && ((have.file === f.rfm1 && (have.sha || "") === (f.rfm1sha || "")) || !navigator.onLine)) return have.bytes;
         try {
-          const r = await fetch("https://utopick.github.io/fm1-firmwares/" + f.id + "/" + f.rfm1);
+          const r = await fetch("https://utopick.github.io/fm1-firmwares/" + f.id + "/" + f.rfm1 + (f.rfm1sha ? "?" + f.rfm1sha : ""));
           if (!r.ok) throw Error("status " + r.status);
           const bytes = new Uint8Array(await r.arrayBuffer());
           if (bytes.length > 40 << 20 || bytes[0] !== 0 || bytes[1] !== 0x61 || bytes[2] !== 0x73 || bytes[3] !== 0x6d) throw Error("not an .rfm1");
-          kvPut("rfm1:" + f.id, { file: f.rfm1, bytes }).catch(() => {});
+          kvPut("rfm1:" + f.id, { file: f.rfm1, sha: f.rfm1sha || "", bytes }).catch(() => {});
           return bytes;
         } catch (e) {
           if (have) return have.bytes; // an older build kept is better than none
