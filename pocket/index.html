@@ -29,8 +29,8 @@
                                       save:<hash of the package>  [[offset, 4096 bytes], ...]  the flash sectors a firmware changed
                                       catalog   the firmware list as last fetched from fm1-emu's page
                                       shot:<id>  a picture (PNG data URL) of that firmware's screen, taken when it ran here
-  Network: the firmware list (fm1-emu's firmwares.json), a firmware's package from its author and the Firmware Hub's
-  picture of each firmware for its card, and a firmware's manual (api.github.com lists its repository, raw.githubusercontent.com has the file), only when online. Everything read back or fetched is checked before use.
+  Network: the firmware list (fm1-emu's firmwares.json), a firmware's package from its author, and the picture of each
+  firmware's screen for its card (ours in fm1-firmwares/<id>/screen.png, else the Firmware Hub's), and a firmware's manual (api.github.com lists its repository, raw.githubusercontent.com has the file), only when online. Everything read back or fetched is checked before use.
 -->
 <html lang="en">
   <head>
@@ -208,6 +208,20 @@
          but the firmware list */
       /* the menu, the sheet and the dialog wear the skin: the body's colour, its print for the text, its buttons, its light for what is chosen */
       #menu, #sheet, #sure, #job, #more { --m-panel: color-mix(in srgb, var(--body2), #000 16%); --m-dim: color-mix(in srgb, var(--silk) 72%, var(--body2)); }
+      /* the carousel of firmwares (a press on the screen): one big card in the middle, its neighbours smaller, the name and text under the picture */
+      #car { position: fixed; inset: 0; z-index: 6; background: rgb(0 0 0 / 0.78); overflow: hidden; touch-action: none; user-select: none; color: #eee; font: 13px/1.35 system-ui, sans-serif; }
+      #carStrip { position: absolute; top: 0; bottom: 0; left: 50%; display: flex; align-items: center; gap: 14px; will-change: transform; }
+      #car .cc { flex: none; width: var(--cw); display: flex; flex-direction: column; gap: 6px; opacity: 0.5; transform: scale(0.84); transition: transform 0.2s, opacity 0.2s; }
+      #car .cc.on { opacity: 1; transform: none; }
+      #car .cp { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: #000; box-shadow: 0 10px 34px rgb(0 0 0 / 0.65); }
+      #car .cp img { display: block; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; pointer-events: none; }
+      #car .rib { position: absolute; left: calc(var(--c) - 110px); top: calc(var(--c) - 10px); width: 220px; transform: rotate(-45deg); text-align: center; font: 700 10px/20px system-ui, sans-serif; letter-spacing: 0.5px; color: #fff; background: #c0392b; box-shadow: 0 2px 6px rgb(0 0 0 / 0.5); --c: 40px; }
+      #car .rib.fast { --c: 70px; background: #1e7d4f; }
+      #car .ct { display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+      #car .ct b { font-size: 15px; }
+      #car .ct span { opacity: 0.7; font-size: 11px; }
+      #car .ct small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; opacity: 0.85; }
+      #carHint { position: absolute; left: 0; right: 0; bottom: 6px; margin: 0; text-align: center; font-size: 11px; opacity: 0.6; pointer-events: none; }
       #menu { position: fixed; inset: 0; z-index: 5; background: var(--body2); color: var(--silk); display: flex; touch-action: auto; font: 13px/1.35 system-ui, sans-serif; }
       #menu[hidden], #menu [hidden] { display: none; }
       #menu .card { flex: 1; min-width: 0; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
@@ -732,6 +746,7 @@
       </div>
     </div>
 
+    <div id="car" hidden><div id="carStrip"></div><p id="carHint">Swipe up to install it on your FM-1 · down or tap to run it here</p></div>
     <div id="menu" hidden>
       <div class="card" role="dialog" aria-modal="true" aria-label="Menu">
         <div class="tabs" role="tablist">
@@ -9672,6 +9687,16 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       // the firmware list and files
       // ======================================================================
       // a card with no picture (offline and never run here, or the Hub has none): a little pixel fellow says so
+      // the picture of a firmware's screen: ours (fm1-firmwares/<id>/screen.png), then the Firmware Hub's, then the one kept here when it last ran
+      const shotOf = (img, f) => {
+        const srcs = f === local || f === backup || !navigator.onLine ? [] : ["https://utopick.github.io/fm1-firmwares/" + f.id + "/screen.png", HUB_IMG + f.id + ".webp"];
+        const next = () => (srcs.length ? (img.src = srcs.shift()) : ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (img.src = typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? d : NO_IMG))));
+        img.alt = "";
+        img.loading = "lazy";
+        img.referrerPolicy = "no-referrer";
+        img.onerror = next;
+        next();
+      };
       const NO_IMG =
         "data:image/svg+xml," +
         encodeURIComponent(
@@ -9711,13 +9736,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
             inst = el("button", "inst", "INSTALL ON MY FM-1"),
             man = el("button", "man", "MANUAL"),
             wipe = el("button", "wipe", "ERASE");
-          const own = () => ((img.onerror = null), kvGet("shot:" + f.id).then((d) => (img.src = typeof d === "string" && d.startsWith("data:image/png;base64,") && d.length < 300000 ? d : NO_IMG)));
-          img.alt = "";
-          img.loading = "lazy";
-          img.referrerPolicy = "no-referrer";
-          img.onerror = own;
-          if (f === local || f === backup || !navigator.onLine) own();
-          else img.src = HUB_IMG + f.id + ".webp";
+          shotOf(img, f);
           t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "") + (fwWhen(f) ? " · " + fwWhen(f) : "")), notr(el("small", "", f === backup ? "The flash of your real FM-1, saved by REAL FM-1. It is kept on this device and nothing is uploaded." : f === local ? "It is kept on this device and nothing is uploaded." : (f.about || "").replace(/\*\*/g, "")), f !== backup && f !== local));
           const tags = [f.chip && [f.chip, ...CHIP_TAG[f.chip]], fast && f.rfm1 && ["fast", "FAST", "It has a fast build (" + f.rfm1 + "): its own code made for computers, so it runs without emulating the chip and plays smoothly on slow devices too. FAST BUILDS in OPTIONS turns them off"]].filter(Boolean);
           if (tags.length) { // the tags sit to the right of the title, where there is room
@@ -9870,6 +9889,104 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       $("#chipOnly").onclick = () => ((fwChipOnly = !fwChipOnly), listFace());
       $("#fastOnly").onclick = () => ((fwFast = (fwFast + 1) % 3), listFace(), toast(["Every firmware", "Only firmwares with a fast build", "Only firmwares without a fast build"][fwFast]));
       $("#findClear").onclick = () => ((fwQuery = ""), (fwChipOnly = false), (fwFast = 0), ($("#fwSearch").value = ""), listFace(), $("#fwSearch").focus());
+      // THE CAROUSEL: a press on the screen. The screen grows out into a card, and every firmware's card goes by under a finger. Up installs it on
+      // the real FM-1 (realInstall asks first), down or a tap on the middle card runs it here, a tap outside or on the running one closes it.
+      // Positions are in the page's own coordinates (bodyX, upY), so it works on the turned page of an upright phone too.
+      const car = { list: [], at: 0, w: 0, step: 0, p: null };
+      const carHave = (f) => f === local || f === backup || f.own || kept.has(f.id);
+      const carRunning = (f) => !!(f && node && run && run.f.id === f.id);
+      const carCards = () => [...$("#carStrip").children];
+      const carMove = (dx = 0, anim = true) => {
+        const st = $("#carStrip").style;
+        st.transition = anim ? "transform 0.25s ease-out" : "none";
+        st.transform = "translateX(" + (dx - car.at * car.step - car.w / 2) + "px)";
+        carCards().forEach((c, i) => c.classList.toggle("on", i === car.at));
+      };
+      // the picture flies between the FM-1's screen and the middle card (the two rects are turned back into the page's coordinates)
+      const carFly = (back) => {
+        const c = carCards()[car.at]?.querySelector(".cp"), s = $("#scr").getBoundingClientRect();
+        if (!c || !s.width) return;
+        const r = c.getBoundingClientRect(), turned = matchMedia("(orientation: portrait) and (pointer: coarse)").matches,
+          dx = s.left + s.width / 2 - (r.left + r.width / 2), dy = s.top + s.height / 2 - (r.top + r.height / 2),
+          at = "translate(" + (turned ? dy : dx) + "px, " + (turned ? -dx : dy) + "px) scale(" + s.width / r.width + ")";
+        c.animate([{ transform: at }, { transform: "none" }], { duration: 260, easing: "ease-out", direction: back ? "reverse" : "normal", fill: back ? "forwards" : "none" });
+      };
+      function carOpen() {
+        const cur = current();
+        car.list = [backup, local].filter(Boolean).concat(FIRMWARES.filter((f) => f.own || kept.has(f.id)), FIRMWARES.filter((f) => !f.own && !kept.has(f.id)));
+        car.at = Math.max(0, car.list.indexOf(cur));
+        $("#car").hidden = false;
+        car.w = Math.round(Math.min($("#car").offsetHeight - 140, $("#car").offsetWidth * 0.6, 380));
+        car.step = car.w + 14;
+        $("#car").style.setProperty("--cw", car.w + "px");
+        $("#carStrip").replaceChildren(...car.list.map((f, i) => {
+          const c = el("div", "cc"), pic = el("div", "cp"), img = el("img"), t = el("div", "ct");
+          if (i === car.at && carRunning(f)) ((img.alt = ""), (img.src = $("#lcd").toDataURL("image/png"))); // the screen as it is now
+          else shotOf(img, f);
+          pic.append(img);
+          if (!carHave(f)) pic.append(el("div", "rib", "NOT DOWNLOADED"));
+          if (fast && f.rfm1) pic.append(el("div", "rib fast", "FAST BUILD"));
+          t.append(el("b", "", f.name + (f.version ? " " + f.version : "")), el("span", "", f === backup ? "your FM-1" : f === local ? "your file" : (f.author || "?") + (f.license ? " · " + f.license : "")), notr(el("small", "", (f.about || "").replace(/\*\*/g, "")), f !== backup && f !== local));
+          c.append(pic, t);
+          return c;
+        }));
+        carMove(0, false);
+        carFly(false);
+      }
+      function carClose(fly) {
+        if (fly) carFly(true);
+        setTimeout(() => ($("#car").hidden = true), fly ? 250 : 0);
+      }
+      function carRun(f) {
+        carClose(false);
+        if (carRunning(f)) return;
+        if (carHave(f)) return use(f.id, true);
+        toast("Downloading " + f.name + "…");
+        packageOf(f).then(() => (manualOf(f).catch(() => {}), listFace(), use(f.id, true)), (e) => (listFace(), toast(f.name + ": " + e.message, 4000)));
+      }
+      function carInstall(f) {
+        carClose(false);
+        if (!REAL.acc) return realNotice("CONNECT YOUR FM-1 FIRST", "Plug the real FM-1 in with a USB cable, open the menu (FM1.), then OPTIONS, and press CONNECT under REAL FM-1. Then swipe the firmware up again.");
+        realInstall(f);
+      }
+      $("#scr").addEventListener("click", () => (carOpen(), toast("Swipe up to install · down or tap to run")));
+      $("#car").addEventListener("pointerdown", (e) => {
+        car.p = { id: e.pointerId, x: bodyX(e), y: upY(e), axis: "" };
+        $("#car").setPointerCapture(e.pointerId);
+      });
+      $("#car").addEventListener("pointermove", (e) => {
+        const p = car.p;
+        if (!p || p.id !== e.pointerId) return;
+        const dx = bodyX(e) - p.x, dy = upY(e) - p.y;
+        if (!p.axis && Math.hypot(dx, dy) > 10) p.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y";
+        if (p.axis === "x") carMove(dx, false);
+        else if (p.axis === "y") {
+          const c = carCards()[car.at];
+          c.style.transition = "none";
+          c.style.transform = "translateY(" + Math.max(-120, Math.min(120, dy)) + "px)";
+        }
+      });
+      const carUp = (e) => {
+        const p = car.p;
+        if (!p || p.id !== e.pointerId) return;
+        car.p = null;
+        const dx = bodyX(e) - p.x, dy = upY(e) - p.y, c = carCards()[car.at], f = car.list[car.at];
+        if (c) c.style.transform = c.style.transition = "";
+        if (e.type === "pointercancel") return carMove();
+        if (p.axis === "x") {
+          const n = Math.round(-dx / car.step) || (Math.abs(dx) > 40 ? -Math.sign(dx) : 0); // a short flick still goes one card
+          car.at = Math.max(0, Math.min(car.list.length - 1, car.at + n));
+          return carMove();
+        }
+        if (p.axis === "y") return dy < -70 ? carInstall(f) : dy > 70 ? carRun(f) : carMove();
+        // a tap: outside the cards closes, on a side card brings it to the middle, on the middle one runs it (or closes, if it is the one running)
+        const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest("#carStrip .cc"), i = hit ? carCards().indexOf(hit) : -1;
+        if (i < 0) return carClose(carRunning(f));
+        if (i !== car.at) return (car.at = i), carMove();
+        carRunning(f) ? carClose(true) : carRun(f);
+      };
+      $("#car").addEventListener("pointerup", carUp);
+      $("#car").addEventListener("pointercancel", carUp);
       $("#find").onclick = (e) => e.target === $("#find") && findShow(false);
       $("#helpFw").onclick = () => (current() && current().repo ? showManual(current()) : ((manPart = "fm"), menuShow(true), menuTab("man"), manual()));
       $("#sureNo").onclick = () => { const back = sureCancel; sureClose(); back ? back() : toast("Cancelled"); };
@@ -10912,6 +11029,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           "A phone is always played sideways, so if you hold it upright the FM-1 is drawn turned and you just need to turn the phone.",
           "## The menu (the FM1. button)",
           "**FIRMWARE** has a card for each firmware. **USE** runs it, and **DOWNLOAD** keeps it on this device so it runs with no connection (it is then marked ●). **OPEN FIRMWARE FILE** runs your own .fwsc file, and **LOAD DX7 BANK** puts a DX7 bank of 32 voices (.syx) into M-VAVE's own firmware. The list updates itself when the app opens with a connection, and **UPDATE FIRMWARES** does it again at once, which helps when a download fails because its link has changed. **Tether**, our own firmware, is built into the app and comes first. It makes no sound of its own, because it is the firmware that makes a real FM-1 the panel of this one.",
+          "**Press the screen** for a carousel of every firmware. Slide left and right to go through them. Swipe a card **down**, or tap it, to run it here, and swipe it **up** to install it on your real FM-1, which asks you first. A tap outside, or on the firmware that is already running, closes it. A ribbon says when a firmware is not downloaded yet, and another when it has a fast build.",
           "If this device cannot keep up and the sound breaks up, the app offers to restart the firmware at a lower clock. **CPU CLOCK**, in OPTIONS, lets you choose it yourself: the real FM-1 runs at 240 MHz and the app starts at 100 (the Android app at 240), so lower it if the sound breaks up and raise it if this device has power to spare. Your choice is kept on this device.",
           "Over a hundred firmwares also have a fast build, and their cards say **FAST**. A fast build is the firmware's own code made to run on a computer, built by Quixotic7 for RemoteFM1, so the app runs it directly instead of emulating the FM-1's chip, and it plays smoothly even on a slow phone. It can behave a little differently from the real FM-1, and it may be an older or newer version than the package, because it is built separately. It keeps its own saves, apart from the emulator's. **FAST BUILDS**, in OPTIONS, turns them off so that every firmware runs on the emulator, and if a fast build fails to start the app uses the emulator by itself.",
           "**ERASE**, on a card, forgets what that firmware saved, and **CLEAR DATA** deletes the downloaded firmwares. Both ask you to slide to confirm. What a firmware saves (patches, songs, settings) is kept on this device, separately for each exact version of it.",
@@ -10949,6 +11067,7 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
           "En el móvil siempre se toca en horizontal, así que si lo pones en vertical el FM-1 se dibuja girado y solo tienes que girar el móvil.",
           "## El menú (el botón FM1.)",
           "**FIRMWARE** tiene una tarjeta por firmware. **USAR** lo ejecuta, y **DESCARGAR** lo guarda en este dispositivo para usarlo sin conexión (entonces sale marcado con ●). **ABRIR FIRMWARE** ejecuta tu propio archivo .fwsc, y **CARGAR BANCO DX7** carga un banco DX7 de 32 voces (.syx) en el firmware de M-VAVE. La lista se actualiza sola cuando la app se abre con conexión, y **ACTUALIZAR FIRMWARES** lo hace otra vez en el momento, lo que ayuda cuando una descarga falla porque su enlace ha cambiado. **Tether**, nuestro propio firmware, viene dentro de la app y sale primero. No suena por sí mismo, porque es el firmware que convierte un FM-1 real en el panel de este.",
+          "**Pulsa la pantalla** para ver un carrusel con todos los firmwares. Desliza a izquierda y derecha para recorrerlos. Desliza una tarjeta **hacia abajo**, o tócala, para ejecutarla aquí, y **hacia arriba** para instalarla en tu FM-1 real, que te pregunta antes. Un toque fuera, o en el firmware que ya está sonando, lo cierra. Una cinta avisa si un firmware aún no está descargado, y otra si tiene versión rápida.",
           "Si este dispositivo no da abasto y el sonido se corta, la app ofrece reiniciar el firmware con un reloj más lento. **RELOJ CPU**, en OPCIONES, te deja elegirlo: el FM-1 real va a 240 MHz y la app empieza a 100 (la app de Android a 240), así que bájalo si el sonido se corta y súbelo si este dispositivo tiene potencia de sobra. Tu elección se guarda en este dispositivo.",
           "Más de cien firmwares tienen además una versión rápida, y su tarjeta dice **FAST**. Una versión rápida es el propio código del firmware hecho para funcionar en un ordenador, compilado por Quixotic7 para RemoteFM1, así que la app lo ejecuta directamente en vez de emular el chip del FM-1, y suena fluido incluso en un móvil lento. Puede comportarse un poco distinto del FM-1 real, y puede ser una versión más antigua o más nueva que el paquete, porque se compila aparte. Guarda sus propios datos, separados de los del emulador. **VERSIONES RÁPIDAS**, en OPCIONES, las apaga para que todos los firmwares usen el emulador, y si una versión rápida no arranca, la app usa el emulador por sí sola.",
           "**BORRAR**, en una tarjeta, borra lo que ha guardado ese firmware, y **BORRAR DATOS** borra los firmwares descargados. Los dos piden deslizar para confirmar. Lo que guarda un firmware (sonidos, canciones, ajustes) se queda en este dispositivo, por separado para cada versión exacta.",
@@ -11162,6 +11281,12 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
         "IN USE": "EN USO",
         USE: "USAR",
         "INSTALL ON MY FM-1": "INSTALAR EN MI FM-1",
+        "NOT DOWNLOADED": "SIN DESCARGAR",
+        "FAST BUILD": "VERSIÓN RÁPIDA",
+        "Swipe up to install it on your FM-1 · down or tap to run it here": "Desliza hacia arriba para instalarlo en tu FM-1 · hacia abajo o toca para ejecutarlo aquí",
+        "Swipe up to install · down or tap to run": "Arriba para instalar · abajo o toca para ejecutar",
+        "CONNECT YOUR FM-1 FIRST": "CONECTA ANTES TU FM-1",
+        "Plug the real FM-1 in with a USB cable, open the menu (FM1.), then OPTIONS, and press CONNECT under REAL FM-1. Then swipe the firmware up again.": "Conecta el FM-1 real con un cable USB, abre el menú (FM1.), luego OPCIONES, y pulsa CONECTAR en FM-1 REAL. Después desliza otra vez el firmware hacia arriba.",
         ERASE: "BORRAR",
         "your FM-1": "tu FM-1",
         "your file": "tu archivo",
@@ -11736,6 +11861,8 @@ onmessage = ({ data: d }) => {   // once, from the page: its port for the workle
       // shortcut: switching a unit off cuts its tail (a delay or reverb stops at once); upgrade if asked
       // ======================================================================
       const T = (en, es) => (lang === "es" ? es : en);
+      // (#fm is not translated by i18n, so the screen's title is chosen here)
+      $("#scr").title = T("Press the screen to choose a firmware", "Pulsa la pantalla para elegir un firmware");
       const rack = (() => {
         try {
           return FXE.vet(JSON.parse(stored("fm1.rack") || "null"));

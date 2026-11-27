@@ -124,6 +124,20 @@ try:
     webdriver.ActionChains(d).move_to_element(k).click_and_hold().perform(); assert js("return down[30]") == 1
     webdriver.ActionChains(d).release().perform(); assert js("return down[30]") == 0
     js("turn(0, 3); setPot(900)")
+    # the carousel: a press on the screen opens it on the running firmware, a slide goes to the next card, up without a unit asks to connect, a tap outside closes
+    carOn = "return !document.querySelector('#car').hidden"
+    js("document.querySelector('#scr').click()"); time.sleep(0.4)
+    assert js(carOn) and js("return car.list[car.at].id") == "local" and js("return document.querySelectorAll('#carStrip .cc').length") == js("return car.list.length") > 20
+    assert js("return document.querySelector('#carStrip .cc.on img').src").startswith("data:image/png"), "the running firmware's card does not show its screen"
+    car_el = d.find_element(By.ID, "car")
+    webdriver.ActionChains(d).move_to_element(car_el).click_and_hold().move_by_offset(-60, 0).move_by_offset(-90, 0).release().perform(); time.sleep(0.4)
+    assert js("return car.at") == 1, "a slide did not go to the next card"
+    webdriver.ActionChains(d).move_to_element(car_el).click_and_hold().move_by_offset(0, -50).move_by_offset(0, -60).release().perform(); time.sleep(0.4)
+    assert not js(carOn) and q("#jobTitle") == "CONNECT YOUR FM-1 FIRST", "a swipe up without a unit: %s" % q("#jobTitle")
+    js("document.querySelector('#jobOk').click()")
+    js("document.querySelector('#scr').click()"); time.sleep(0.4)
+    webdriver.ActionChains(d).move_to_element_with_offset(car_el, 0, -js("return innerHeight") // 2 + 8).click().perform(); time.sleep(0.5)
+    assert not js(carOn) and js("return run.f.id") == "local", "a tap outside did not just close the carousel"
     # a dimmed light wavers a little from frame to frame (386DX dims every button): it is drawn steady
     seen = js("""const out = new Set(), l = new Float32Array(41);
       for (let i = 0; i < 40; i++) { l[3] = i % 9 ? 0.022 : 0.02; showFrame({ lcd: null, leds: l }); i > 20 && out.add(lights[3].style.getPropertyValue('--led')); }
