@@ -1495,6 +1495,9 @@
       // boot on one: Demake reads OCT- as held at power-on there and stays on its USB rescue screen (seen on a Galaxy S21, 2026-11-26)
       // shortcut: a list by hand; when the threaded core is fixed for them, empty it
       const ONE_THREAD = new Set(["demake"]);
+      // Firmwares that get a USB cable to a (pretend) computer: without one the chip's USB never answers, Dinghy's usb.c tries to start it
+      // again every second and waits 25 ms each time, and Demake's 17 ms of sound ran out: a gap, heard as a crack, once a second.
+      const USB_CABLE = new Set(["demake"]);
       async function boot(fresh) {
         const f = current(),
           mine = ++seq;
@@ -1523,7 +1526,7 @@
           rnode && rnode.port.postMessage({ type: "cancel-boot" }); // a fast build that was running stops
           const one = ONE_THREAD.has(f.id), mt = window.FM1Native || one ? null : await threadedCore();
           if (mine !== seq || !node) return;
-          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, threads: one ? 1 : undefined, wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
+          node.port.postMessage({ type: "boot", seq: mine, mt, wasm: window.FM1Native ? null : WASM.slice().buffer, package: bytes.slice().buffer, sectors: sectors.buffer, syx: bank ? bank.slice().buffer : null, mhz, threads: one ? 1 : undefined, usb: USB_CABLE.has(f.id), wallPace: !emu && !/[?&]wallpace=0/.test(location.search) });
           bank = null;
         } catch (e) {
           if (mine !== seq) return;

@@ -145,6 +145,8 @@ impl Host {
         w::fm1_jit(!matches!(m.get("jit"), Some(Json::Bool(false))) as u32, 16);
         // "threads":2: core 1 on its own thread, for a firmware that releases it (the default is one thread: the reference)
         w::fm1_threads(m.num("threads").unwrap_or(1.0) as u32);
+        // "usb":true: a USB cable to a host, for a firmware that stalls without one (the page's USB_CABLE)
+        w::fm1_usb(matches!(m.get("usb"), Some(Json::Bool(true))) as u32);
         w::fm1_flash_part((m.str("chip") == Some("uc25hq80")) as u32);
         let ahead = m.num("ahead").unwrap_or(AHEAD_FRAMES);
         w::fm1_ahead(ahead as u32);

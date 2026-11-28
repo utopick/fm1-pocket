@@ -143,6 +143,7 @@ class Fm1 extends AudioWorkletProcessor {
     if (token !== this.bootToken) return;
     // hot code compiled to WebAssembly, a few blocks per quantum at most (?jit=0: interpreter only)
     x.fm1_jit(m.jit === false ? 0 : 1, 16);
+    x.fm1_usb?.(m.usb ? 1 : 0);          // a USB cable to a host, for a firmware that stalls without one (the page's USB_CABLE)
     x.fm1_flash_part?.(m.chip === "uc25hq80" ? 1 : 0);   // ?chip=uc25hq80: the newer units' flash part
     const ahead = x.fm1_ahead ? m.ahead ?? AHEAD_FRAMES : 0;
     x.fm1_ahead?.(ahead);               // (?ahead=0: each quantum runs for its own frames only)

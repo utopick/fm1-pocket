@@ -128,6 +128,7 @@ impl Machine {
         soc.lcd_timed = unsafe { LCD_TIMED };
         soc.cpu1_survives = unsafe { CPU1_SURVIVES };
         soc.set_threads(unsafe { THREADS });
+        if unsafe { USB } { soc.usb_plug(); }
         // (before the boot: the board sets the flash chip's id from it)
         soc.set_flash_part(flash_part(unsafe { FLASH_PART }));
         let mut cpu = Cpu::new(entry);
@@ -203,6 +204,8 @@ static mut M: Option<Machine> = None;
 static mut JIT: bool = false;
 /// `fm1_threads`: the next boot's core 1 thread (2) or not (1)
 static mut THREADS: u32 = 1;
+/// `fm1_usb`: the next boot's machine has a USB cable to a host
+static mut USB: bool = false;
 static mut JIT_PER_RENDER: u32 = 0;
 static mut AHEAD: u32 = 0;
 /// `fm1_lcd_timed`: the next boot's `Soc::lcd_timed`
@@ -422,6 +425,11 @@ pub extern "C" fn fm1_render(frames: u32, max_insns: u32) -> u32 {
         m.audio.extend(m.soc.periph.audio.drain(..));
     }
     m.pace.end();
+    if m.soc.usb.cable {
+        // nobody listens at the host's end here: what the firmware sends it is dropped, so it does not pile up
+        m.soc.usb.midi_take();
+        m.soc.usb.events.clear();
+    }
     // (core 1's thread, if any, runs on between renders: what the host reads from here is core 0's side)
     unsafe { INSNS += spent as u64 };
     let have = (m.audio.len() / 2).min(frames);
@@ -462,6 +470,14 @@ fn flash_part(n: u32) -> fm1_soc::FlashPart {
 pub extern "C" fn fm1_flash_part(part: u32) {
     unsafe { FLASH_PART = part };
     if let Some(m) = machine() { m.soc.set_flash_part(flash_part(part)); }
+}
+
+/// A USB cable to a host (usb.rs) from the next boot on, or none (0, the default). Without one the chip's
+/// USB never answers, and a firmware that keeps trying to start it stalls each time: Dinghy's usb.c tries
+/// once a second and waits 25 ms, which empties Demake's 17 ms of sound (a gap a second).
+#[no_mangle]
+pub extern "C" fn fm1_usb(on: u32) {
+    unsafe { USB = on != 0 };
 }
 
 /// Core 1 on its own thread (`threads` = 2, from the next boot on; `Soc::set_threads`), once the
