@@ -1700,7 +1700,8 @@
       // PEDALS and LIVE FX in the Android app: while something is on, the app mutes its own sound and the page fetches it (/native/pcm, interleaved
       // stereo floats) and plays it through fm1-reader (worklet.js) and the chain. The price is the poll's delay, about 50 ms, and only while an effect is on.
       async function nativeGraph() {
-        const a = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" }),
+        // "balanced", not "interactive": the fast builds play here too, and a heavy one (h1, 40% of an S23) crackled in the ~4 ms buffer "interactive" gets
+        const a = new AudioContext({ sampleRate: 44100, latencyHint: "balanced" }),
           url = URL.createObjectURL(new Blob([$("#worklet").textContent], { type: "text/javascript" }));
         try {
           await a.audioWorklet.addModule(url);
