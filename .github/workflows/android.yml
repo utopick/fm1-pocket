@@ -44,6 +44,8 @@ jobs:
         run: |
           export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang"
           test -x "$CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"
+          # 16 KB pages (Android 15 and newer phones): every LOAD segment aligned to 16 KB, or Android warns that the app is not compatible
+          export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384"
           cargo build --release --target aarch64-linux-android --manifest-path pocket/android/native/Cargo.toml
           mkdir -p pocket/android/app/src/main/jniLibs/arm64-v8a
           cp pocket/android/native/target/aarch64-linux-android/release/libfm1_android.so pocket/android/app/src/main/jniLibs/arm64-v8a/
