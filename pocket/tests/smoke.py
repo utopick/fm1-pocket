@@ -127,11 +127,21 @@ try:
     # the carousel: a press on the screen opens it on the running firmware, a slide goes to the next card, up without a unit asks to connect, a tap outside closes
     carOn = "return !document.querySelector('#car').hidden"
     js("document.querySelector('#scr').click()"); time.sleep(0.4)
-    assert js(carOn) and js("return car.list[car.at].id") == "local" and js("return document.querySelectorAll('#carStrip .cc').length") == js("return car.list.length") > 20
+    assert js(carOn) and js("return car.list[car.at].id") == "local" and js("return car.list.length") > 20 and js("return document.querySelectorAll('#carStrip .cc').length") == 9
     assert js("return document.querySelector('#carStrip .cc.on img').src").startswith("data:image/png"), "the running firmware's card does not show its screen"
     car_el = d.find_element(By.ID, "car")
     webdriver.ActionChains(d).move_to_element(car_el).click_and_hold().move_by_offset(-60, 0).move_by_offset(-90, 0).release().perform(); time.sleep(0.4)
     assert js("return car.at") == 1, "a slide did not go to the next card"
+    # the ring has no end: two left arrows from the second card come to the last one; the arrows do not play the FM-1's keys meanwhile
+    for _ in range(2): js("dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))"); time.sleep(0.2)
+    assert js("return car.at === car.list.length - 1"), "the ring does not go round: %s" % js("return car.at")
+    # DOWNLOADED: only what is on this device; the search: only what matches; both undone
+    js("document.querySelector('#carOnly').click()")
+    assert js("return car.list.length < car.all.length && car.list.every(carHave) && document.querySelector('#carOnly').textContent") == "DOWNLOADED"
+    js("document.querySelector('#carOnly').click(); document.querySelector('#carFind').click(); const q = document.querySelector('#carQ'); q.value = '386'; q.dispatchEvent(new Event('input'))")
+    assert js("return car.list.length >= 1 && car.list.every(f => (f.name + ' ' + f.author + ' ' + f.about).includes('386'))"), "the search"
+    js("const q = document.querySelector('#carQ'); q.value = ''; q.dispatchEvent(new Event('input')); q.blur()"); assert js("return car.list.length === car.all.length")
+    js("car.at = car.list.findIndex(f => f.id === 'local'); carDraw()")
     webdriver.ActionChains(d).move_to_element(car_el).click_and_hold().move_by_offset(0, -50).move_by_offset(0, -60).release().perform(); time.sleep(0.4)
     assert not js(carOn) and q("#jobTitle") == "CONNECT YOUR FM-1 FIRST", "a swipe up without a unit: %s" % q("#jobTitle")
     js("document.querySelector('#jobOk').click()")
