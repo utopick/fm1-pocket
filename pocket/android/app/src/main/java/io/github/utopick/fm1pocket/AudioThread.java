@@ -90,7 +90,8 @@ final class AudioThread extends Thread {
         // Every frame in the buffer is a frame of delay between a key press and its sound, so start small
         // and double it each time the phone could not keep up (Android clamps it to what it allows). After 5 s
         // with no dropout it halves again: a heavy passage does not leave the keys slow for the rest of the session.
-        int size = track.setBufferSizeInFrames(2 * CHUNK), underruns = 0;
+        // It never halves back to a size that dropped out (floor), or a firmware with steady heavy work crackles every 5 s.
+        int size = track.setBufferSizeInFrames(2 * CHUNK), underruns = 0, floor = 2 * CHUNK;
         if (size <= 0) size = track.getBufferCapacityInFrames(); // refused: keep the whole buffer, as before
         bufferFrames = size;
         float[] buf = new float[CHUNK * 2];
@@ -115,8 +116,9 @@ final class AudioThread extends Thread {
                 if (u > underruns) {
                     underruns = u;
                     calm = now;
+                    floor = Math.max(floor, 2 * size);
                     if (size < track.getBufferCapacityInFrames()) bufferFrames = size = Math.max(size, track.setBufferSizeInFrames(size * 2));
-                } else if (size > 2 * CHUNK && now - calm > 5_000_000_000L) {
+                } else if (size / 2 >= floor && now - calm > 5_000_000_000L) {
                     calm = now;
                     int s = track.setBufferSizeInFrames(size / 2);
                     if (s > 0) bufferFrames = size = s;
